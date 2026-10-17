@@ -1,6 +1,7 @@
 #pragma once
 
 #include "audio/AudioDeviceController.h"
+#include "project/ProjectActions.h"
 #include "ui/DrumMachinePanel.h"
 #include "ui/LevelMeterComponent.h"
 #include "ui/StatusBar.h"
@@ -8,6 +9,7 @@
 #include "ui/TransportBar.h"
 
 #include <beatforge/audio/AudioEngine.h>
+#include <beatforge/project/Session.h>
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -20,14 +22,19 @@ namespace beatforge
                                 private juce::Timer
     {
     public:
-        MainComponent (audio::AudioEngine&, AudioDeviceController&);
+        MainComponent (audio::AudioEngine&, AudioDeviceController&, project::Session&, juce::PropertiesFile& settings);
         ~MainComponent() override;
 
         void paint (juce::Graphics&) override;
         void resized() override;
         bool keyPressed (const juce::KeyPress&) override;
 
+        // App shortcuts. Also called by the window, so they work even when no
+        // component has keyboard focus (e.g. right after a dialog closes).
+        bool handleShortcut (const juce::KeyPress&);
+
         TransportBar& getTransportBar() noexcept { return transportBar; }
+        ProjectActions& getProjectActions() noexcept { return actions; }
 
     private:
         void changeListenerCallback (juce::ChangeBroadcaster*) override;
@@ -37,6 +44,9 @@ namespace beatforge
 
 
         AudioDeviceController& devices;
+        project::Session& session;
+        ProjectActions actions;
+        int sessionListenerId = 0;
         TransportBar transportBar;
         TimelineRuler ruler;
         DrumMachinePanel drumPanel;

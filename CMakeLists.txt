@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(BeatForge VERSION 0.3.0 LANGUAGES C CXX)
+project(BeatForge VERSION 0.4.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -14,6 +14,14 @@ if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/JUCE/CMakeLists.txt")
 endif()
 
 add_subdirectory(external/JUCE EXCLUDE_FROM_ALL)
+
+# JSON for the project file format (header-only, used inside core only).
+include(FetchContent)
+FetchContent_Declare(nlohmann_json
+    URL      https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
+    URL_HASH SHA256=42f6e95cad6ec532fd372391373363b62a14af6d771056dbfc86160e6dfff7aa
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+FetchContent_MakeAvailable(nlohmann_json)
 
 # GUI-free code (project model, transport, engine, ...) lives in core so it can
 # be unit tested and later driven by the command API without a window.

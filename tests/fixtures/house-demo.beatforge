@@ -1,0 +1,23 @@
+{
+  "format": "beatforge-project",
+  "version": 1,
+  "savedBy": "BeatForge 0.4.0",
+  "name": "House Demo",
+  "tempo": 124.0,
+  "timeSignature": { "numerator": 4, "denominator": 4 },
+  "metronome": false,
+  "loop": { "enabled": false, "startBar": 1, "bars": 4 },
+  "tracks": [
+    {
+      "type": "drumMachine",
+      "name": "Drums",
+      "lanes": [
+        { "sound": "kick",      "name": "Kick",       "gainDb": 0.0,  "muted": false, "soloed": false, "steps": "x...x...x...x..." },
+        { "sound": "snare",     "name": "Snare",      "gainDb": -2.0, "muted": false, "soloed": false, "steps": "....x.......x..." },
+        { "sound": "closedHat", "name": "Closed Hat", "gainDb": -3.0, "muted": false, "soloed": false, "steps": "xx.xxx.xxx.xxx.x" },
+        { "sound": "openHat",   "name": "Open Hat",   "gainDb": -4.0, "muted": false, "soloed": false, "steps": "..x...x...x...x." },
+        { "sound": "clap",      "name": "Clap",       "gainDb": 0.0,  "muted": false, "soloed": false, "steps": "....x.......x..." }
+      ]
+    }
+  ]
+}

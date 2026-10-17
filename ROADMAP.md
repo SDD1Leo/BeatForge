@@ -11,7 +11,7 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 | 1 | Audio output & transport (device selection, test tone, play/stop, level meter) | ✅ |
 | 2 | Tempo engine & metronome (BPM, bars/beats, loop foundation) | ✅ |
 | 3 | First drum machine (16-step sequencer, 5 drum sounds) | ✅ |
-| 4 | Project save/load (versioned format) | ⏳ |
+| 4 | Project save/load (versioned format) | 🧪 |
 | 5 | MIDI engine & piano roll | ⏳ |
 | 6 | Built-in synth & mono bass | ⏳ |
 | 7 | Arrangement view (tracks, clips, volume/pan, loop, undo) | ⏳ |
@@ -35,12 +35,16 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 - One 16-step pattern (one 4/4 bar of 16ths, aligned to bar 1); in other time
   signatures it still repeats every 16 sixteenths. No step velocity/accent,
   swing, or pattern length options yet. Loading your own samples comes later.
-- The pattern is lost on quit until project saving (Phase 4).
+- No undo/redo yet (planned with the arrangement editing in Phase 7).
+- Only one drum track per project; other track types appear with later phases
+  (files containing them keep them).
+- Opening a project does not stop playback first (the new pattern plays from
+  the next step).
 - In Debug builds, if the ALSA MIDI sequencer cannot be opened JUCE raises a
   debug assertion (`juce_Midi_linux.cpp`). Seen only with ALSA deliberately broken.
 
-## Next up: Phase 4
+## Next up: Phase 5
 
-Project saving and loading: a versioned project file that preserves tempo,
-time signature, the drum pattern and drum lane settings; New/Open/Save; useful
-errors for invalid files without silently discarding data.
+MIDI engine and piano roll: note model, MIDI event scheduling, a piano roll
+(draw, move, resize, delete, velocity, multi-select, quantize) and MIDI clip
+playback through a basic synth voice.

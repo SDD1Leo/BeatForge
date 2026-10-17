@@ -8,9 +8,8 @@ namespace beatforge
         constexpr int numLanes = audio::DrumMachine::numLanes;
         constexpr int numSteps = audio::DrumMachine::numSteps;
         constexpr int rowHeight = 44;
-        constexpr int headerWidth = 300;
+        constexpr int headerWidth = 310;
 
-        juce::String toJuce (std::string_view s) { return juce::String (s.data(), s.size()); }
     }
 
     juce::Colour DrumMachinePanel::laneColour (int lane)
@@ -26,7 +25,7 @@ namespace beatforge
                                                public juce::SettableTooltipClient
     {
     public:
-        LaneHeader (audio::DrumMachine& d, int laneIndex) : drums (d), lane (laneIndex)
+        LaneHeader (project::Session& s, audio::DrumMachine& d, int laneIndex) : session (s), drums (d), lane (laneIndex)
         {
             const auto colour = laneColour (lane);
 
@@ -40,30 +39,40 @@ namespace beatforge
 
             mute.setColour (juce::TextButton::buttonOnColourId, theme::muteOn);
             solo.setColour (juce::TextButton::buttonOnColourId, theme::soloOn);
-            mute.setTooltip ("Mute " + name());
-            solo.setTooltip ("Solo " + name());
-            mute.onClick = [this] { drums.setLaneMuted (lane, mute.getToggleState()); };
-            solo.onClick = [this] { drums.setLaneSoloed (lane, solo.getToggleState()); };
+            mute.onClick = [this] { session.setLaneMuted (lane, mute.getToggleState()); };
+            solo.onClick = [this] { session.setLaneSoloed (lane, solo.getToggleState()); };
 
             volume.setSliderStyle (juce::Slider::LinearHorizontal);
             volume.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
             volume.setRange (audio::DrumMachine::minGainDb, audio::DrumMachine::maxGainDb, 0.1);
             volume.setSkewFactorFromMidPoint (-12.0);
-            volume.setValue (drums.getLaneGainDb (lane), juce::dontSendNotification);
             volume.setDoubleClickReturnValue (true, 0.0);
             volume.setPopupDisplayEnabled (true, true, nullptr);
             volume.setTextValueSuffix (" dB");
             volume.setNumDecimalPlacesToDisplay (1);
             volume.setWantsKeyboardFocus (false);
-            volume.setTooltip (name() + " volume (double-click: 0 dB)");
             volume.setColour (juce::Slider::trackColourId, colour);
-            volume.onValueChange = [this] { drums.setLaneGainDb (lane, (float) volume.getValue()); };
+            volume.onValueChange = [this] { session.setLaneGainDb (lane, (float) volume.getValue()); };
             addAndMakeVisible (volume);
 
-            setTooltip ("Click the name to hear " + name());
+            refresh();
         }
 
-        juce::String name() const { return toJuce (audio::drumSoundName ((audio::DrumSound) lane)); }
+        std::function<void()> onEditFinished;
+
+        void refresh()
+        {
+            const auto& l = session.getProject().lanes[(size_t) lane];
+            name = juce::String::fromUTF8 (l.name.c_str());
+            mute.setToggleState (l.muted, juce::dontSendNotification);
+            solo.setToggleState (l.soloed, juce::dontSendNotification);
+            volume.setValue (l.gainDb, juce::dontSendNotification);
+            mute.setTooltip ("Mute " + name);
+            solo.setTooltip ("Solo " + name);
+            volume.setTooltip (name + " volume (double-click: 0 dB)");
+            setTooltip ("Click to hear " + name + ", double-click to rename");
+            repaint();
+        }
 
         void setFlash (float amount)
         {
@@ -76,8 +85,14 @@ namespace beatforge
 
         void mouseDown (const juce::MouseEvent& e) override
         {
-            if (nameArea.contains (e.getPosition()))
+            if (nameArea.contains (e.getPosition()) && e.getNumberOfClicks() == 1)
                 drums.preview (lane);
+        }
+
+        void mouseDoubleClick (const juce::MouseEvent& e) override
+        {
+            if (nameArea.contains (e.getPosition()))
+                showEditor();
         }
 
         void paint (juce::Graphics& g) override
@@ -92,6 +107,9 @@ namespace beatforge
             g.setColour (colour);
             g.fillRoundedRectangle (area.withWidth (4.0f), 2.0f);
 
+            if (editor != nullptr)
+                return;
+
             area.removeFromLeft (10.0f);
             auto led = area.removeFromLeft (14.0f).withSizeKeepingCentre (7.0f, 7.0f);
             g.setColour (flash > 0.0f ? colour.withAlpha (0.4f + 0.6f * flash) : theme::border);
@@ -100,27 +118,72 @@ namespace beatforge
 
             g.setColour (theme::textPrimary);
             g.setFont (theme::font (13.5f, juce::Font::bold));
-            g.drawText (name(), area, juce::Justification::centredLeft);
+            g.drawText (name, area.withTrimmedRight (4.0f), juce::Justification::centredLeft, true);
         }
 
         void resized() override
         {
             auto area = getLocalBounds();
-            nameArea = area.removeFromLeft (110);
+            nameArea = area.removeFromLeft (120);
             area.removeFromLeft (8);
             mute.setBounds (area.removeFromLeft (28).withSizeKeepingCentre (28, 26));
             area.removeFromLeft (4);
             solo.setBounds (area.removeFromLeft (28).withSizeKeepingCentre (28, 26));
             area.removeFromLeft (8);
             volume.setBounds (area.reduced (0, 8));
+
+            if (editor != nullptr)
+                editor->setBounds (nameArea.reduced (8, 9).withTrimmedLeft (6));
         }
 
     private:
+        void showEditor()
+        {
+            editor = std::make_unique<juce::TextEditor>();
+            editor->setFont (theme::font (13.5f, juce::Font::bold));
+            editor->setInputRestrictions (project::Project::maxLaneNameLength);
+            editor->setText (name, false);
+            editor->selectAll();
+            editor->onReturnKey = [this] { closeEditor (true); };
+            editor->onFocusLost = [this] { closeEditor (true); };
+            editor->onEscapeKey = [this] { closeEditor (false); };
+            addAndMakeVisible (*editor);
+            resized();
+            editor->grabKeyboardFocus();
+            repaint();
+        }
+
+        void closeEditor (bool commit)
+        {
+            if (editor == nullptr || ! editor->isVisible())
+                return;
+
+            const auto text = editor->getText().trim();
+            editor->setVisible (false);
+
+            if (commit && text.isNotEmpty())
+                session.renameLane (lane, text.toStdString());   // invalid names are refused
+
+            // The editor is still inside its own callback; delete it afterwards.
+            juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<LaneHeader> (this)]
+            {
+                if (safe == nullptr)
+                    return;
+                safe->editor = nullptr;
+                safe->refresh();
+                if (safe->onEditFinished)
+                    safe->onEditFinished();
+            });
+        }
+
+        project::Session& session;
         audio::DrumMachine& drums;
         int lane;
+        juce::String name;
         juce::TextButton mute { "M" }, solo { "S" };
         juce::Slider volume;
         juce::Rectangle<int> nameArea;
+        std::unique_ptr<juce::TextEditor> editor;
         float flash = 0.0f;
     };
 
@@ -129,7 +192,7 @@ namespace beatforge
                                              public juce::SettableTooltipClient
     {
     public:
-        explicit StepGrid (audio::AudioEngine& e) : engine (e)
+        StepGrid (audio::AudioEngine& e, project::Session& s) : engine (e), session (s)
         {
             setTooltip ("Click or drag to set steps");
         }
@@ -145,7 +208,7 @@ namespace beatforge
 
         void paint (juce::Graphics& g) override
         {
-            auto& drums = engine.getDrumMachine();
+            const auto& lanes = session.getProject().lanes;
 
             for (int step = 0; step < numSteps; ++step)
             {
@@ -156,7 +219,7 @@ namespace beatforge
                 for (int lane = 0; lane < numLanes; ++lane)
                 {
                     const auto cell = cellBounds (lane, step).toFloat().reduced (3.0f, 6.0f);
-                    const bool on = drums.getStep (lane, step);
+                    const bool on = lanes[(size_t) lane].steps[(size_t) step];
                     const auto colour = laneColour (lane);
 
                     g.setColour (on ? colour : offColour);
@@ -182,7 +245,7 @@ namespace beatforge
                 return;
 
             // The first cell decides whether this drag paints steps on or off.
-            paintValue = ! engine.getDrumMachine().getStep (lane, step);
+            paintValue = ! session.getProject().lanes[(size_t) lane].steps[(size_t) step];
             paintLane = lane;
             apply (lane, step);
         }
@@ -197,14 +260,14 @@ namespace beatforge
     private:
         void apply (int lane, int step)
         {
-            auto& drums = engine.getDrumMachine();
-            if (drums.getStep (lane, step) == paintValue)
+            if (session.getProject().lanes[(size_t) lane].steps[(size_t) step] == paintValue)
                 return;
 
-            drums.setStep (lane, step, paintValue);
+            session.setStep (lane, step, paintValue);
 
+            // Audition is not an edit: it goes straight to the engine.
             if (paintValue && engine.getState() == audio::TransportState::stopped)
-                drums.preview (lane);
+                engine.getDrumMachine().preview (lane);
 
             repaint (cellBounds (lane, step));
         }
@@ -231,31 +294,46 @@ namespace beatforge
         }
 
         audio::AudioEngine& engine;
+        project::Session& session;
         int playingStep = -1, paintLane = -1;
         bool paintValue = true;
     };
 
     //==============================================================================
-    DrumMachinePanel::DrumMachinePanel (audio::AudioEngine& e) : engine (e)
+    DrumMachinePanel::DrumMachinePanel (audio::AudioEngine& e, project::Session& s) : engine (e), session (s)
     {
-        grid = std::make_unique<StepGrid> (engine);
+        grid = std::make_unique<StepGrid> (engine, session);
         addAndMakeVisible (*grid);
 
         for (int lane = 0; lane < numLanes; ++lane)
         {
-            headers[(size_t) lane] = std::make_unique<LaneHeader> (engine.getDrumMachine(), lane);
+            headers[(size_t) lane] = std::make_unique<LaneHeader> (session, engine.getDrumMachine(), lane);
+            headers[(size_t) lane]->onEditFinished = [this] { if (onTextEditFinished) onTextEditFinished(); };
             addAndMakeVisible (*headers[(size_t) lane]);
         }
 
         clearButton.setTooltip ("Clear all steps");
         clearButton.setWantsKeyboardFocus (false);
-        clearButton.onClick = [this] { engine.getDrumMachine().clearPattern(); grid->repaint(); };
+        clearButton.onClick = [this] { session.clearPattern(); };
         addAndMakeVisible (clearButton);
+
+        listenerId = session.addListener ([this] (project::Session::Change change)
+        {
+            using Change = project::Session::Change;
+            if (change == Change::replaced || change == Change::pattern)
+                grid->repaint();
+            if (change == Change::replaced || change == Change::lanes)
+                for (auto& h : headers)
+                    h->refresh();
+        });
 
         startTimerHz (60);
     }
 
-    DrumMachinePanel::~DrumMachinePanel() = default;
+    DrumMachinePanel::~DrumMachinePanel()
+    {
+        session.removeListener (listenerId);
+    }
 
     void DrumMachinePanel::timerCallback()
     {

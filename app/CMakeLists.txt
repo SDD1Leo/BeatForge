@@ -9,9 +9,12 @@ target_sources(BeatForge
         Source/Main.cpp
         Source/MainComponent.cpp
         Source/audio/AudioDeviceController.cpp
+        Source/project/ProjectActions.cpp
         Source/ui/BeatForgeLookAndFeel.cpp
         Source/ui/DrumMachinePanel.cpp
         Source/ui/LevelMeterComponent.cpp
+        Source/ui/ProjectButton.cpp
+        Source/ui/SignatureField.cpp
         Source/ui/StatusBar.cpp
         Source/ui/TempoField.cpp
         Source/ui/TimelineRuler.cpp

@@ -3,9 +3,10 @@
 A native desktop DAW for electronic music, built in C++ with JUCE.
 Small feature set, reliable audio, pleasant workflow.
 
-**Status:** Phase 3 (first drum machine) built — awaiting hands-on test.
+**Status:** Phase 4 (project saving and loading) built — awaiting hands-on test.
 A 16-step drum machine (kick, snare, closed/open hat, clap) on a sample-accurate
-musical clock (40–240 BPM, time signatures, loop, metronome).
+musical clock (40–240 BPM, time signatures, loop, metronome), saved as
+versioned `.beatforge` project files.
 
 ### Controls
 
@@ -15,9 +16,12 @@ musical clock (40–240 BPM, time signatures, loop, metronome).
 | Hear a drum | Click its name |
 | Drum level / mute / solo | Row slider (double-click = 0 dB), **M**, **S** buttons |
 | Clear the pattern | **Clear** |
+| Rename a drum | Double-click its name |
+| Project menu | Click the project name (top left): New, Open, Open Recent, Save, Save As, Rename |
+| New / Open / Save / Save As | **Ctrl+N** / **Ctrl+O** / **Ctrl+S** / **Ctrl+Shift+S** |
 | Play / Stop | Play/Stop buttons, or **Space** |
 | Tempo | Drag the BPM field up/down or scroll (Shift = 0.1 BPM), double-click to type |
-| Time signature | Dropdown next to the tempo (2/4 … 7/8) |
+| Time signature | Click **SIG** in the readout (2/4 … 7/8) |
 | Metronome (off by default) | Metronome button or **M** |
 | Loop | Loop button or **L**; length (1/2/4/8 bars from bar 1) in the dropdown |
 See [ROADMAP.md](ROADMAP.md).
@@ -63,13 +67,24 @@ Use the `release` preset for an optimised build
 | `--smoke-test` | Open the window, confirm it is on screen, quit (exit 0 = OK) |
 | `--smoke-play` | Like `--smoke-test`, plus: wait 1 s, press Play, check the audio clock keeps real time for 2 s and every metronome beat fired, press Stop, check it stops. **Plays clicks on your output** (see TESTING.md to route it to a virtual sink). |
 | `--screenshot=<file.png>` | Save the window content as PNG (mid-playback with `--smoke-play`) |
+| `<project>.beatforge` | Open that project at launch |
 
 ## Audio on Linux
 
 BeatForge uses **ALSA**. On Ubuntu 24.04 the ALSA "default" device is PipeWire,
 so audio follows your system output (speakers, HDMI, Bluetooth). Pick a
 different device, sample rate or buffer size in **Audio Settings...**; the
-choice is saved in `~/.config/BeatForge/BeatForge.settings`.
+choice is saved in `~/.config/BeatForge/BeatForge.settings` (versions before
+0.4 used `~/BeatForge/`; the file is moved automatically).
+
+## Projects
+
+Projects are `.beatforge` files: readable, versioned JSON (see
+ARCHITECTURE.md). New projects are saved to `~/Music/BeatForge/` by default.
+Saving writes a temporary file and renames it, so a failed save never damages
+the previous file. BeatForge asks before discarding unsaved changes (New,
+Open, Quit); the title shows `*` and the transport shows **Unsaved** until you
+save.
 
 JACK support is compiled out for now (see ROADMAP known limitations).
 

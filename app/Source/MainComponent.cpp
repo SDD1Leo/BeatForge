@@ -13,12 +13,26 @@ namespace beatforge
         const juce::String dot = juce::String::fromUTF8 ("  \xc2\xb7  ");
     }
 
-    MainComponent::MainComponent (audio::AudioEngine& engine, AudioDeviceController& d)
-        : devices (d), transportBar (engine), ruler (engine), drumPanel (engine), outputMeter (engine.getOutputMeter())
+    MainComponent::MainComponent (audio::AudioEngine& engine, AudioDeviceController& d,
+                                  project::Session& s, juce::PropertiesFile& settings)
+        : devices (d), session (s), actions (s, settings, *this),
+          transportBar (engine, s), ruler (engine), drumPanel (engine, s), outputMeter (engine.getOutputMeter())
     {
         transportBar.onOpenAudioSettings = [this] { openAudioSettings(); };
-        transportBar.onLoopChanged = [this] (bool on, int bars) { ruler.setLoop (on, bars); };
+        transportBar.onProjectMenu = [this] (juce::Component& anchor) { actions.showMenu (anchor); };
         transportBar.onTextEditFinished = [this] { grabKeyboardFocus(); };
+        drumPanel.onTextEditFinished = [this] { grabKeyboardFocus(); };
+
+        auto syncRuler = [this]
+        {
+            ruler.setLoop (session.getProject().loopEnabled, session.getProject().loopBars);
+        };
+        syncRuler();
+        sessionListenerId = session.addListener ([syncRuler] (project::Session::Change change)
+        {
+            if (change == project::Session::Change::replaced || change == project::Session::Change::transport)
+                syncRuler();
+        });
 
         addAndMakeVisible (transportBar);
         addAndMakeVisible (ruler);
@@ -36,6 +50,7 @@ namespace beatforge
 
     MainComponent::~MainComponent()
     {
+        session.removeListener (sessionListenerId);
         devices.removeChangeListener (this);
 
         if (settingsWindow != nullptr)
@@ -67,7 +82,7 @@ namespace beatforge
             text = "Audio error: " + s.error + dot + text;
 
         statusBar.setStatus (text, s.error.isNotEmpty());
-        setWorkspaceHint ("Click steps to build a beat    Space: play / stop    M: metronome    L: loop");
+        setWorkspaceHint ("Click steps to build a beat    Space: play / stop    M: metronome    L: loop    Ctrl+S: save");
     }
 
     void MainComponent::setWorkspaceHint (const juce::String& hint)
@@ -104,6 +119,18 @@ namespace beatforge
 
     bool MainComponent::keyPressed (const juce::KeyPress& key)
     {
+        return handleShortcut (key);
+    }
+
+    bool MainComponent::handleShortcut (const juce::KeyPress& key)
+    {
+        const auto ctrl = juce::ModifierKeys::commandModifier;
+        if (key == juce::KeyPress ('n', ctrl, 0))  { actions.newProject();      return true; }
+        if (key == juce::KeyPress ('o', ctrl, 0))  { actions.openWithChooser(); return true; }
+        if (key == juce::KeyPress ('s', ctrl, 0))  { actions.save();            return true; }
+        if (key == juce::KeyPress ('s', ctrl | juce::ModifierKeys::shiftModifier, 0)
+            || key == juce::KeyPress ('S', ctrl | juce::ModifierKeys::shiftModifier, 0)) { actions.saveAs(); return true; }
+
         if (key == juce::KeyPress::spaceKey)      { transportBar.togglePlayStop();  return true; }
         if (key.isKeyCode ('M') || key.isKeyCode ('m')) { transportBar.toggleMetronome(); return true; }
         if (key.isKeyCode ('L') || key.isKeyCode ('l')) { transportBar.toggleLoop();      return true; }
@@ -160,7 +187,7 @@ namespace beatforge
     {
         auto area = getLocalBounds();
         headerArea = area.removeFromTop (48);
-        transportBar.setBounds (area.removeFromTop (60));
+        transportBar.setBounds (area.removeFromTop (64));
         statusBar.setBounds (area.removeFromBottom (26));
 
         // Master output card, docked right like a mixer's master strip.

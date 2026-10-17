@@ -82,6 +82,21 @@ namespace beatforge
                 g.drawLine (r.getCentreX(), r.getBottom() - 3.0f, r.getRight() - 2.0f, r.getY() + 1.0f, 1.6f);
                 break;
             }
+
+            case Icon::settings:
+            {
+                // Gear: ring, hub and eight teeth.
+                const auto c = iconArea.getCentre();
+                g.drawEllipse (juce::Rectangle<float> (11.0f, 11.0f).withCentre (c), 1.8f);
+                g.fillEllipse (juce::Rectangle<float> (3.5f, 3.5f).withCentre (c));
+                for (int i = 0; i < 8; ++i)
+                {
+                    const auto angle = (float) i * juce::MathConstants<float>::pi / 4.0f;
+                    const juce::Point<float> dir (std::cos (angle), std::sin (angle));
+                    g.drawLine ({ c + dir * 5.5f, c + dir * 8.0f }, 2.2f);
+                }
+                break;
+            }
         }
     }
 }

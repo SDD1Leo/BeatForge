@@ -4,6 +4,7 @@
 #include "ui/Theme.h"
 
 #include <beatforge/audio/AudioEngine.h>
+#include <beatforge/project/Session.h>
 
 #include <iostream>
 
@@ -12,16 +13,36 @@ namespace beatforge
     class MainWindow final : public juce::DocumentWindow
     {
     public:
-        MainWindow (const juce::String& name, audio::AudioEngine& engine, AudioDeviceController& devices)
-            : DocumentWindow (name, theme::background, allButtons)
+        MainWindow (const juce::String& name, audio::AudioEngine& engine, AudioDeviceController& devices,
+                    project::Session& s, juce::PropertiesFile& settings)
+            : DocumentWindow (name, theme::background, allButtons), session (s)
         {
             setUsingNativeTitleBar (true);
-            setContentOwned (new MainComponent (engine, devices), true);
+            setContentOwned (new MainComponent (engine, devices, session, settings), true);
             setResizable (true, true);
-            setResizeLimits (960, 600, 10000, 10000);
+            setResizeLimits (1080, 640, 10000, 10000);
             centreWithSize (getWidth(), getHeight());
             setVisible (true);
             getContentComponent()->grabKeyboardFocus();
+
+            updateTitle();
+            listenerId = session.addListener ([this] (project::Session::Change change)
+            {
+                if (change == project::Session::Change::replaced || change == project::Session::Change::metadata)
+                    updateTitle();
+            });
+        }
+
+        ~MainWindow() override
+        {
+            session.removeListener (listenerId);
+        }
+
+        // "*Neon Horizon - BeatForge" while there are unsaved changes.
+        void updateTitle()
+        {
+            setName ((session.isDirty() ? "*" : "") + juce::String::fromUTF8 (session.getProject().name.c_str())
+                     + " - BeatForge");
         }
 
         MainComponent& getMainComponent() { return *static_cast<MainComponent*> (getContentComponent()); }
@@ -39,10 +60,13 @@ namespace beatforge
                 return true;
             }
 
-            return DocumentWindow::keyPressed (key);
+            return getMainComponent().handleShortcut (key) || DocumentWindow::keyPressed (key);
         }
 
     private:
+        project::Session& session;
+        int listenerId = 0;
+
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainWindow)
     };
 
@@ -236,9 +260,15 @@ namespace beatforge
 
             juce::PropertiesFile::Options options;
             options.applicationName = "BeatForge";
+           #if JUCE_LINUX
+            // JUCE places folderName directly under $HOME on Linux; follow XDG instead.
+            options.folderName = ".config/BeatForge";
+           #else
             options.folderName = "BeatForge";
+           #endif
             options.filenameSuffix = ".settings";
             options.osxLibrarySubFolder = "Application Support";
+            migrateOldSettings (options);
             settings.setStorageParameters (options);
 
             juce::LookAndFeel::setDefaultLookAndFeel (&lookAndFeel);
@@ -247,9 +277,18 @@ namespace beatforge
             devices = std::make_unique<AudioDeviceController> (*engine, *settings.getUserSettings());
             devices->open();
 
-            mainWindow = std::make_unique<MainWindow> (getApplicationName(), *engine, *devices);
+            session = std::make_unique<project::Session> (*engine);
+            mainWindow = std::make_unique<MainWindow> (getApplicationName(), *engine, *devices, *session,
+                                                       *settings.getUserSettings());
 
             const bool smokePlay = args.contains ("--smoke-play");
+            auto& actions = mainWindow->getMainComponent().getProjectActions();
+            actions.setReportToConsole (args.contains ("--smoke-test") || smokePlay);
+
+            // A project file on the command line opens at launch.
+            for (auto& arg : args)
+                if (! arg.startsWith ("--"))
+                    actions.openFile (juce::File::getCurrentWorkingDirectory().getChildFile (arg.unquoted()));
 
             if (args.contains ("--smoke-test") || smokePlay)
             {
@@ -267,6 +306,7 @@ namespace beatforge
         {
             smokeTest = nullptr;
             mainWindow = nullptr;
+            session = nullptr;
             devices = nullptr;   // closes the device: no more audio callbacks after this
             engine = nullptr;
             settings.closeFiles();
@@ -274,13 +314,40 @@ namespace beatforge
             std::cout << "BeatForge shut down cleanly" << std::endl;
         }
 
-        void systemRequestedQuit() override { quit(); }
+        // Unsaved changes are offered for saving first; Cancel keeps the app open.
+        // Versions up to 0.3 kept settings in ~/BeatForge/; move them once.
+        static void migrateOldSettings (const juce::PropertiesFile::Options& options)
+        {
+           #if JUCE_LINUX
+            const auto oldFolder = juce::File ("~/BeatForge");
+            const auto oldFile = oldFolder.getChildFile ("BeatForge.settings");
+            const auto newFile = options.getDefaultFile();
+
+            if (oldFile.existsAsFile() && ! newFile.exists())
+            {
+                newFile.getParentDirectory().createDirectory();
+                if (oldFile.moveFileTo (newFile) && oldFolder.getNumberOfChildFiles (juce::File::findFilesAndDirectories) == 0)
+                    oldFolder.deleteFile();
+            }
+           #else
+            juce::ignoreUnused (options);
+           #endif
+        }
+
+        void systemRequestedQuit() override
+        {
+            if (mainWindow == nullptr)
+                return quit();
+
+            mainWindow->getMainComponent().getProjectActions().confirmDiscardChanges ([] { quit(); });
+        }
 
     private:
         BeatForgeLookAndFeel lookAndFeel;
         juce::ApplicationProperties settings;
         std::unique_ptr<audio::AudioEngine> engine;
         std::unique_ptr<AudioDeviceController> devices;
+        std::unique_ptr<project::Session> session;
         std::unique_ptr<MainWindow> mainWindow;
         std::unique_ptr<SmokeTest> smokeTest;
     };

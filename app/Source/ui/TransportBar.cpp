@@ -7,73 +7,87 @@ namespace beatforge
 {
     namespace
     {
-        struct SignatureChoice { const char* name; time::TimeSignature sig; };
-        const SignatureChoice signatures[] {
-            { "2/4", { 2, 4 } }, { "3/4", { 3, 4 } }, { "4/4", { 4, 4 } },
-            { "5/4", { 5, 4 } }, { "6/8", { 6, 8 } }, { "7/8", { 7, 8 } }
-        };
         const int loopLengths[] { 1, 2, 4, 8 };
+
+        void drawSegment (juce::Graphics& g, juce::Rectangle<int> area, const juce::String& value,
+                          const juce::String& caption, float valueSize)
+        {
+            area = area.reduced (4, 4);
+            auto captionArea = area.removeFromBottom (12);
+            g.setColour (theme::textPrimary);
+            g.setFont (theme::numericFont (valueSize));
+            g.drawText (value, area, juce::Justification::centred);
+            g.setColour (theme::textSecondary);
+            g.setFont (theme::captionFont (9.5f));
+            g.drawText (caption, captionArea, juce::Justification::centred);
+        }
     }
 
-    TransportBar::TransportBar (audio::AudioEngine& e)
-        : engine (e),
+    TransportBar::TransportBar (audio::AudioEngine& e, project::Session& s)
+        : engine (e), session (s),
           playButton ("Play", TransportButton::Icon::play, theme::accent),
           stopButton ("Stop", TransportButton::Icon::stop, theme::textPrimary),
           loopButton ("Loop", TransportButton::Icon::loop, theme::accent),
-          metronomeButton ("Metronome", TransportButton::Icon::metronome, theme::accent)
+          metronomeButton ("Metronome", TransportButton::Icon::metronome, theme::accent),
+          settingsButton ("Audio Settings", TransportButton::Icon::settings, theme::accent)
     {
         playButton.setTooltip ("Play (Space)");
         stopButton.setTooltip ("Stop and return to bar 1 (Space)");
         loopButton.setTooltip ("Loop from bar 1 (L)");
         metronomeButton.setTooltip ("Metronome on/off (M)");
-        audioSettingsButton.setTooltip ("Choose the audio output device, sample rate and buffer size");
+        settingsButton.setTooltip ("Audio settings: output device, sample rate, buffer size");
 
-        playButton.onClick = [this] { engine.play(); refresh(); };
-        stopButton.onClick = [this] { engine.stop(); refresh(); };
+        projectButton.onClick = [this] { if (onProjectMenu) onProjectMenu (projectButton); };
+        playButton.onClick = [this] { engine.play(); refreshPosition(); };
+        stopButton.onClick = [this] { engine.stop(); refreshPosition(); };
         loopButton.onClick = [this] { toggleLoop(); };
         metronomeButton.onClick = [this] { toggleMetronome(); };
-        audioSettingsButton.onClick = [this] { if (onOpenAudioSettings) onOpenAudioSettings(); };
+        settingsButton.onClick = [this] { if (onOpenAudioSettings) onOpenAudioSettings(); };
 
-        tempoField.setTempo (engine.getTempo(), juce::dontSendNotification);
-        tempoField.onTempoChange = [this] (double bpm) { engine.setTempo (bpm); };
+        tempoField.onTempoChange = [this] (double bpm) { session.setTempo (bpm); };
         tempoField.onEditFinished = [this] { if (onTextEditFinished) onTextEditFinished(); };
-
-        for (int i = 0; i < (int) std::size (signatures); ++i)
-            signatureBox.addItem (signatures[i].name, i + 1);
-        signatureBox.setSelectedId (3, juce::dontSendNotification);   // 4/4
-        signatureBox.setTooltip ("Time signature");
-        signatureBox.onChange = [this]
-        {
-            engine.setTimeSignature (signatures[signatureBox.getSelectedId() - 1].sig);
-            applyLoop();   // loop length is in bars, so its tick length changes
-        };
+        signatureField.onChange = [this] (time::TimeSignature sig) { session.setTimeSignature (sig); };
 
         for (auto bars : loopLengths)
             loopLengthBox.addItem (juce::String (bars) + (bars == 1 ? " bar" : " bars"), bars);
-        loopLengthBox.setSelectedId (4, juce::dontSendNotification);
         loopLengthBox.setTooltip ("Loop length, from bar 1");
-        loopLengthBox.onChange = [this] { applyLoop(); };
+        loopLengthBox.setWantsKeyboardFocus (false);   // keep Space for the transport
+        loopLengthBox.onChange = [this]
+        {
+            session.setLoop (session.getProject().loopEnabled, loopLengthBox.getSelectedId());
+        };
 
-        for (auto* c : std::initializer_list<juce::Component*> { &signatureBox, &loopLengthBox, &audioSettingsButton })
-            c->setWantsKeyboardFocus (false);   // keep Space for the transport
-
-        for (auto* c : std::initializer_list<juce::Component*> { &playButton, &stopButton, &loopButton, &metronomeButton,
-                                                                  &tempoField, &signatureBox, &loopLengthBox, &audioSettingsButton })
+        for (auto* c : std::initializer_list<juce::Component*> { &projectButton, &playButton, &stopButton, &loopButton,
+                                                                  &tempoField, &signatureField, &metronomeButton,
+                                                                  &loopLengthBox, &settingsButton })
             addAndMakeVisible (c);
 
+        listenerId = session.addListener ([this] (project::Session::Change change)
+        {
+            if (change != project::Session::Change::pattern && change != project::Session::Change::lanes)
+                refreshFromSession();
+        });
+
+        refreshFromSession();
         setDeviceAvailable (false);
         startTimerHz (60);
     }
 
-    void TransportBar::applyLoop()
+    TransportBar::~TransportBar()
     {
-        const auto bars = loopLengthBox.getSelectedId();
-        const auto barTicks = engine.getTimeSignature().ticksPerBar();
-        engine.setLoop (loopOn, 0, barTicks * bars);
-        loopButton.setLit (loopOn);
+        session.removeListener (listenerId);
+    }
 
-        if (onLoopChanged)
-            onLoopChanged (loopOn, bars);
+    void TransportBar::refreshFromSession()
+    {
+        const auto& p = session.getProject();
+        projectButton.setProjectName (juce::String::fromUTF8 (p.name.c_str()));
+        tempoField.setTempo (p.tempo, juce::dontSendNotification);
+        signatureField.setSignature (p.timeSignature);
+        loopButton.setLit (p.loopEnabled);
+        metronomeButton.setLit (p.metronomeEnabled);
+        loopLengthBox.setSelectedId (p.loopBars, juce::dontSendNotification);
+        repaint (savedArea);
     }
 
     void TransportBar::setDeviceAvailable (bool available)
@@ -81,7 +95,7 @@ namespace beatforge
         deviceAvailable = available;
         playButton.setEnabled (available);
         playButton.setTooltip (available ? "Play (Space)" : "No audio device - open Audio Settings");
-        refresh();
+        refreshPosition();
     }
 
     void TransportBar::togglePlayStop()
@@ -91,24 +105,23 @@ namespace beatforge
         else if (deviceAvailable)
             engine.play();
 
-        refresh();
+        refreshPosition();
     }
 
     void TransportBar::toggleLoop()
     {
-        loopOn = ! loopOn;
-        applyLoop();
+        const auto& p = session.getProject();
+        session.setLoop (! p.loopEnabled, p.loopBars);
     }
 
     void TransportBar::toggleMetronome()
     {
-        engine.setMetronomeEnabled (! engine.isMetronomeEnabled());
-        refresh();
+        session.setMetronomeEnabled (! session.getProject().metronomeEnabled);
     }
 
-    void TransportBar::timerCallback() { refresh(); }
+    void TransportBar::timerCallback() { refreshPosition(); }
 
-    void TransportBar::refresh()
+    void TransportBar::refreshPosition()
     {
         const auto ticks = engine.getPositionTicks();
         const auto sig = engine.getTimeSignature();
@@ -124,14 +137,13 @@ namespace beatforge
         const int newBeat = running ? bbt.beat : 0;
 
         playButton.setLit (engine.isPlayRequested());
-        metronomeButton.setLit (engine.isMetronomeEnabled());
 
         if (newBbt != barBeatText || newTime != timeText || newBeat != currentBeat)
         {
             barBeatText = newBbt;
             timeText = newTime;
             currentBeat = newBeat;
-            repaint (positionArea.getUnion (beatArea));
+            repaint (positionArea.getUnion (timeArea).getUnion (beatArea));
         }
     }
 
@@ -142,21 +154,36 @@ namespace beatforge
         g.setColour (theme::border);
         g.drawHorizontalLine (getHeight() - 1, 0.0f, (float) getWidth());
 
-        // Position display: bars.beats.ticks large, clock time small.
+        // Saved state next to the project name.
+        {
+            const bool dirty = session.isDirty();
+            const bool neverSaved = ! session.getFile().has_value();
+            const auto colour = dirty ? theme::amber : (neverSaved ? theme::textMuted : theme::ok);
+            const auto label = dirty ? "Unsaved" : (neverSaved ? "Not saved" : "Saved");
+
+            auto area = savedArea;
+            g.setColour (colour);
+            g.fillEllipse (area.removeFromLeft (8).withSizeKeepingCentre (7, 7).toFloat());
+            area.removeFromLeft (6);
+            g.setColour (dirty ? theme::textPrimary : theme::textSecondary);
+            g.setFont (theme::font (12.5f));
+            g.drawText (label, area, juce::Justification::centredLeft);
+        }
+
+        // Readout strip: one dark instrument display split into segments.
         g.setColour (theme::background);
-        g.fillRoundedRectangle (positionArea.toFloat(), theme::cornerRadius);
+        g.fillRoundedRectangle (stripArea.toFloat(), theme::controlRadius);
         g.setColour (theme::border);
-        g.drawRoundedRectangle (positionArea.toFloat().reduced (0.5f), theme::cornerRadius, 1.0f);
+        g.drawRoundedRectangle (stripArea.toFloat().reduced (0.5f), theme::controlRadius, theme::borderWidth);
+        for (auto x : { tempoField.getRight(), signatureField.getRight(), showTime ? positionArea.getRight() : -1 })
+            if (x > 0)
+                g.drawVerticalLine (x, (float) stripArea.getY() + 8.0f, (float) stripArea.getBottom() - 8.0f);
 
-        auto text = positionArea.reduced (12, 3);
-        g.setColour (theme::textPrimary);
-        g.setFont (theme::numericFont (20.0f));
-        g.drawText (barBeatText, text.removeFromTop (24), juce::Justification::centredLeft);
-        g.setColour (theme::textSecondary);
-        g.setFont (theme::numericFont (11.0f));
-        g.drawText (timeText, text, juce::Justification::centredLeft);
+        drawSegment (g, positionArea, barBeatText, "BAR.BEAT.TICK", 20.0f);
+        if (showTime)
+            drawSegment (g, timeArea, timeText, "TIME", 17.0f);
 
-        // Beat lights: one per beat in the bar; downbeat in accent colour.
+        // Beat lights: one per beat in the bar; downbeat magenta, others cyan.
         const auto beats = engine.getTimeSignature().numerator;
         const float size = 10.0f, gap = 5.0f;
         const float totalWidth = beats * size + (beats - 1) * gap;
@@ -168,36 +195,42 @@ namespace beatforge
             const bool lit = b == currentBeat;
             g.setColour (lit ? (b == 1 ? theme::magenta : theme::cyan) : theme::control);
             g.fillEllipse (dot);
-            g.setColour (theme::border);
+            g.setColour (lit ? juce::Colours::transparentBlack : theme::border);
             g.drawEllipse (dot, 1.0f);
         }
     }
 
     void TransportBar::resized()
     {
-        auto area = getLocalBounds().reduced (16, 10);
+        showTime = getWidth() >= minimumWidthForTime;
+        auto area = getLocalBounds().reduced (16, 9);
 
-        auto place = [&area] (juce::Component& c, int width, int gapAfter)
+        projectButton.setBounds (area.removeFromLeft (184).reduced (0, 4));
+        area.removeFromLeft (10);
+        savedArea = area.removeFromLeft (84);
+        area.removeFromLeft (12);
+
+        for (auto* b : { &playButton, &stopButton, &loopButton })
         {
-            c.setBounds (area.removeFromLeft (width));
-            area.removeFromLeft (gapAfter);
-        };
+            b->setBounds (area.removeFromLeft (40).reduced (0, 3));
+            area.removeFromLeft (6);
+        }
+        area.removeFromLeft (10);
 
-        place (playButton, 40, 6);
-        place (stopButton, 40, 6);
-        place (loopButton, 40, 16);
+        stripArea = area.removeFromLeft (108 + 64 + 128 + (showTime ? 104 : 0));
+        auto strip = stripArea;
+        tempoField.setBounds (strip.removeFromLeft (108));
+        signatureField.setBounds (strip.removeFromLeft (64));
+        positionArea = strip.removeFromLeft (128);
+        timeArea = showTime ? strip : juce::Rectangle<int>();
+        area.removeFromLeft (12);
 
-        positionArea = area.removeFromLeft (128);
+        beatArea = area.removeFromLeft (84);
+        area.removeFromLeft (12);
+        metronomeButton.setBounds (area.removeFromLeft (40).reduced (0, 3));
         area.removeFromLeft (8);
-        beatArea = area.removeFromLeft (110);
-        area.removeFromLeft (8);
+        loopLengthBox.setBounds (area.removeFromLeft (92).reduced (0, 7));
 
-        place (tempoField, 116, 8);
-        signatureBox.setBounds (area.removeFromLeft (70).reduced (0, 4));
-        area.removeFromLeft (8);
-        place (metronomeButton, 40, 8);
-        loopLengthBox.setBounds (area.removeFromLeft (84).reduced (0, 4));
-
-        audioSettingsButton.setBounds (area.removeFromRight (130));
+        settingsButton.setBounds (area.removeFromRight (40).reduced (0, 3));
     }
 }

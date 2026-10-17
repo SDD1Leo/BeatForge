@@ -16,6 +16,9 @@ exists.
 | Stock JUCE widgets (buttons, combo boxes, sliders, menus, tooltips, dialogs) | `app/Source/ui/BeatForgeLookAndFeel.*` |
 | Custom components (transport buttons, step grid, meter, ruler…) | read tokens from `Theme.h`, never literal colours |
 
+Dialogs: alerts use a compact badge (amber `!` warning, violet `?` question,
+cyan `i` info); file dialogs use JUCE's browser so they inherit the theme.
+
 Rule: no `juce::Colour (0x…)` outside `Theme.h` (checked with
 `grep -rn "Colour (0x" app/Source | grep -v Theme.h`).
 
@@ -73,7 +76,7 @@ Colour always comes with a text label; it is never the only signal.
 | # | Step | Status |
 |---|---|---|
 | 1 | Tokens + central LookAndFeel applied to every existing screen (no layout change) | done (0.3.x) |
-| 2 | Transport bar: captioned segment displays (BPM / SIG / BAR.BEAT.TICK), Nebula icon buttons, project name slot (once projects exist, Phase 4) | planned |
+| 2 | Transport bar: project button + saved state, captioned readout strip (BPM / SIG / BAR.BEAT.TICK / TIME), icon buttons; Nebula alert dialogs and file browser | done (0.4.0) |
 | 3 | Shared controls: rotary `Knob`, `Panel` with header, compact M/S, Nebula meter strip; replace one-off painting | planned |
 | 4 | Step sequencer polish to the reference (velocity lane when velocity exists) | planned |
 | 5 | Arrangement-first layout (track headers + clips, timeline takes most space) with Phase 7 | planned |

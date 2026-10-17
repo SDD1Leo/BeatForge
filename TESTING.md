@@ -20,6 +20,9 @@ ctest --preset debug
 | `[drums]` | Kicks on exact step samples, four-on-the-floor trigger count, 16th hats every 6000 samples @ 120/48k, clap backbeat at 100 BPM over 3 bars, **bit-identical output for block sizes 1/37/64/256/1000**, live step edits, audition while stopped, closed hat chokes open hat, stop lets tails ring with no new hits | nothing |
 | `[controls]` | Mute, solo, -6 dB halves level, minimum volume = silence, mute while ringing is silent after the 5 ms ramp with 64- and 4096-sample buffers | nothing |
 | `[steps]` | Every 16th is a grid line with exact samples; 6/8 beat flags | nothing |
+| `[project][file]` | JSON round trip, readable step strings, save/load file, atomic save leaves the old file intact on failure, missing folder error, non-project files refused with reasons, newer version refused, minimal v1 file, out-of-range values corrected with 5 warnings, **unknown data survives two load/save cycles**, optional fields silent | temp dir |
+| `[session]` | Edits update project + engine + dirty flag + listeners, no-op edits stay clean, loop length follows the time signature, rename validation, open replaces engine state, **save → reopen sounds bit-identical** | nothing |
+| `app_open_*` | Real app opens fixture files: valid demo (0 warnings), corrected tempo (1 warning listed), newer format refused, truncated JSON refused | X server |
 | `[realtime]` | **Callback path makes zero heap allocations** (global `operator new` counter), plus a self-check that the counter works | nothing |
 | `app_smoke_launch` | Real GUI app starts, window reaches the screen, app quits cleanly. **Fails on any JUCE assertion or leaked object.** | X server (uses `xvfb-run` if installed) |
 
@@ -46,13 +49,24 @@ pw-cli destroy <id>
 Recording the default sink monitor instead also captures any other app's audio
 (browsers etc.), so prefer the virtual sink.
 
+### Isolating UI tests from your files
+
+Run the app with a scratch home so test projects, recent files and settings
+never land in your real `~/Music` or `~/.config`:
+
+```bash
+HOME=/tmp/bf-home PIPEWIRE_NODE=beatforge-test ./build/debug/app/BeatForge_artefacts/Debug/BeatForge
+```
+
 ### Driving the real UI headlessly
 
 `Xvfb :99` + `xdotool` (installed) can click buttons, drag the tempo, pick
 menu items and press keys in the real app while audio goes to the virtual sink;
 `ffmpeg -f x11grab -i :99 -frames:v 1 shot.png` captures the screen. Xvfb has no
 window manager, so after a dropdown closes run `xdotool windowfocus --sync <win>`
-before sending keys (a real desktop does this itself).
+before sending keys (a real desktop does this itself). Send keys as real input
+(`xdotool key ctrl+s`, no `--window`): synthetic `--window` events are
+ignored by the app once focus has moved through a dialog.
 
 Simulate "no audio device": `ALSA_CONFIG_PATH=/path/to/empty-file BeatForge`.
 
@@ -62,6 +76,15 @@ Proof levels we keep separate (from Phase 1 on):
 2. **Generated audio** — render to buffers/files and analyse samples.
 3. **Real device** — only a human (or a run on real hardware) proves sound
    actually comes out of the speakers. Automated tests never claim this.
+
+## Manual checklist — Phase 4
+
+1. Build a beat, set the tempo to e.g. 124, rename a drum (double-click its name).
+2. **Ctrl+S** — the save dialog suggests `~/Music/BeatForge/Untitled.beatforge`; name it and save. The project takes the file's name; the transport says **Saved**.
+3. Close BeatForge. Reopen it, click the project name → **Open Recent** → your project.
+4. Press **Space** — the same beat, tempo, names and mute/solo come back.
+5. Change a step, then try to quit — BeatForge asks **Save changes?**; Cancel keeps it open.
+6. Optional: open `tests/fixtures/newer-version.beatforge` or `truncated.beatforge` — a clear error, nothing breaks.
 
 ## Manual checklist — Phase 3
 
@@ -104,6 +127,7 @@ Proof levels we keep separate (from Phase 1 on):
 
 | Date | Phase | Result |
 |---|---|---|
+| 2026-10-18 | 4 | 79/79 ctest pass in Debug and Release (21 new: file format, session, 4 app-level open tests). Isolated real-UI run (Xvfb, `HOME` sandboxed, virtual sink): built a 124 BPM beat by mouse, renamed Kick → "808 Kick", muted Snare, **Ctrl+S** via the JUCE browser → project named "Night Drive", **Saved**, readable JSON on disk; quit (no prompt); relaunched → **Open Recent** → identical state, playback **0.4839 s** intervals before and after (124 BPM); edit → quit prompt → **Cancel** keeps app open; **Ctrl+S** wrote directly; Ctrl+Shift+S, Escape, Space all work with real key input; clean exit, 0 assertions. Found & fixed: alert icon clipped; tests wrote recent files into real settings; settings were in `~/BeatForge` (moved to `~/.config/BeatForge`, migrated); zenity 4.0.1 ignored the suggested file name (switched to JUCE's themed browser); shortcuts made window-level. **Not yet tested by the user.** |
 | 2026-10-18 | Nebula 1 | 58/58 ctest pass. Xvfb UI session with the restyled app: house beat entered by mouse, loop/solo/mute toggled, captured mix identical to pre-restyle (**0.5000 s** grid, peaks **-1.5 / -5.4 dBFS**); screenshots of main view, dropdown menu, tooltip and Audio Settings dialog all themed; clean shutdown, zero JUCE assertions. No hard-coded colours outside Theme.h. |
 | 2026-10-18 | 3 | 58/58 ctest pass in Debug and Release. Real UI driven in Xvfb (audio to a virtual PipeWire sink): clicking steps while stopped auditioned 6 hits; drag-painted 16 hats; played the user-checklist beat — solo captures: kick **0.5000 s**, clap **1.0000 s**, hats **0.1250 s** @ 120 BPM; typed 100 BPM mid-playback → **0.6000 s**; muting the kick left hats at **0.1500 s**. Found & fixed: default kit clipped (+3.2 dBFS on kick+hat+clap; red clip lights on kick+snare) → kit rebalanced, busy house beat now peaks **-1.5 dBFS, 0 clipped**; ruler lost the playhead after bar 8 → pages now; dangling-reference crash in a test. `--smoke-play` on real device OK. User hands-on test: approved 2026-10-18. |
 | 2026-10-18 | 2 | 40/40 ctest pass in Debug and Release (178k assertions incl. a 1-hour no-drift run). `--smoke-play` on real device: 2.01 s audio / 2.01 s wall, 5 beats @ 120, 0 dropouts. Virtual-sink capture: click intervals **0.5000 s** @ 120 BPM, downbeat -6.3 dBFS vs -10.8 dBFS. Real UI driven in Xvfb with xdotool: typed 100 BPM → **0.6000 s**; dragged tempo during playback → clean transition to 143 BPM (**0.4196 s**), no doubled/missing click; 3/4 + 1-bar loop → constant 0.4196 s across loop wraps, accent every 3rd click; Space/M/L keys, Ctrl+Q clean exit, zero JUCE assertions. User hands-on test on speakers: approved 2026-10-18. |

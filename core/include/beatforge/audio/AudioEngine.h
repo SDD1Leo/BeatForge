@@ -53,6 +53,8 @@ namespace beatforge::audio
         double getTempo() const noexcept                       { return tempo.load (std::memory_order_acquire); }
         time::TimeSignature getTimeSignature() const noexcept;
         bool isMetronomeEnabled() const noexcept               { return metronomeEnabled.load (std::memory_order_acquire); }
+        bool isLoopEnabled() const noexcept                    { return loopEnabled.load (std::memory_order_acquire); }
+        time::Tick getLoopEnd() const noexcept                 { return loopEnd.load (std::memory_order_acquire); }
 
         // Musical position (ticks) and samples rendered since Play; both return
         // to 0 once a stop completes.

@@ -220,4 +220,45 @@ namespace beatforge
         g.setFont (theme::font (13.0f));
         g.drawFittedText (text, bounds.toNearestInt().reduced (10, 2), juce::Justification::centredLeft, 1);
     }
+
+    //==============================================================================
+    juce::Font BeatForgeLookAndFeel::getAlertWindowTitleFont()   { return juce::Font (theme::font (17.0f, juce::Font::bold)); }
+    juce::Font BeatForgeLookAndFeel::getAlertWindowMessageFont() { return juce::Font (theme::font (14.5f)); }
+    juce::Font BeatForgeLookAndFeel::getAlertWindowFont()        { return juce::Font (theme::font (14.0f)); }
+
+    void BeatForgeLookAndFeel::drawAlertBox (juce::Graphics& g, juce::AlertWindow& alert,
+                                             const juce::Rectangle<int>&, juce::TextLayout& textLayout)
+    {
+        const auto bounds = alert.getLocalBounds().toFloat();
+        g.setColour (theme::panel);
+        g.fillRoundedRectangle (bounds, theme::cornerRadius);
+        g.setColour (theme::borderStrong);
+        g.drawRoundedRectangle (bounds.reduced (0.5f), theme::cornerRadius, theme::borderWidth);
+
+        // Compact badge instead of JUCE's oversized clipped icon. The text column
+        // starts at x = 80 either way, matching AlertWindow's own layout.
+        constexpr int iconSpace = 80;
+        const auto type = alert.getAlertType();
+
+        if (type != juce::MessageBoxIconType::NoIcon)
+        {
+            const auto colour = type == juce::MessageBoxIconType::WarningIcon  ? theme::amber
+                              : type == juce::MessageBoxIconType::QuestionIcon ? theme::violet
+                                                                                : theme::cyan;
+            const auto glyph = type == juce::MessageBoxIconType::WarningIcon  ? "!"
+                             : type == juce::MessageBoxIconType::QuestionIcon ? "?"
+                                                                               : "i";
+            const auto badge = juce::Rectangle<float> (24.0f, 26.0f, 36.0f, 36.0f);
+            g.setColour (colour.withAlpha (0.16f));
+            g.fillEllipse (badge);
+            g.setColour (colour);
+            g.drawEllipse (badge.reduced (0.75f), 1.5f);
+            g.setFont (theme::font (20.0f, juce::Font::bold));
+            g.drawText (glyph, badge, juce::Justification::centred);
+        }
+
+        const auto left = type != juce::MessageBoxIconType::NoIcon ? iconSpace : 0;
+        textLayout.draw (g, juce::Rectangle<int> (left, 30, alert.getWidth() - left,
+                                                  alert.getHeight() - getAlertWindowButtonHeight() - 20).toFloat());
+    }
 }

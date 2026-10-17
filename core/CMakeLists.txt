@@ -13,10 +13,14 @@ add_library(beatforge_core STATIC
     src/audio/LevelMeter.cpp
     src/audio/Metronome.cpp
     src/dsp/Biquad.cpp
+    src/project/Project.cpp
+    src/project/ProjectFile.cpp
+    src/project/Session.cpp
     src/time/MusicalTime.cpp
     src/time/TempoMap.cpp
     src/time/Transport.cpp)
 
 target_include_directories(beatforge_core PUBLIC include)
+target_link_libraries(beatforge_core PRIVATE nlohmann_json::nlohmann_json)
 target_compile_features(beatforge_core PUBLIC cxx_std_20)
 target_compile_options(beatforge_core PRIVATE -Wall -Wextra -Wpedantic)

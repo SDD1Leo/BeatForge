@@ -11,13 +11,16 @@ BeatForge/
 │   └── src/
 │       ├── audio/          AudioEngine, DrumMachine, DrumKit, Metronome, LevelMeter
 │       ├── dsp/            Biquad filter, deterministic Noise (pure C++, no JUCE)
+│       └── project/        Project model, ProjectFile (JSON), Session (single mutation path)
 │       └── time/           MusicalTime (PPQ 960, bar/beat/tick), TempoMap, Transport
 ├── app/                  BeatForge GUI executable (JUCE)
 │   └── Source/
 │       ├── Main.cpp        application, main window, smoke-test mode
 │       ├── MainComponent.* root content: header, transport, master meter, status
 │       ├── audio/          AudioDeviceController (JUCE AudioDeviceManager <-> engine)
-│       └── ui/             theme, LookAndFeel, TransportBar, TempoField, TimelineRuler, DrumMachinePanel,
+│       ├── project/        ProjectActions (file commands, dialogs, recent files)
+│       └── ui/             theme, LookAndFeel, TransportBar, ProjectButton, SignatureField, TempoField,
+│                           TimelineRuler, DrumMachinePanel,
 │                           LevelMeterComponent, StatusBar
 ├── tools/                analyze_onsets.py (timing analysis of captured audio)
 ├── tests/                Catch2 unit tests + app launch test (CTest)
@@ -48,6 +51,47 @@ Rules that hold from day one:
   lock-free queues / atomics (introduced in Phase 1).
 - **Timing comes from the audio timeline**, never from UI timers or frame rate.
 - **Live playback and offline export share** the same instrument and mixing code.
+
+## Projects and the command path (Phase 4)
+
+```
+ GUI widgets ──► Session (core) ──► AudioEngine atomics
+ (later: MCP, assistant)   │
+                           ├─► Project (plain data) ──► ProjectFile ⇄ .beatforge JSON
+                           └─► listeners (UI refresh, title, saved state)
+```
+
+- **`Session`** is the only way to change the project: it validates, updates
+  the `Project`, pushes the change into the engine and notifies listeners
+  (`replaced`, `transport`, `pattern`, `lanes`, `metadata`). It tracks the file
+  path and the dirty flag. Message-thread only. MCP (Phase 10) will call the
+  same methods.
+- Auditioning a drum is not an edit, so it goes straight to the engine.
+- **`ProjectActions`** (app) adds file dialogs, prompts, recent files and
+  error reporting on top of the Session. In `--smoke-test` mode it prints
+  results instead of opening dialogs and never touches recent-file settings.
+
+### File format v1 (`.beatforge`, UTF-8 JSON)
+
+```json
+{ "format": "beatforge-project", "version": 1, "savedBy": "BeatForge 0.4.0",
+  "name": "Night Drive", "tempo": 124.0,
+  "timeSignature": { "numerator": 4, "denominator": 4 },
+  "metronome": false, "loop": { "enabled": false, "startBar": 1, "bars": 4 },
+  "tracks": [ { "type": "drumMachine", "name": "Drums", "lanes": [
+      { "sound": "kick", "name": "808 Kick", "gainDb": 0.0, "muted": false,
+        "soloed": false, "steps": "x...x...x...x..." } ] } ] }
+```
+
+Loading rules:
+- Not JSON, wrong `format`, or missing `version` → refused with a reason.
+- `version` newer than this build → refused ("saved by a newer BeatForge"),
+  never half-read.
+- Out-of-range or wrong-typed values → corrected, each with a warning shown to
+  the user; nothing changes on disk until they save.
+- Unknown keys, extra steps beyond 16, unknown lanes and track types → kept
+  and written back on save (no silent data loss).
+- Save = write `<file>.tmp`, then rename over the target.
 
 ## Drum machine (Phase 3)
 

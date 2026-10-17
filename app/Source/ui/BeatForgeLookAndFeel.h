@@ -28,6 +28,12 @@ namespace beatforge
         int getSliderThumbRadius (juce::Slider&) override;
 
         void drawTooltip (juce::Graphics&, const juce::String& text, int width, int height) override;
+
+        void drawAlertBox (juce::Graphics&, juce::AlertWindow&, const juce::Rectangle<int>& textArea,
+                           juce::TextLayout&) override;
+        juce::Font getAlertWindowTitleFont() override;
+        juce::Font getAlertWindowMessageFont() override;
+        juce::Font getAlertWindowFont() override;
         juce::Rectangle<int> getTooltipBounds (const juce::String& text, juce::Point<int> screenPos,
                                                juce::Rectangle<int> parentArea) override;
     };

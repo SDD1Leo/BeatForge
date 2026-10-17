@@ -25,33 +25,34 @@ namespace beatforge
             onTempoChange (tempo);
     }
 
+    // Drawn as a segment of the transport readout strip: value over caption.
     void TempoField::paint (juce::Graphics& g)
     {
-        auto bounds = getLocalBounds().toFloat().reduced (0.5f);
-        g.setColour (theme::background);
-        g.fillRoundedRectangle (bounds, theme::controlRadius);
-        g.setColour (dragging ? theme::accent : (isMouseOver() ? theme::borderStrong : theme::border));
-        g.drawRoundedRectangle (bounds, theme::controlRadius, theme::borderWidth);
+        if (isMouseOver() || dragging)
+        {
+            g.setColour (theme::control.withAlpha (0.6f));
+            g.fillRect (getLocalBounds().reduced (1));
+        }
 
         if (editor != nullptr && editor->isVisible())
             return;
 
-        auto area = getLocalBounds().reduced (10, 4);
-        auto label = area.removeFromRight (30);
+        auto area = getLocalBounds().reduced (4, 4);
+        auto caption = area.removeFromBottom (12);
 
         g.setColour (theme::textPrimary);
-        g.setFont (theme::numericFont (18.0f));
-        g.drawText (juce::String (tempo, 2), area, juce::Justification::centredRight);
+        g.setFont (theme::numericFont (20.0f));
+        g.drawText (juce::String (tempo, 2), area, juce::Justification::centred);
 
-        g.setColour (theme::textSecondary);
-        g.setFont (theme::captionFont (10.0f));
-        g.drawText ("BPM", label, juce::Justification::centredRight);
+        g.setColour (dragging ? theme::violet : theme::textSecondary);
+        g.setFont (theme::captionFont (9.5f));
+        g.drawText ("BPM", caption, juce::Justification::centred);
     }
 
     void TempoField::resized()
     {
         if (editor != nullptr)
-            editor->setBounds (getLocalBounds().reduced (4));
+            editor->setBounds (getLocalBounds().reduced (6, 8));
     }
 
     void TempoField::mouseDown (const juce::MouseEvent&)
@@ -93,7 +94,7 @@ namespace beatforge
     void TempoField::showEditor()
     {
         editor = std::make_unique<juce::TextEditor>();
-        editor->setFont (theme::numericFont (18.0f));
+        editor->setFont (theme::numericFont (20.0f));
         editor->setJustification (juce::Justification::centred);
         editor->setInputRestrictions (6, "0123456789.");
         editor->setText (juce::String (tempo, 2), false);

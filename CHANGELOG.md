@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.4.0] — Phase 4: project saving and loading + Nebula transport (awaiting user test)
+
+### Added
+- `.beatforge` project files: versioned JSON (format v1) with tempo, time
+  signature, metronome, loop, drum pattern and lane names/volume/mute/solo.
+- Safe loading: invalid files refused with reasons, newer versions refused,
+  out-of-range values corrected with listed warnings, unknown data preserved.
+- Atomic saving (temp file + rename).
+- `Session`: the single path for project edits (GUI now, MCP later).
+- Project menu: New, Open, Open Recent, Save, Save As, Rename; Ctrl+N/O/S,
+  Ctrl+Shift+S; unsaved-changes prompt on New/Open/Quit; `*` in the title.
+- Rename drum lanes by double-clicking; an untitled project takes its file name.
+- Open a project from the command line.
+- NEBULA transport (design step 2): project button + Saved/Unsaved state,
+  captioned readout strip BPM | SIG | BAR.BEAT.TICK | TIME, gear button for
+  audio settings; Nebula alert dialogs and file browser.
+- 17 unit tests and 4 app-level tests; project fixtures in `tests/fixtures`.
+
+### Changed
+- Settings moved from `~/BeatForge/` to `~/.config/BeatForge/` (migrated on
+  first launch).
+- Minimum window width 1080 px (TIME readout hides below 1180 px).
+- Keyboard shortcuts are handled at window level (work right after dialogs).
+
+### Fixed
+- Smoke tests no longer write recent files into the user's settings.
+- Save errors include the operating-system reason.
+
 ## [Unreleased] — NEBULA visual system, step 1
 
 ### Changed
