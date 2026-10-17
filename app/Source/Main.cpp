@@ -51,7 +51,8 @@ namespace beatforge
     // --screenshot=<file.png> additionally saves the window content (taken
     // mid-playback with --smoke-play).
     // --smoke-play additionally presses Play, checks the device clock keeps
-    // real time for 2 s, presses Stop and checks the transport stops.
+    // real time for 2 s and the metronome fired every beat, presses Stop and
+    // checks the transport stops.
     // None of this proves sound reached the speakers - only a listener can.
     class SmokeTest final : private juce::Timer
     {
@@ -64,7 +65,7 @@ namespace beatforge
         }
 
     private:
-        enum class Step { waitForWindow, playing, stopping };
+        enum class Step { waitForWindow, settling, playing, stopping };
 
         void timerCallback() override
         {
@@ -77,6 +78,11 @@ namespace beatforge
                         windowShown();
                     else if (now - startMs > 10000)
                         fail ("window did not appear within 10 s");
+                    break;
+
+                case Step::settling:
+                    if (now - stepStartMs >= 1000)
+                        pressPlay();
                     break;
 
                 case Step::playing:
@@ -122,6 +128,14 @@ namespace beatforge
             if (! s.deviceOpen)
                 return fail ("--smoke-play needs an open audio device");
 
+            // Give external recorders (pw-record) a moment to attach to our stream.
+            step = Step::settling;
+            stepStartMs = juce::Time::getMillisecondCounterHiRes();
+        }
+
+        void pressPlay()
+        {
+            beatsAtStart = engine.getBeatCount();
             window.getMainComponent().getTransportBar().togglePlayStop();   // same path as Space
             step = Step::playing;
             stepStartMs = juce::Time::getMillisecondCounterHiRes();
@@ -133,12 +147,19 @@ namespace beatforge
             const auto wallSeconds = (now - stepStartMs) / 1000.0;
             const auto ratio = audioSeconds / wallSeconds;
 
+            const auto beats = engine.getBeatCount() - beatsAtStart;
+            const auto expectedBeats = (std::uint64_t) (audioSeconds * engine.getTempo() / 60.0) + 1;
+
             std::cout << "SMOKE: played " << juce::String (wallSeconds, 2) << " s wall clock, "
                       << juce::String (audioSeconds, 2) << " s of audio rendered (ratio "
-                      << juce::String (ratio, 3) << "), dropouts " << devices.getStatus().xruns << std::endl;
+                      << juce::String (ratio, 3) << "), " << beats << " beats at "
+                      << engine.getTempo() << " BPM, dropouts " << devices.getStatus().xruns << std::endl;
 
             if (engine.getState() != audio::TransportState::playing)
                 return fail ("transport is not PLAYING after Play");
+
+            if (beats != expectedBeats)
+                return fail ("expected " + juce::String ((juce::int64) expectedBeats) + " metronome beats");
 
             // The first device buffer(s) start a little after Play, so allow slack.
             if (ratio < 0.85 || ratio > 1.10)
@@ -188,6 +209,7 @@ namespace beatforge
         juce::File screenshot;
         bool play;
         bool screenshotTaken = false;
+        std::uint64_t beatsAtStart = 0;
 
         Step step = Step::waitForWindow;
         double startMs = juce::Time::getMillisecondCounterHiRes();

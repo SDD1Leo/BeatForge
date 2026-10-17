@@ -12,6 +12,8 @@ target_sources(BeatForge
         Source/ui/BeatForgeLookAndFeel.cpp
         Source/ui/LevelMeterComponent.cpp
         Source/ui/StatusBar.cpp
+        Source/ui/TempoField.cpp
+        Source/ui/TimelineRuler.cpp
         Source/ui/TransportBar.cpp
         Source/ui/TransportButton.cpp)
 

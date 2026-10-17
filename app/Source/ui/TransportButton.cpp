@@ -40,13 +40,47 @@ namespace beatforge
         auto iconArea = bounds.withSizeKeepingCentre (14.0f, 14.0f);
         juce::Path path;
 
-        if (icon == Icon::play)
-            path.addTriangle (iconArea.getX() + 1.0f, iconArea.getY(),
-                              iconArea.getX() + 1.0f, iconArea.getBottom(),
-                              iconArea.getRight(), iconArea.getCentreY());
-        else
-            path.addRoundedRectangle (iconArea.reduced (1.0f), 1.5f);
+        switch (icon)
+        {
+            case Icon::play:
+                path.addTriangle (iconArea.getX() + 1.0f, iconArea.getY(),
+                                  iconArea.getX() + 1.0f, iconArea.getBottom(),
+                                  iconArea.getRight(), iconArea.getCentreY());
+                g.fillPath (path);
+                break;
 
-        g.fillPath (path);
+            case Icon::stop:
+                path.addRoundedRectangle (iconArea.reduced (1.0f), 1.5f);
+                g.fillPath (path);
+                break;
+
+            case Icon::loop:
+            {
+                // Rounded loop with an arrow head on the top run.
+                auto r = iconArea.withSizeKeepingCentre (16.0f, 10.0f);
+                path.addRoundedRectangle (r, 4.0f);
+                g.strokePath (path, juce::PathStrokeType (1.6f));
+                juce::Path head;
+                head.addTriangle (r.getCentreX() + 1.0f, r.getY() - 3.5f,
+                                  r.getCentreX() + 1.0f, r.getY() + 3.5f,
+                                  r.getCentreX() + 5.0f, r.getY());
+                g.fillPath (head);
+                break;
+            }
+
+            case Icon::metronome:
+            {
+                // Trapezoid body with a tilted pendulum arm.
+                auto r = iconArea.expanded (1.0f);
+                path.startNewSubPath (r.getX() + 4.0f, r.getY());
+                path.lineTo (r.getRight() - 4.0f, r.getY());
+                path.lineTo (r.getRight(), r.getBottom());
+                path.lineTo (r.getX(), r.getBottom());
+                path.closeSubPath();
+                g.strokePath (path, juce::PathStrokeType (1.6f));
+                g.drawLine (r.getCentreX(), r.getBottom() - 3.0f, r.getRight() - 2.0f, r.getY() + 1.0f, 1.6f);
+                break;
+            }
+        }
     }
 }

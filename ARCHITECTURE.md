@@ -8,13 +8,17 @@ BeatForge/
 ├── external/JUCE/        JUCE 9.0.4 (git submodule, pinned tag)
 ├── core/                 beatforge_core: GUI-free static library
 │   ├── include/beatforge/  public headers
-│   └── src/audio/          AudioEngine, TestTone, LevelMeter (pure C++, no JUCE)
+│   └── src/
+│       ├── audio/          AudioEngine, Metronome, LevelMeter (pure C++, no JUCE)
+│       └── time/           MusicalTime (PPQ 960, bar/beat/tick), TempoMap, Transport
 ├── app/                  BeatForge GUI executable (JUCE)
 │   └── Source/
 │       ├── Main.cpp        application, main window, smoke-test mode
 │       ├── MainComponent.* root content: header, transport, master meter, status
 │       ├── audio/          AudioDeviceController (JUCE AudioDeviceManager <-> engine)
-│       └── ui/             theme, LookAndFeel, TransportBar, LevelMeterComponent, StatusBar
+│       └── ui/             theme, LookAndFeel, TransportBar, TempoField, TimelineRuler,
+│                           LevelMeterComponent, StatusBar
+├── tools/                analyze_onsets.py (timing analysis of captured audio)
 ├── tests/                Catch2 unit tests + app launch test (CTest)
 └── mcp/                  (Phase 10) TypeScript MCP server
 ```
@@ -44,6 +48,28 @@ Rules that hold from day one:
 - **Timing comes from the audio timeline**, never from UI timers or frame rate.
 - **Live playback and offline export share** the same instrument and mixing code.
 
+## Musical clock (Phase 2)
+
+- **Musical time is ticks** (960 per quarter note), independent of sample rate.
+  `TimeSignature` gives ticks per beat/bar; `toBarBeatTick` formats positions.
+- **`TempoMap`** (piecewise-constant tempo) converts ticks ↔ seconds ↔ samples
+  and already supports multiple tempo changes; it will drive arrangement math
+  and offline rendering. The live transport only needs the current tempo.
+- **`Transport`** (audio thread only) never accumulates time. Position is
+  `anchorTick + (sample − anchorSample) / samplesPerTick` from an integer sample
+  counter; the anchor moves only on a tempo change or loop wrap. Result: no
+  drift (tested over one hour at awkward tempos).
+- **Event rule:** an event at tick T fires on the first sample whose position
+  is ≥ T. Each beat fires exactly once regardless of block size, tempo changes
+  or loop wraps (tested with block sizes 1…4096 and 300+ tempo changes).
+- Loops are `[start, end)` in ticks; a wrap splits the block at the exact sample.
+- `AudioEngine::process` collects the block's beats from the transport, then
+  renders the metronome voice segment by segment so every click starts on its
+  exact sample.
+- UI → engine settings (tempo, signature, loop, metronome) are atomics read at
+  the start of each block; engine → UI position/state are atomics polled at
+  60 Hz for display only.
+
 ## Audio path (Phase 1)
 
 ```
@@ -53,7 +79,7 @@ Rules that hold from day one:
                                          │
  AudioDeviceController                   ▼
    AudioDeviceManager ──callback──► AudioEngine::process(outputs, n)
-   (ALSA → PipeWire)                       ├─ TestTone (10 ms click-free ramp)
+   (ALSA → PipeWire)                       ├─ Transport → Metronome clicks (Phase 2)
                                            ├─ position, state  ──► atomics ──► TransportBar (30 Hz poll)
                                            └─ LevelMeter peaks ──► atomic max ──► LevelMeterComponent (30 Hz)
 ```

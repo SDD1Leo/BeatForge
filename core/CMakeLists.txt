@@ -9,7 +9,10 @@ add_library(beatforge_core STATIC
     "${CMAKE_CURRENT_BINARY_DIR}/BuildInfo.cpp"
     src/audio/AudioEngine.cpp
     src/audio/LevelMeter.cpp
-    src/audio/TestTone.cpp)
+    src/audio/Metronome.cpp
+    src/time/MusicalTime.cpp
+    src/time/TempoMap.cpp
+    src/time/Transport.cpp)
 
 target_include_directories(beatforge_core PUBLIC include)
 target_compile_features(beatforge_core PUBLIC cxx_std_20)

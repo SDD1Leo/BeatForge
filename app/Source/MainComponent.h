@@ -3,6 +3,7 @@
 #include "audio/AudioDeviceController.h"
 #include "ui/LevelMeterComponent.h"
 #include "ui/StatusBar.h"
+#include "ui/TimelineRuler.h"
 #include "ui/TransportBar.h"
 
 #include <beatforge/audio/AudioEngine.h>
@@ -32,16 +33,19 @@ namespace beatforge
         void timerCallback() override;
         void refreshDeviceStatus();
         void openAudioSettings();
-        void setWorkspaceHint (const juce::String&);
+
 
         AudioDeviceController& devices;
         TransportBar transportBar;
+        TimelineRuler ruler;
         LevelMeterComponent outputMeter;
         StatusBar statusBar;
         juce::TooltipWindow tooltips { this, 600 };
 
         juce::Rectangle<int> headerArea, outputCard, workspaceArea;
         juce::String workspaceHint;
+
+        void setWorkspaceHint (const juce::String&);
         juce::Component::SafePointer<juce::DialogWindow> settingsWindow;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)

@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.2.0] — Phase 2: tempo engine & metronome (awaiting user test)
+
+### Added
+- Musical time core: 960 PPQ ticks, time signatures, bar.beat.tick conversion.
+- `TempoMap`: piecewise tempo, ticks ↔ seconds ↔ samples (multi-tempo ready).
+- `Transport`: drift-free audio-thread clock with sample-accurate beat events,
+  live tempo changes, loop regions.
+- Metronome click voice (accented downbeat), rendered sample-accurately.
+- UI: tempo field (drag/scroll/type, 40–240), time-signature menu (2/4…7/8),
+  metronome toggle (M), loop toggle (L) + length (1/2/4/8 bars), bar.beat.tick
+  + clock display, beat lights, bar ruler with loop region and playhead.
+- `tools/analyze_onsets.py`; virtual-sink + Xvfb/xdotool test recipes.
+- 22 new unit tests (time, tempo, transport, loop, metronome, engine).
+
+### Changed
+- The metronome replaces the Phase 1 test tone as the sound source (Audio
+  Settings keeps JUCE's own device Test button).
+- `--smoke-play` waits 1 s before Play and checks the beat count.
+
+### Fixed
+- Loop end landing exactly on an audio block boundary did not wrap (caught by
+  tests before release).
+
 ## [0.1.0] — Phase 1: audio output & transport (approved 2026-10-18)
 
 ### Added

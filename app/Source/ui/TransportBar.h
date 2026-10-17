@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ui/TempoField.h"
 #include "ui/TransportButton.h"
 
 #include <beatforge/audio/AudioEngine.h>
@@ -19,8 +20,12 @@ namespace beatforge
         // Play is only possible while an output device is open.
         void setDeviceAvailable (bool available);
         void togglePlayStop();
+        void toggleLoop();
+        void toggleMetronome();
 
         std::function<void()> onOpenAudioSettings;
+        std::function<void (bool enabled, int bars)> onLoopChanged;
+        std::function<void()> onTextEditFinished;
 
         void paint (juce::Graphics&) override;
         void resized() override;
@@ -28,15 +33,18 @@ namespace beatforge
     private:
         void timerCallback() override;
         void refresh();
+        void applyLoop();
 
         audio::AudioEngine& engine;
-        TransportButton playButton, stopButton;
+        TransportButton playButton, stopButton, loopButton, metronomeButton;
+        TempoField tempoField;
+        juce::ComboBox signatureBox, loopLengthBox;
         juce::TextButton audioSettingsButton { "Audio Settings..." };
-        juce::Rectangle<int> timeArea, stateArea, toneArea;
+        juce::Rectangle<int> positionArea, beatArea;
 
-        juce::String timeText { "00:00.000" };
-        juce::String stateText { "STOPPED" };
-        juce::Colour stateColour;
+        juce::String barBeatText { "1.1.000" }, timeText { "00:00.000" };
+        int currentBeat = 0;   // 1-based beat lit in the indicator, 0 = none
         bool deviceAvailable = false;
+        bool loopOn = false;
     };
 }

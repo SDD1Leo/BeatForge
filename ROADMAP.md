@@ -9,7 +9,7 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 |---|---|---|
 | 0 | Environment & project foundation | ✅ |
 | 1 | Audio output & transport (device selection, test tone, play/stop, level meter) | ✅ |
-| 2 | Tempo engine & metronome (BPM, bars/beats, loop foundation) | ⏳ |
+| 2 | Tempo engine & metronome (BPM, bars/beats, loop foundation) | 🧪 |
 | 3 | First drum machine (16-step sequencer, 5 drum sounds) | ⏳ |
 | 4 | Project save/load (versioned format) | ⏳ |
 | 5 | MIDI engine & piano roll | ⏳ |
@@ -28,11 +28,14 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 - Changing device / sample rate / buffer size stops playback (device restart).
 - JACK backend disabled; ALSA-via-PipeWire only. Default buffer is 512 samples
   (~46 ms reported output latency) — fine for now, tune in Audio Settings.
+- Loop always starts at bar 1 (1/2/4/8 bars); dragging loop points arrives with
+  the arrangement view (Phase 7). No seek/pause yet — Stop returns to bar 1.
+- One time signature for the whole project (time-signature changes later).
+- The ruler is display-only.
 - In Debug builds, if the ALSA MIDI sequencer cannot be opened JUCE raises a
   debug assertion (`juce_Midi_linux.cpp`). Seen only with ALSA deliberately broken.
 
-## Next up: Phase 2
+## Next up: Phase 3
 
-Tempo engine and metronome: BPM control (40–240), musical clock at 960 PPQ,
-bars/beats display, metronome clicks scheduled on the audio timeline, and the
-loop playback foundation.
+First drum machine: a 16-step sequencer with kick, snare, closed/open hi-hat
+and clap; pattern looping in sync with the tempo; basic track controls.

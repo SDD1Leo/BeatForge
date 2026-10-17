@@ -11,7 +11,10 @@ add_executable(beatforge_tests
     unit/AudioEngineTests.cpp
     unit/BuildInfoTests.cpp
     unit/LevelMeterTests.cpp
-    unit/TestToneTests.cpp)
+    unit/MetronomeTests.cpp
+    unit/MusicalTimeTests.cpp
+    unit/TempoMapTests.cpp
+    unit/TransportTests.cpp)
 
 target_link_libraries(beatforge_tests PRIVATE beatforge_core Catch2::Catch2WithMain)
 target_compile_definitions(beatforge_tests PRIVATE BEATFORGE_EXPECTED_VERSION="${PROJECT_VERSION}")

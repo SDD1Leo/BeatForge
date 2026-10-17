@@ -3,9 +3,19 @@
 A native desktop DAW for electronic music, built in C++ with JUCE.
 Small feature set, reliable audio, pleasant workflow.
 
-**Status:** Phase 1 (audio output & transport) built — awaiting hands-on test.
-BeatForge opens your audio device and plays a test tone from a transport bar,
-with an output level meter.
+**Status:** Phase 2 (tempo engine & metronome) built — awaiting hands-on test.
+BeatForge has a musical clock (40–240 BPM, time signatures, bar.beat.tick
+display), a sample-accurate metronome and loop playback.
+
+### Controls
+
+| Action | How |
+|---|---|
+| Play / Stop | Play/Stop buttons, or **Space** |
+| Tempo | Drag the BPM field up/down or scroll (Shift = 0.1 BPM), double-click to type |
+| Time signature | Dropdown next to the tempo (2/4 … 7/8) |
+| Metronome | Metronome button or **M** |
+| Loop | Loop button or **L**; length (1/2/4/8 bars from bar 1) in the dropdown |
 See [ROADMAP.md](ROADMAP.md).
 
 ## Ubuntu setup (24.04)
@@ -47,7 +57,7 @@ Use the `release` preset for an optimised build
 |---|---|
 | `--version` | Print the version and exit |
 | `--smoke-test` | Open the window, confirm it is on screen, quit (exit 0 = OK) |
-| `--smoke-play` | Like `--smoke-test`, plus: press Play, check the audio clock keeps real time for 2 s, press Stop, check it stops. **Plays the tone on your speakers.** |
+| `--smoke-play` | Like `--smoke-test`, plus: wait 1 s, press Play, check the audio clock keeps real time for 2 s and every metronome beat fired, press Stop, check it stops. **Plays clicks on your output** (see TESTING.md to route it to a virtual sink). |
 | `--screenshot=<file.png>` | Save the window content as PNG (mid-playback with `--smoke-play`) |
 
 ## Audio on Linux

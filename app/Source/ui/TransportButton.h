@@ -5,11 +5,11 @@
 namespace beatforge
 {
     // Square icon button for the transport bar. "Lit" shows an active state
-    // (e.g. Play while the transport runs).
+    // (Play while the transport runs, or a toggle that is on).
     class TransportButton final : public juce::Button
     {
     public:
-        enum class Icon { play, stop };
+        enum class Icon { play, stop, loop, metronome };
 
         TransportButton (const juce::String& name, Icon, juce::Colour litColour);
 

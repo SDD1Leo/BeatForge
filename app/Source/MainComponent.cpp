@@ -14,11 +14,14 @@ namespace beatforge
     }
 
     MainComponent::MainComponent (audio::AudioEngine& engine, AudioDeviceController& d)
-        : devices (d), transportBar (engine), outputMeter (engine.getOutputMeter())
+        : devices (d), transportBar (engine), ruler (engine), outputMeter (engine.getOutputMeter())
     {
         transportBar.onOpenAudioSettings = [this] { openAudioSettings(); };
+        transportBar.onLoopChanged = [this] (bool on, int bars) { ruler.setLoop (on, bars); };
+        transportBar.onTextEditFinished = [this] { grabKeyboardFocus(); };
 
         addAndMakeVisible (transportBar);
+        addAndMakeVisible (ruler);
         addAndMakeVisible (outputMeter);
         addAndMakeVisible (statusBar);
 
@@ -63,7 +66,7 @@ namespace beatforge
             text = "Audio error: " + s.error + dot + text;
 
         statusBar.setStatus (text, s.error.isNotEmpty());
-        setWorkspaceHint ("Press Space or Play to hear the test tone");
+        setWorkspaceHint ("Space: play / stop    M: metronome    L: loop    Drag or scroll the tempo to change it");
     }
 
     void MainComponent::setWorkspaceHint (const juce::String& hint)
@@ -100,11 +103,9 @@ namespace beatforge
 
     bool MainComponent::keyPressed (const juce::KeyPress& key)
     {
-        if (key == juce::KeyPress::spaceKey)
-        {
-            transportBar.togglePlayStop();
-            return true;
-        }
+        if (key == juce::KeyPress::spaceKey)      { transportBar.togglePlayStop();  return true; }
+        if (key.isKeyCode ('M') || key.isKeyCode ('m')) { transportBar.toggleMetronome(); return true; }
+        if (key.isKeyCode ('L') || key.isKeyCode ('l')) { transportBar.toggleLoop();      return true; }
 
         return false;
     }
@@ -133,7 +134,8 @@ namespace beatforge
         // Empty workspace hint until the sequencer/timeline arrive.
         g.setColour (theme::textMuted.withAlpha (0.7f));
         g.setFont (juce::FontOptions (14.0f));
-        g.drawText (workspaceHint, workspaceArea, juce::Justification::centred);
+        g.drawText (workspaceHint, workspaceArea.withTrimmedTop (ruler.getBottom() - workspaceArea.getY()),
+                    juce::Justification::centred);
 
         // Master output panel.
         g.setColour (theme::panel);
@@ -155,7 +157,9 @@ namespace beatforge
         // Master output card, docked right like a mixer's master strip.
         auto body = area.reduced (16);
         outputCard = body.removeFromRight (120);
+        body.removeFromRight (16);
         workspaceArea = body;
+        ruler.setBounds (body.removeFromTop (64));
         outputMeter.setBounds (outputCard.reduced (16, 0).withTrimmedTop (36).withTrimmedBottom (16));
     }
 }

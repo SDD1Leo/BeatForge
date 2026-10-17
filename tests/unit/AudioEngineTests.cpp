@@ -13,7 +13,8 @@ using namespace beatforge::audio;
 
 namespace
 {
-    // Simulates a device: owns channel buffers and calls process() per block.
+    // Simulates a device: owns channel buffers, calls process() per block and
+    // keeps a recording of the first channel.
     struct FakeDevice
     {
         FakeDevice (AudioEngine& e, double rate, int block, int channels = 2)
@@ -30,6 +31,7 @@ namespace
             for (int i = 0; i < numBlocks; ++i)
             {
                 engine.process (pointers.data(), (int) pointers.size(), blockSize);
+                recording.insert (recording.end(), buffers[0].begin(), buffers[0].end());
                 for (auto& b : buffers)
                     for (auto s : b)
                         maxAbs = std::max (maxAbs, std::abs (s));
@@ -37,10 +39,25 @@ namespace
             return maxAbs;
         }
 
+        // Sample indices where a click starts (silence followed by sound).
+        std::vector<size_t> clickOnsets() const
+        {
+            std::vector<size_t> onsets;
+            size_t silentRun = 1000;
+            for (size_t i = 0; i < recording.size(); ++i)
+            {
+                if (recording[i] != 0.0f && silentRun >= 100)
+                    onsets.push_back (i - 1);   // the click's first sample is sin(0) == 0
+                silentRun = recording[i] == 0.0f ? silentRun + 1 : 0;
+            }
+            return onsets;
+        }
+
         AudioEngine& engine;
         int blockSize;
         std::vector<std::vector<float>> buffers;
         std::vector<float*> pointers;
+        std::vector<float> recording;
     };
 }
 
@@ -50,43 +67,91 @@ TEST_CASE ("Stopped engine outputs exact silence and clears garbage", "[audio][e
     FakeDevice device (engine, 48000.0, 256, 4);   // buffers start filled with 7.0
     REQUIRE (device.runBlocks (10) == 0.0f);
     REQUIRE (engine.getState() == TransportState::stopped);
-    REQUIRE (engine.getPositionSamples() == 0);
+    REQUIRE (engine.getPositionTicks() == 0.0);
 }
 
-TEST_CASE ("Play produces audio on the first stereo pair only", "[audio][engine]")
+TEST_CASE ("Metronome clicks are heard exactly on the beats", "[audio][engine][metronome]")
 {
     AudioEngine engine;
-    FakeDevice device (engine, 48000.0, 512, 4);
+    FakeDevice device (engine, 48000.0, 512);
     engine.play();
-    device.runBlocks (5);
+    device.runBlocks (48000 * 4 / 512);   // 4 s at 120 BPM
 
-    REQUIRE (engine.getState() == TransportState::playing);
-    auto blockPeak = [] (const std::vector<float>& b) {
-        float p = 0.0f; for (auto s : b) p = std::max (p, std::abs (s)); return p; };
-    REQUIRE (blockPeak (device.buffers[0]) > 0.1f);
-    REQUIRE (device.buffers[0] == device.buffers[1]);
-    REQUIRE (blockPeak (device.buffers[2]) == 0.0f);
-    REQUIRE (blockPeak (device.buffers[3]) == 0.0f);
+    const auto onsets = device.clickOnsets();
+    REQUIRE (onsets.size() == 8);
+    for (size_t i = 0; i < onsets.size(); ++i)
+        REQUIRE (onsets[i] == i * 24000);
+
+    // Downbeats (beats 1, 5) are louder.
+    auto clickPeak = [&] (size_t at) {
+        float p = 0.0f;
+        for (size_t i = at; i < at + 1440; ++i) p = std::max (p, std::abs (device.recording[i]));
+        return p; };
+    REQUIRE (clickPeak (onsets[0]) > clickPeak (onsets[1]) * 1.4f);
+    REQUIRE (clickPeak (onsets[4]) > clickPeak (onsets[5]) * 1.4f);
 }
 
-TEST_CASE ("Position advances only while playing and rewinds after stop", "[audio][engine]")
+TEST_CASE ("Tempo set from another thread applies at the next block", "[audio][engine][tempo]")
 {
     AudioEngine engine;
-    FakeDevice device (engine, 44100.0, 147);   // 3.33 ms blocks, shorter than the 10 ms fade
-
+    engine.setTempo (100.0);
+    FakeDevice device (engine, 44100.0, 441);
     engine.play();
-    device.runBlocks (300);
-    REQUIRE (engine.getPositionSamples() == 44100);   // exactly one second
+    device.runBlocks (300);   // 3 s
 
+    const auto onsets = device.clickOnsets();
+    REQUIRE (onsets.size() == 5);
+    for (size_t i = 0; i < onsets.size(); ++i)
+        REQUIRE (onsets[i] == i * 26460);
+
+    engine.setTempo (500.0);
+    REQUIRE (engine.getTempo() == 240.0);   // clamped
+}
+
+TEST_CASE ("Metronome can be muted while the clock keeps running", "[audio][engine][metronome]")
+{
+    AudioEngine engine;
+    engine.setMetronomeEnabled (false);
+    FakeDevice device (engine, 48000.0, 480);
+    engine.play();
+    REQUIRE (device.runBlocks (300) == 0.0f);
+    REQUIRE (engine.getBeatCount() == 6);
+    REQUIRE (engine.getPositionTicks() == Catch::Approx (300 * 480 / 25.0));
+}
+
+TEST_CASE ("Stop lets the click ring out, then rewinds", "[audio][engine]")
+{
+    AudioEngine engine;
+    FakeDevice device (engine, 48000.0, 128);
+    engine.play();
+    device.runBlocks (2);   // inside the first click
     engine.stop();
     device.runBlocks (1);
     REQUIRE (engine.getState() == TransportState::stopping);
-    REQUIRE (engine.getPositionSamples() == 44100);   // frozen during fade
+    REQUIRE (engine.getPositionTicks() > 0.0);
 
-    device.runBlocks (3);                              // 441-sample fade done within 4 blocks
+    device.runBlocks (20);  // 30 ms click < 23 * 128 samples
     REQUIRE (engine.getState() == TransportState::stopped);
-    REQUIRE (engine.getPositionSamples() == 0);
+    REQUIRE (engine.getPositionTicks() == 0.0);
     REQUIRE (device.runBlocks (5) == 0.0f);
+
+    // Next play starts again from the downbeat.
+    device.recording.clear();
+    engine.play();
+    device.runBlocks (1);
+    REQUIRE (engine.getBeatCount() == 2);
+    REQUIRE (device.clickOnsets() == std::vector<size_t> { 0 });
+}
+
+TEST_CASE ("Loop region in the engine wraps the musical position", "[audio][engine][loop]")
+{
+    AudioEngine engine;
+    engine.setLoop (true, 0, 3840);   // 1 bar @ 120 BPM = 2 s
+    FakeDevice device (engine, 48000.0, 1000);
+    engine.play();
+    device.runBlocks (240);           // 5 s
+    REQUIRE (engine.getPositionTicks() == Catch::Approx (960.0 * 2).margin (1e-6));   // 1 s into the bar
+    REQUIRE (device.clickOnsets().size() == 10);
 }
 
 TEST_CASE ("Repeated play/stop stays well-formed", "[audio][engine]")
@@ -102,10 +167,10 @@ TEST_CASE ("Repeated play/stop stays well-formed", "[audio][engine]")
         device.runBlocks (1 + cycle % 3);
 
         REQUIRE (std::isfinite (playing));
-        REQUIRE (playing <= 0.126f);   // never louder than -18 dBFS (+ rounding)
+        REQUIRE (playing <= 0.5f);
     }
 
-    device.runBlocks (10);
+    device.runBlocks (30);
     REQUIRE (engine.getState() == TransportState::stopped);
     REQUIRE (device.runBlocks (1) == 0.0f);
 }
@@ -122,37 +187,43 @@ TEST_CASE ("Changing sample rate (device restart) keeps the engine usable", "[au
     engine.reset();   // device stopped
     REQUIRE (engine.getState() == TransportState::stopped);
     REQUIRE_FALSE (engine.isPlayRequested());
+    REQUIRE (engine.getPositionTicks() == 0.0);
 
     FakeDevice device (engine, 96000.0, 64);
     REQUIRE (engine.getSampleRate() == 96000.0);
     REQUIRE (device.runBlocks (4) == 0.0f);
 
     engine.play();
-    REQUIRE (device.runBlocks (100) > 0.1f);
+    device.runBlocks (96000 / 64);
+    const auto onsets = device.clickOnsets();
+    REQUIRE (onsets.size() == 2);
+    REQUIRE (onsets[1] - onsets[0] == 48000);
 }
 
-TEST_CASE ("Output meter sees the -18 dBFS tone", "[audio][engine][meter]")
+TEST_CASE ("Output meter sees the clicks", "[audio][engine][meter]")
 {
     AudioEngine engine;
     FakeDevice device (engine, 48000.0, 480);
     engine.play();
     device.runBlocks (20);
 
-    auto& meter = engine.getOutputMeter();
     for (int ch = 0; ch < 2; ++ch)
-        REQUIRE (LevelMeter::toDecibels (meter.takePeak (ch)) == Catch::Approx (-18.0f).margin (0.05f));
-
-    REQUIRE (meter.takePeak (0) == 0.0f);   // take resets
+        REQUIRE (LevelMeter::toDecibels (engine.getOutputMeter().takePeak (ch)) > -8.0f);
 }
 
 TEST_CASE ("Audio callback path never allocates", "[audio][engine][realtime]")
 {
     AudioEngine engine;
     FakeDevice device (engine, 48000.0, 256);   // allocates here, outside the guard
+    device.recording.reserve (1 << 20);
 
     beatforge::test::ScopedAllocationCounter allocations;
     engine.play();
-    device.runBlocks (50);
+    device.runBlocks (100);
+    engine.setTempo (90.0);
+    engine.setTimeSignature ({ 7, 8 });
+    engine.setLoop (true, 0, 3360);
+    device.runBlocks (200);
     engine.stop();
     device.runBlocks (50);
     (void) engine.getOutputMeter().takePeak (0);
