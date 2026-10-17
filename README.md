@@ -3,7 +3,7 @@
 A native desktop DAW for electronic music, built in C++ with JUCE.
 Small feature set, reliable audio, pleasant workflow.
 
-**Status:** Phase 0 (foundation) — the app launches and shows its window. No audio yet.
+**Status:** Phase 0 (foundation) complete and approved. No audio yet — Phase 1 is next.
 See [ROADMAP.md](ROADMAP.md).
 
 ## Ubuntu setup (24.04)

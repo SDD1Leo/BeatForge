@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.0.1] — Phase 0: foundation (awaiting user test)
+## [0.0.1] — Phase 0: foundation (approved 2026-10-17)
 
 ### Added
 - CMake + Ninja build with `debug`/`release` presets; C++20.

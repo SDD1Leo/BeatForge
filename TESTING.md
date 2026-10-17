@@ -30,4 +30,4 @@ Proof levels we keep separate (from Phase 1 on):
 
 | Date | Phase | Result |
 |---|---|---|
-| 2026-10-17 | 0 | 3/3 automated tests pass (Debug, Xvfb). Launched on real X11 display `:1`, window 1280×800, clean shutdown. |
+| 2026-10-17 | 0 | 3/3 automated tests pass (Debug, Xvfb). Launched on real X11 display `:1`, window 1280×800, clean shutdown. User hands-on test: all 5 checks pass — approved. |
