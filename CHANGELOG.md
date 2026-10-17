@@ -14,7 +14,7 @@
   track-colour stripes on drum lanes, cyan→violet→magenta meter.
 - No layout, behaviour or audio changes (verified: identical timing and levels).
 
-## [0.3.0] — Phase 3: first drum machine (awaiting user test)
+## [0.3.0] — Phase 3: first drum machine (approved 2026-10-18)
 
 ### Added
 - 16-step, 5-lane drum machine: kick, snare, closed hat, open hat, clap.
