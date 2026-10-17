@@ -3,16 +3,110 @@
 
 #include <beatforge/BuildInfo.h>
 
+#include <juce_audio_utils/juce_audio_utils.h>
+
 namespace beatforge
 {
     namespace
     {
         juce::String toJuce (std::string_view s) { return juce::String (s.data(), s.size()); }
+        const juce::String dot = juce::String::fromUTF8 ("  \xc2\xb7  ");
     }
 
-    MainComponent::MainComponent()
+    MainComponent::MainComponent (audio::AudioEngine& engine, AudioDeviceController& d)
+        : devices (d), transportBar (engine), outputMeter (engine.getOutputMeter())
     {
+        transportBar.onOpenAudioSettings = [this] { openAudioSettings(); };
+
+        addAndMakeVisible (transportBar);
+        addAndMakeVisible (outputMeter);
+        addAndMakeVisible (statusBar);
+
+        setWantsKeyboardFocus (true);
+        devices.addChangeListener (this);
+        refreshDeviceStatus();
+        startTimer (500);   // dropout counter has no change notification
+
         setSize (1280, 800);
+    }
+
+    MainComponent::~MainComponent()
+    {
+        devices.removeChangeListener (this);
+
+        if (settingsWindow != nullptr)
+            delete settingsWindow.getComponent();
+    }
+
+    void MainComponent::changeListenerCallback (juce::ChangeBroadcaster*) { refreshDeviceStatus(); }
+    void MainComponent::timerCallback()                                  { refreshDeviceStatus(); }
+
+    void MainComponent::refreshDeviceStatus()
+    {
+        const auto s = devices.getStatus();
+        transportBar.setDeviceAvailable (s.deviceOpen);
+
+        if (! s.deviceOpen)
+        {
+            statusBar.setStatus ("Audio unavailable: " + s.error + dot + "open Audio Settings to choose a device", true);
+            setWorkspaceHint ("No audio output - open Audio Settings to choose a device");
+            return;
+        }
+
+        const auto latencyMs = 1000.0 * (s.bufferSize + s.outputLatencySamples) / s.sampleRate;
+        auto text = s.typeName + dot + s.deviceName
+                  + dot + juce::String (s.sampleRate / 1000.0, 1) + " kHz"
+                  + dot + juce::String (s.bufferSize) + " samples (" + juce::String (latencyMs, 1) + " ms)"
+                  + dot + juce::String (s.xruns) + (s.xruns == 1 ? " dropout" : " dropouts");
+
+        if (s.error.isNotEmpty())
+            text = "Audio error: " + s.error + dot + text;
+
+        statusBar.setStatus (text, s.error.isNotEmpty());
+        setWorkspaceHint ("Press Space or Play to hear the test tone");
+    }
+
+    void MainComponent::setWorkspaceHint (const juce::String& hint)
+    {
+        if (hint != workspaceHint)
+        {
+            workspaceHint = hint;
+            repaint (workspaceArea);
+        }
+    }
+
+    void MainComponent::openAudioSettings()
+    {
+        if (settingsWindow != nullptr)
+        {
+            settingsWindow->toFront (true);
+            return;
+        }
+
+        auto selector = std::make_unique<juce::AudioDeviceSelectorComponent> (
+            devices.getDeviceManager(), 0, 0, 1, 2, false, false, true, false);
+        selector->setSize (520, 380);
+
+        juce::DialogWindow::LaunchOptions options;
+        options.dialogTitle = "Audio Settings";
+        options.dialogBackgroundColour = theme::panel;
+        options.content.setOwned (selector.release());
+        options.componentToCentreAround = this;
+        options.useNativeTitleBar = true;
+        options.resizable = true;
+        options.escapeKeyTriggersCloseButton = true;
+        settingsWindow = options.launchAsync();
+    }
+
+    bool MainComponent::keyPressed (const juce::KeyPress& key)
+    {
+        if (key == juce::KeyPress::spaceKey)
+        {
+            transportBar.togglePlayStop();
+            return true;
+        }
+
+        return false;
     }
 
     void MainComponent::paint (juce::Graphics& g)
@@ -36,45 +130,32 @@ namespace beatforge
         g.setFont (juce::FontOptions (13.0f));
         g.drawText ("v" + toJuce (versionString()), header, juce::Justification::centredRight);
 
-        // Body: honest placeholder card — nothing here is interactive yet.
-        auto card = bodyArea.withSizeKeepingCentre (juce::jmin (520, bodyArea.getWidth() - 32), 112).toFloat();
-        g.setColour (theme::panel);
-        g.fillRoundedRectangle (card, theme::cornerRadius);
-        g.setColour (theme::border);
-        g.drawRoundedRectangle (card, theme::cornerRadius, 1.0f);
-
-        auto text = card.reduced (24.0f, 20.0f);
-        g.setColour (theme::textPrimary);
-        g.setFont (juce::FontOptions (18.0f, juce::Font::bold));
-        g.drawText ("Foundation ready", text.removeFromTop (30.0f), juce::Justification::centredLeft);
-        g.setColour (theme::textMuted);
+        // Empty workspace hint until the sequencer/timeline arrive.
+        g.setColour (theme::textMuted.withAlpha (0.7f));
         g.setFont (juce::FontOptions (14.0f));
-        g.drawFittedText ("Phase 0: application shell, build system and tests.\n"
-                          "Audio output and the transport bar arrive in Phase 1.",
-                          text.toNearestInt(), juce::Justification::topLeft, 3);
+        g.drawText (workspaceHint, workspaceArea, juce::Justification::centred);
 
-        // Status bar.
+        // Master output panel.
         g.setColour (theme::panel);
-        g.fillRect (statusArea);
+        g.fillRoundedRectangle (outputCard.toFloat(), theme::cornerRadius);
         g.setColour (theme::border);
-        g.drawHorizontalLine (statusArea.getY(), 0.0f, (float) getWidth());
-
-        auto status = statusArea.reduced (16, 0);
-        g.setColour (theme::ok);
-        g.fillEllipse (status.removeFromLeft (8).withSizeKeepingCentre (8, 8).toFloat());
-        status.removeFromLeft (8);
+        g.drawRoundedRectangle (outputCard.toFloat().reduced (0.5f), theme::cornerRadius, 1.0f);
         g.setColour (theme::textMuted);
-        g.setFont (juce::FontOptions (12.0f));
-        const auto dot = juce::String::fromUTF8 ("  \xc2\xb7  ");
-        g.drawText ("Ready" + dot + "JUCE " + toJuce (juceVersionString()) + dot + "Ctrl+Q to quit",
-                    status, juce::Justification::centredLeft);
+        g.setFont (juce::FontOptions (11.0f, juce::Font::bold));
+        g.drawText ("MASTER", outputCard.withHeight (34), juce::Justification::centred);
     }
 
     void MainComponent::resized()
     {
         auto area = getLocalBounds();
         headerArea = area.removeFromTop (48);
-        statusArea = area.removeFromBottom (26);
-        bodyArea = area;
+        transportBar.setBounds (area.removeFromTop (60));
+        statusBar.setBounds (area.removeFromBottom (26));
+
+        // Master output card, docked right like a mixer's master strip.
+        auto body = area.reduced (16);
+        outputCard = body.removeFromRight (120);
+        workspaceArea = body;
+        outputMeter.setBounds (outputCard.reduced (16, 0).withTrimmedTop (36).withTrimmedBottom (16));
     }
 }

@@ -3,7 +3,9 @@
 A native desktop DAW for electronic music, built in C++ with JUCE.
 Small feature set, reliable audio, pleasant workflow.
 
-**Status:** Phase 0 (foundation) complete and approved. No audio yet — Phase 1 is next.
+**Status:** Phase 1 (audio output & transport) built — awaiting hands-on test.
+BeatForge opens your audio device and plays a test tone from a transport bar,
+with an output level meter.
 See [ROADMAP.md](ROADMAP.md).
 
 ## Ubuntu setup (24.04)
@@ -45,7 +47,17 @@ Use the `release` preset for an optimised build
 |---|---|
 | `--version` | Print the version and exit |
 | `--smoke-test` | Open the window, confirm it is on screen, quit (exit 0 = OK) |
-| `--screenshot=<file.png>` | With `--smoke-test`: save the window content as PNG first |
+| `--smoke-play` | Like `--smoke-test`, plus: press Play, check the audio clock keeps real time for 2 s, press Stop, check it stops. **Plays the tone on your speakers.** |
+| `--screenshot=<file.png>` | Save the window content as PNG (mid-playback with `--smoke-play`) |
+
+## Audio on Linux
+
+BeatForge uses **ALSA**. On Ubuntu 24.04 the ALSA "default" device is PipeWire,
+so audio follows your system output (speakers, HDMI, Bluetooth). Pick a
+different device, sample rate or buffer size in **Audio Settings...**; the
+choice is saved in `~/.config/BeatForge/BeatForge.settings`.
+
+JACK support is compiled out for now (see ROADMAP known limitations).
 
 ## Documentation
 

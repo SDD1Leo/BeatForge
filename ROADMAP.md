@@ -8,7 +8,7 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 | # | Phase | Status |
 |---|---|---|
 | 0 | Environment & project foundation | ✅ |
-| 1 | Audio output & transport (device selection, test tone, play/stop, level meter) | ⏳ |
+| 1 | Audio output & transport (device selection, test tone, play/stop, level meter) | 🧪 |
 | 2 | Tempo engine & metronome (BPM, bars/beats, loop foundation) | ⏳ |
 | 3 | First drum machine (16-step sequencer, 5 drum sounds) | ⏳ |
 | 4 | Project save/load (versioned format) | ⏳ |
@@ -23,7 +23,16 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 
 **First major goal:** a complete four-bar electronic composition, exported.
 
-## Next up: Phase 1
+## Known limitations
 
-Open the native audio device (via PipeWire/ALSA/JACK), device selection +
-status, a test tone, Play/Stop in a transport bar, and an output level meter.
+- Changing device / sample rate / buffer size stops playback (device restart).
+- JACK backend disabled; ALSA-via-PipeWire only. Default buffer is 512 samples
+  (~46 ms reported output latency) — fine for now, tune in Audio Settings.
+- In Debug builds, if the ALSA MIDI sequencer cannot be opened JUCE raises a
+  debug assertion (`juce_Midi_linux.cpp`). Seen only with ALSA deliberately broken.
+
+## Next up: Phase 2
+
+Tempo engine and metronome: BPM control (40–240), musical clock at 960 PPQ,
+bars/beats display, metronome clicks scheduled on the audio timeline, and the
+loop playback foundation.

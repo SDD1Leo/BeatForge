@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.1.0] — Phase 1: audio output & transport (awaiting user test)
+
+### Added
+- `AudioEngine` (core, pure C++): lock-free play/stop, transport state and
+  sample position, allocation-free process callback.
+- 440 Hz / -18 dBFS test tone with a 10 ms click-free ramp.
+- Lock-free stereo peak meter; UI meter with decay, peak hold and clip lights.
+- `AudioDeviceController`: opens the saved or default device (ALSA → PipeWire),
+  persists device settings, reports device errors and dropouts.
+- Transport bar: Play, Stop, time display, state pill, Audio Settings dialog
+  (device / sample rate / buffer size). Space toggles play/stop.
+- Status bar shows device, rate, buffer, latency and dropouts; turns red with
+  a reason when no device is available (Play is disabled then).
+- `--smoke-play` real-device check; `--screenshot` now works mid-playback.
+- 15 new unit tests incl. a zero-allocation test for the audio callback path.
+
+### Fixed
+- Meter gradient stops were outside 0..1 (JUCE assertion).
+- Allocation-counter self-test was optimised away in Release builds.
+
+### Changed
+- JUCE JACK backend disabled (noisy without a JACK server); ALSA only.
+
 ## [0.0.1] — Phase 0: foundation (approved 2026-10-17)
 
 ### Added

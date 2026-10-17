@@ -8,12 +8,13 @@ BeatForge/
 ├── external/JUCE/        JUCE 9.0.4 (git submodule, pinned tag)
 ├── core/                 beatforge_core: GUI-free static library
 │   ├── include/beatforge/  public headers
-│   └── src/
+│   └── src/audio/          AudioEngine, TestTone, LevelMeter (pure C++, no JUCE)
 ├── app/                  BeatForge GUI executable (JUCE)
 │   └── Source/
 │       ├── Main.cpp        application, main window, smoke-test mode
-│       ├── MainComponent.* root content component
-│       └── ui/             theme + LookAndFeel
+│       ├── MainComponent.* root content: header, transport, master meter, status
+│       ├── audio/          AudioDeviceController (JUCE AudioDeviceManager <-> engine)
+│       └── ui/             theme, LookAndFeel, TransportBar, LevelMeterComponent, StatusBar
 ├── tests/                Catch2 unit tests + app launch test (CTest)
 └── mcp/                  (Phase 10) TypeScript MCP server
 ```
@@ -43,6 +44,29 @@ Rules that hold from day one:
 - **Timing comes from the audio timeline**, never from UI timers or frame rate.
 - **Live playback and offline export share** the same instrument and mixing code.
 
+## Audio path (Phase 1)
+
+```
+ GUI thread                               audio thread (device callback)
+ ──────────                               ──────────────────────────────
+ TransportBar ── play()/stop() ──► atomic<bool> playRequested
+                                         │
+ AudioDeviceController                   ▼
+   AudioDeviceManager ──callback──► AudioEngine::process(outputs, n)
+   (ALSA → PipeWire)                       ├─ TestTone (10 ms click-free ramp)
+                                           ├─ position, state  ──► atomics ──► TransportBar (30 Hz poll)
+                                           └─ LevelMeter peaks ──► atomic max ──► LevelMeterComponent (30 Hz)
+```
+
+- `AudioEngine` is plain C++ in `core/`; tests drive it with fake buffers.
+- The callback path touches only atomics and pre-sized state — no locks, no
+  allocation (enforced by a unit test that counts heap allocations).
+- `audioDeviceAboutToStart` → `engine.prepare(sampleRate)`;
+  `audioDeviceStopped` → `engine.reset()` (silence, rewind). Changing device,
+  rate or buffer size restarts the device, which stops playback.
+- Device errors may arrive on any thread; they are stored under a mutex that is
+  never taken on the audio path, then shown via an async update.
+
 ## Toolchain decisions
 
 - **C++20** (g++ 13.3) — supported by JUCE 9 and our toolchain.
@@ -50,5 +74,7 @@ Rules that hold from day one:
   reproducible builds. WebKit/curl disabled (not needed).
 - **Ninja + CMake presets** — `debug` / `release`, build dirs under `build/`.
 - **Catch2 v3.16.0** via FetchContent for C++ unit tests.
-- **Audio on Linux:** JUCE talks to ALSA and JACK. On this machine both are
-  served by PipeWire (`pipewire-alsa`, `pipewire-jack`).
+- **Audio on Linux:** ALSA, whose default device is PipeWire. JUCE's JACK
+  backend is disabled (`JUCE_JACK=0`): Ubuntu's `libjack` is jackd2's, so
+  without a JACK server it only prints connection errors. Revisit with
+  `pw-jack` if we need lower latency than ALSA-via-PipeWire gives.

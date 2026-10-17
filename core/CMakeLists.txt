@@ -3,8 +3,13 @@ get_directory_property(JUCE_VERSION DIRECTORY "${PROJECT_SOURCE_DIR}/external/JU
 
 configure_file(src/BuildInfo.cpp.in "${CMAKE_CURRENT_BINARY_DIR}/BuildInfo.cpp" @ONLY)
 
+# Pure C++ (no JUCE): the real-time engine pieces stay testable without a
+# device or a window.
 add_library(beatforge_core STATIC
-    "${CMAKE_CURRENT_BINARY_DIR}/BuildInfo.cpp")
+    "${CMAKE_CURRENT_BINARY_DIR}/BuildInfo.cpp"
+    src/audio/AudioEngine.cpp
+    src/audio/LevelMeter.cpp
+    src/audio/TestTone.cpp)
 
 target_include_directories(beatforge_core PUBLIC include)
 target_compile_features(beatforge_core PUBLIC cxx_std_20)
