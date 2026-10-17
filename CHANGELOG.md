@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased] — NEBULA visual system, step 1
+
+### Changed
+- New canonical visual direction NEBULA (see DESIGN.md, docs/design/).
+- Theme tokens rewritten (midnight surfaces, violet/magenta/cyan signal
+  colours, semantic mute/solo/meter/playhead colours, fixed track colours,
+  Ubuntu Sans / Ubuntu Sans Mono typography).
+- Central LookAndFeel now styles buttons, combo boxes, linear sliders, popup
+  menus, tooltips and the Audio Settings dialog.
+- Existing screens re-skinned: waveform wordmark, violet Play/Loop/Metronome
+  when on, magenta downbeat / cyan beat lights, violet loop band and playhead,
+  track-colour stripes on drum lanes, cyan→violet→magenta meter.
+- No layout, behaviour or audio changes (verified: identical timing and levels).
+
 ## [0.3.0] — Phase 3: first drum machine (awaiting user test)
 
 ### Added

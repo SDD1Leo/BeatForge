@@ -17,7 +17,7 @@ namespace beatforge
 
     TransportBar::TransportBar (audio::AudioEngine& e)
         : engine (e),
-          playButton ("Play", TransportButton::Icon::play, theme::ok),
+          playButton ("Play", TransportButton::Icon::play, theme::accent),
           stopButton ("Stop", TransportButton::Icon::stop, theme::textPrimary),
           loopButton ("Loop", TransportButton::Icon::loop, theme::accent),
           metronomeButton ("Metronome", TransportButton::Icon::metronome, theme::accent)
@@ -150,10 +150,10 @@ namespace beatforge
 
         auto text = positionArea.reduced (12, 3);
         g.setColour (theme::textPrimary);
-        g.setFont (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 20.0f, juce::Font::plain));
+        g.setFont (theme::numericFont (20.0f));
         g.drawText (barBeatText, text.removeFromTop (24), juce::Justification::centredLeft);
-        g.setColour (theme::textMuted);
-        g.setFont (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 11.0f, juce::Font::plain));
+        g.setColour (theme::textSecondary);
+        g.setFont (theme::numericFont (11.0f));
         g.drawText (timeText, text, juce::Justification::centredLeft);
 
         // Beat lights: one per beat in the bar; downbeat in accent colour.
@@ -166,7 +166,7 @@ namespace beatforge
         {
             const auto dot = juce::Rectangle<float> (x, (float) beatArea.getCentreY() - size / 2.0f, size, size);
             const bool lit = b == currentBeat;
-            g.setColour (lit ? (b == 1 ? theme::accent : theme::ok) : theme::panelRaised);
+            g.setColour (lit ? (b == 1 ? theme::magenta : theme::cyan) : theme::control);
             g.fillEllipse (dot);
             g.setColour (theme::border);
             g.drawEllipse (dot, 1.0f);

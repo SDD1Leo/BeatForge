@@ -59,9 +59,9 @@ namespace beatforge
         if (loopOn && firstBar == 0)
         {
             const auto x1 = tickToX (perBar * loopBars, perBar);
-            g.setColour (theme::accent.withAlpha (0.10f));
+            g.setColour (theme::violet.withAlpha (0.12f));
             g.fillRect (juce::Rectangle<float> (0.0f, 0.0f, x1, bounds.getHeight()));
-            g.setColour (theme::accent);
+            g.setColour (theme::violet);
             g.fillRect (juce::Rectangle<float> (0.0f, 0.0f, x1, 4.0f));
         }
 
@@ -71,8 +71,8 @@ namespace beatforge
             const auto x = tickToX (bar * perBar, perBar);
             g.setColour (theme::border);
             g.drawVerticalLine ((int) x, 0.0f, bounds.getHeight());
-            g.setColour (theme::textMuted);
-            g.setFont (juce::FontOptions (11.0f));
+            g.setColour (theme::textSecondary);
+            g.setFont (theme::font (11.0f));
             g.drawText (juce::String (bar + 1), juce::Rectangle<float> (x + 5.0f, 6.0f, 40.0f, 16.0f),
                         juce::Justification::centredLeft);
 
@@ -92,7 +92,9 @@ namespace beatforge
         if (state != audio::TransportState::stopped || engine.getPositionTicks() > 0.0)
         {
             const auto x = tickToX (engine.getPositionTicks(), perBar);
-            g.setColour (theme::textPrimary);
+            g.setColour (theme::playhead.withAlpha (0.25f));   // soft halo
+            g.fillRect (juce::Rectangle<float> (x - 3.0f, 0.0f, 6.0f, bounds.getHeight()));
+            g.setColour (theme::playhead);
             g.fillRect (juce::Rectangle<float> (x - 1.0f, 0.0f, 2.0f, bounds.getHeight()));
             juce::Path head;
             head.addTriangle (x - 6.0f, 0.0f, x + 6.0f, 0.0f, x, 8.0f);

@@ -76,6 +76,7 @@ JACK support is compiled out for now (see ROADMAP known limitations).
 ## Documentation
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — components and threading rules
+- [DESIGN.md](DESIGN.md) — NEBULA visual design system (tokens, conventions, redesign plan)
 - [ROADMAP.md](ROADMAP.md) — phases and their status
 - [TESTING.md](TESTING.md) — automated tests and manual checklists
 - [CHANGELOG.md](CHANGELOG.md) — what changed per phase

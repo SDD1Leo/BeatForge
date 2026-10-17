@@ -121,20 +121,28 @@ namespace beatforge
         g.setColour (theme::border);
         g.drawHorizontalLine (headerArea.getBottom() - 1, 0.0f, (float) getWidth());
 
+        // Wordmark: a small waveform glyph in the violet-to-magenta signal colours.
         auto header = headerArea.reduced (16, 0);
-        g.setColour (theme::accent);
-        g.fillRoundedRectangle (header.removeFromLeft (10).withSizeKeepingCentre (10, 22).toFloat(), 2.0f);
+        auto glyph = header.removeFromLeft (22).toFloat().withSizeKeepingCentre (22.0f, 22.0f);
+        const float bars[] { 0.35f, 0.7f, 1.0f, 0.55f, 0.85f, 0.4f };
+        juce::ColourGradient signal (theme::violet, glyph.getX(), 0.0f, theme::magenta, glyph.getRight(), 0.0f, false);
+        g.setGradientFill (signal);
+        for (int i = 0; i < 6; ++i)
+        {
+            const float h = glyph.getHeight() * bars[i];
+            g.fillRoundedRectangle (glyph.getX() + (float) i * 3.8f, glyph.getCentreY() - h / 2.0f, 2.2f, h, 1.1f);
+        }
         header.removeFromLeft (10);
         g.setColour (theme::textPrimary);
-        g.setFont (juce::FontOptions (20.0f, juce::Font::bold));
+        g.setFont (theme::font (20.0f, juce::Font::bold));
         g.drawText ("BeatForge", header, juce::Justification::centredLeft);
-        g.setColour (theme::textMuted);
-        g.setFont (juce::FontOptions (13.0f));
+        g.setColour (theme::textSecondary);
+        g.setFont (theme::font (13.0f));
         g.drawText ("v" + toJuce (versionString()), header, juce::Justification::centredRight);
 
         // Empty workspace hint until the sequencer/timeline arrive.
-        g.setColour (theme::textMuted.withAlpha (0.7f));
-        g.setFont (juce::FontOptions (14.0f));
+        g.setColour (theme::textMuted);
+        g.setFont (theme::font (14.0f));
         g.drawText (workspaceHint, workspaceArea.withTrimmedTop (drumPanel.getBottom() - workspaceArea.getY()),
                     juce::Justification::centred);
 
@@ -143,8 +151,8 @@ namespace beatforge
         g.fillRoundedRectangle (outputCard.toFloat(), theme::cornerRadius);
         g.setColour (theme::border);
         g.drawRoundedRectangle (outputCard.toFloat().reduced (0.5f), theme::cornerRadius, 1.0f);
-        g.setColour (theme::textMuted);
-        g.setFont (juce::FontOptions (11.0f, juce::Font::bold));
+        g.setColour (theme::textSecondary);
+        g.setFont (theme::captionFont());
         g.drawText ("MASTER", outputCard.withHeight (34), juce::Justification::centred);
     }
 

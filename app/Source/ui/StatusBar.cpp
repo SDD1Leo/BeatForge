@@ -26,8 +26,8 @@ namespace beatforge
         g.fillEllipse (area.removeFromLeft (8).withSizeKeepingCentre (8, 8).toFloat());
         area.removeFromLeft (8);
 
-        g.setColour (error ? theme::textPrimary : theme::textMuted);
-        g.setFont (juce::FontOptions (12.0f));
+        g.setColour (error ? theme::textPrimary : theme::textSecondary);
+        g.setFont (theme::font (12.0f));
         g.drawText (text, area, juce::Justification::centredLeft, true);
     }
 }

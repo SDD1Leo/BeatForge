@@ -24,17 +24,18 @@ namespace beatforge
         auto bounds = getLocalBounds().toFloat().reduced (1.0f);
         const bool enabled = isEnabled();
 
-        auto fill = lit ? litColour.withAlpha (0.22f) : theme::panelRaised;
-        if (enabled && highlighted) fill = fill.brighter (0.08f);
-        if (enabled && down)        fill = fill.darker (0.15f);
+        // Lit = filled with the signal colour (e.g. violet Play while running).
+        auto fill = lit ? litColour : theme::control;
+        if (enabled && highlighted) fill = fill.brighter (0.1f);
+        if (enabled && down)        fill = fill.darker (0.2f);
 
         g.setColour (fill);
-        g.fillRoundedRectangle (bounds, theme::cornerRadius);
-        g.setColour (lit ? litColour : theme::border);
-        g.drawRoundedRectangle (bounds, theme::cornerRadius, 1.0f);
+        g.fillRoundedRectangle (bounds, theme::controlRadius);
+        g.setColour (lit ? litColour.brighter (0.3f) : (enabled && highlighted ? theme::borderStrong : theme::border));
+        g.drawRoundedRectangle (bounds, theme::controlRadius, theme::borderWidth);
 
-        auto iconColour = lit ? litColour : theme::textPrimary;
-        if (! enabled) iconColour = theme::textMuted.withAlpha (0.4f);
+        auto iconColour = theme::textPrimary;
+        if (! enabled) iconColour = theme::textSecondary.withAlpha (0.4f);
         g.setColour (iconColour);
 
         auto iconArea = bounds.withSizeKeepingCentre (14.0f, 14.0f);

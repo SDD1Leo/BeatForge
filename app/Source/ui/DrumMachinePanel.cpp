@@ -15,8 +15,8 @@ namespace beatforge
 
     juce::Colour DrumMachinePanel::laneColour (int lane)
     {
-        static const juce::Colour colours[] { juce::Colour (0xffff7a2f), juce::Colour (0xffff5c7a), juce::Colour (0xffffd24a),
-                                              juce::Colour (0xff4ad7d1), juce::Colour (0xffa98bff) };
+        static const juce::Colour colours[] { theme::track::kick, theme::track::snare, theme::track::closedHat,
+                                              theme::track::openHat, theme::track::clap };
         return colours[(size_t) juce::jlimit (0, numLanes - 1, lane)];
     }
 
@@ -34,13 +34,12 @@ namespace beatforge
             {
                 b->setClickingTogglesState (true);
                 b->setWantsKeyboardFocus (false);
-                b->setColour (juce::TextButton::buttonColourId, theme::panelRaised);
                 b->setColour (juce::TextButton::textColourOnId, theme::background);
                 addAndMakeVisible (*b);
             }
 
-            mute.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xffffb347));
-            solo.setColour (juce::TextButton::buttonOnColourId, theme::ok);
+            mute.setColour (juce::TextButton::buttonOnColourId, theme::muteOn);
+            solo.setColour (juce::TextButton::buttonOnColourId, theme::soloOn);
             mute.setTooltip ("Mute " + name());
             solo.setTooltip ("Solo " + name());
             mute.onClick = [this] { drums.setLaneMuted (lane, mute.getToggleState()); };
@@ -57,8 +56,7 @@ namespace beatforge
             volume.setNumDecimalPlacesToDisplay (1);
             volume.setWantsKeyboardFocus (false);
             volume.setTooltip (name() + " volume (double-click: 0 dB)");
-            volume.setColour (juce::Slider::trackColourId, colour.withAlpha (0.7f));
-            volume.setColour (juce::Slider::thumbColourId, colour);
+            volume.setColour (juce::Slider::trackColourId, colour);
             volume.onValueChange = [this] { drums.setLaneGainDb (lane, (float) volume.getValue()); };
             addAndMakeVisible (volume);
 
@@ -87,15 +85,21 @@ namespace beatforge
             const auto colour = laneColour (lane);
             auto area = nameArea.toFloat().reduced (0.0f, 6.0f);
 
-            g.setColour (theme::panelRaised.interpolatedWith (colour, 0.25f * flash));
-            g.fillRoundedRectangle (area, theme::cornerRadius);
+            // Track-header style: dark plate, solid track-colour stripe, a hit
+            // light that flashes on every trigger.
+            g.setColour (theme::control.interpolatedWith (colour, 0.18f * flash));
+            g.fillRoundedRectangle (area, theme::controlRadius);
+            g.setColour (colour);
+            g.fillRoundedRectangle (area.withWidth (4.0f), 2.0f);
 
-            auto led = area.removeFromLeft (22.0f).withSizeKeepingCentre (8.0f, 8.0f);
-            g.setColour (colour.withAlpha (0.35f + 0.65f * flash));
+            area.removeFromLeft (10.0f);
+            auto led = area.removeFromLeft (14.0f).withSizeKeepingCentre (7.0f, 7.0f);
+            g.setColour (flash > 0.0f ? colour.withAlpha (0.4f + 0.6f * flash) : theme::border);
             g.fillEllipse (led);
+            area.removeFromLeft (4.0f);
 
             g.setColour (theme::textPrimary);
-            g.setFont (juce::FontOptions (13.0f, juce::Font::bold));
+            g.setFont (theme::font (13.5f, juce::Font::bold));
             g.drawText (name(), area, juce::Justification::centredLeft);
         }
 
@@ -147,7 +151,7 @@ namespace beatforge
             {
                 // Empty cells in every other beat group are lighter so the 4x4
                 // structure is readable.
-                const auto offColour = (step / 4) % 2 == 1 ? theme::panelRaised.brighter (0.07f) : theme::panelRaised;
+                const auto offColour = (step / 4) % 2 == 1 ? theme::control.brighter (0.08f) : theme::control;
 
                 for (int lane = 0; lane < numLanes; ++lane)
                 {
@@ -156,16 +160,17 @@ namespace beatforge
                     const auto colour = laneColour (lane);
 
                     g.setColour (on ? colour : offColour);
-                    g.fillRoundedRectangle (cell, 4.0f);
+                    g.fillRoundedRectangle (cell, theme::controlRadius);
 
+                    // Current step: lifts every cell in the column; a lit step flares.
                     if (step == playingStep)
                     {
-                        g.setColour (on ? juce::Colours::white.withAlpha (0.45f) : theme::textPrimary.withAlpha (0.28f));
-                        g.fillRoundedRectangle (cell, 4.0f);
+                        g.setColour (on ? juce::Colours::white.withAlpha (0.45f) : theme::textPrimary.withAlpha (0.16f));
+                        g.fillRoundedRectangle (cell, theme::controlRadius);
                     }
 
-                    g.setColour (on ? colour.brighter (0.2f) : theme::border);
-                    g.drawRoundedRectangle (cell, 4.0f, 1.0f);
+                    g.setColour (on ? colour.brighter (0.3f) : (step == playingStep ? theme::borderStrong : theme::border));
+                    g.drawRoundedRectangle (cell, theme::controlRadius, theme::borderWidth);
                 }
             }
         }
@@ -287,17 +292,17 @@ namespace beatforge
         g.setColour (theme::border);
         g.drawRoundedRectangle (bounds.reduced (0.5f), theme::cornerRadius, 1.0f);
 
-        g.setColour (theme::textMuted);
-        g.setFont (juce::FontOptions (11.0f, juce::Font::bold));
+        g.setColour (theme::textSecondary);
+        g.setFont (theme::captionFont());
         g.drawText ("DRUMS", titleArea, juce::Justification::centredLeft);
 
         // Step numbers above the grid.
         const auto gridBounds = grid->getBounds();
-        g.setFont (juce::FontOptions (10.0f));
+        g.setFont (theme::font (10.0f));
         for (int step = 0; step < numSteps; ++step)
         {
             const float w = (float) gridBounds.getWidth() / numSteps;
-            g.setColour (step % 4 == 0 ? theme::textPrimary : theme::textMuted);
+            g.setColour (step % 4 == 0 ? theme::textPrimary : theme::textSecondary);
             g.drawText (juce::String (step + 1),
                         juce::Rectangle<float> (gridBounds.getX() + step * w, (float) titleArea.getY(), w, (float) titleArea.getHeight()),
                         juce::Justification::centred);

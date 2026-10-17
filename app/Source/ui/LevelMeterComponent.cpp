@@ -62,11 +62,11 @@ namespace beatforge
         const float barWidth = (area.getWidth() - gap) / 2.0f;
 
         // Scale ticks.
-        g.setFont (juce::FontOptions (10.0f));
+        g.setFont (theme::font (10.0f));
         for (float db : { 0.0f, -6.0f, -12.0f, -18.0f, -24.0f, -36.0f, -48.0f, -60.0f })
         {
             const auto y = dbToY (db, area);
-            g.setColour (theme::textMuted);
+            g.setColour (theme::textSecondary);
             g.drawText (juce::String ((int) db), scale.withY (y - 6.0f).withHeight (12.0f).withTrimmedRight (4.0f),
                         juce::Justification::centredRight);
             g.setColour (theme::border.withAlpha (0.6f));
@@ -82,12 +82,14 @@ namespace beatforge
             g.setColour (theme::background);
             g.fillRoundedRectangle (bar, 2.0f);
 
-            // Green → amber → red, fixed to the dB scale.
-            juce::ColourGradient gradient (theme::error, 0.0f, dbToY (0.0f, bar),
-                                           theme::ok, 0.0f, dbToY (minDb, bar), false);
+            // Cyan body, violet then magenta near the top, red at 0 dBFS - fixed
+            // to the dB scale so a colour always means the same level.
             // Stop positions run 0 (0 dB, top) to 1 (minDb, bottom).
-            gradient.addColour (-6.0 / minDb, juce::Colour (0xffffc04a));
-            gradient.addColour (-18.0 / minDb, theme::ok);
+            juce::ColourGradient gradient (theme::error, 0.0f, dbToY (0.0f, bar),
+                                           theme::meterLow, 0.0f, dbToY (minDb, bar), false);
+            gradient.addColour (-3.0 / minDb, theme::meterHigh);
+            gradient.addColour (-12.0 / minDb, theme::meterMid);
+            gradient.addColour (-24.0 / minDb, theme::meterLow);
 
             const auto top = dbToY (c.displayDb, bar);
             if (c.displayDb > minDb)
@@ -103,7 +105,7 @@ namespace beatforge
             }
 
             auto light = juce::Rectangle<float> (bar.getX(), clipRow.getY(), bar.getWidth(), clipRow.getHeight());
-            g.setColour (c.clipped ? theme::error : theme::panelRaised);
+            g.setColour (c.clipped ? theme::error : theme::control);
             g.fillRoundedRectangle (light, 2.0f);
         }
     }

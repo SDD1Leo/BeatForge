@@ -29,9 +29,9 @@ namespace beatforge
     {
         auto bounds = getLocalBounds().toFloat().reduced (0.5f);
         g.setColour (theme::background);
-        g.fillRoundedRectangle (bounds, theme::cornerRadius);
-        g.setColour (dragging ? theme::accent : theme::border);
-        g.drawRoundedRectangle (bounds, theme::cornerRadius, 1.0f);
+        g.fillRoundedRectangle (bounds, theme::controlRadius);
+        g.setColour (dragging ? theme::accent : (isMouseOver() ? theme::borderStrong : theme::border));
+        g.drawRoundedRectangle (bounds, theme::controlRadius, theme::borderWidth);
 
         if (editor != nullptr && editor->isVisible())
             return;
@@ -40,11 +40,11 @@ namespace beatforge
         auto label = area.removeFromRight (30);
 
         g.setColour (theme::textPrimary);
-        g.setFont (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 18.0f, juce::Font::plain));
+        g.setFont (theme::numericFont (18.0f));
         g.drawText (juce::String (tempo, 2), area, juce::Justification::centredRight);
 
-        g.setColour (theme::textMuted);
-        g.setFont (juce::FontOptions (10.0f, juce::Font::bold));
+        g.setColour (theme::textSecondary);
+        g.setFont (theme::captionFont (10.0f));
         g.drawText ("BPM", label, juce::Justification::centredRight);
     }
 
@@ -93,7 +93,7 @@ namespace beatforge
     void TempoField::showEditor()
     {
         editor = std::make_unique<juce::TextEditor>();
-        editor->setFont (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 18.0f, juce::Font::plain));
+        editor->setFont (theme::numericFont (18.0f));
         editor->setJustification (juce::Justification::centred);
         editor->setInputRestrictions (6, "0123456789.");
         editor->setText (juce::String (tempo, 2), false);
