@@ -10,6 +10,8 @@ add_executable(beatforge_tests
     unit/AllocationGuard.cpp
     unit/AudioEngineTests.cpp
     unit/BuildInfoTests.cpp
+    unit/DrumKitTests.cpp
+    unit/DrumMachineTests.cpp
     unit/LevelMeterTests.cpp
     unit/MetronomeTests.cpp
     unit/MusicalTimeTests.cpp

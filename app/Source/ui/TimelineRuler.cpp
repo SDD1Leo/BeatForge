@@ -30,9 +30,16 @@ namespace beatforge
         }
     }
 
+    int TimelineRuler::firstVisibleBar (double ticksPerBar) const
+    {
+        const auto bar = (int) (engine.getPositionTicks() / ticksPerBar);
+        return (bar / visibleBars()) * visibleBars();
+    }
+
     float TimelineRuler::tickToX (double tick, double ticksPerBar) const
     {
-        return (float) (tick / (ticksPerBar * visibleBars()) * getWidth());
+        const auto origin = firstVisibleBar (ticksPerBar) * ticksPerBar;
+        return (float) ((tick - origin) / (ticksPerBar * visibleBars()) * getWidth());
     }
 
     void TimelineRuler::paint (juce::Graphics& g)
@@ -46,8 +53,10 @@ namespace beatforge
         g.setColour (theme::panel);
         g.fillRoundedRectangle (bounds, theme::cornerRadius);
 
+        const auto firstBar = firstVisibleBar (perBar);
+
         // Loop region (rendered as a band across the full height).
-        if (loopOn)
+        if (loopOn && firstBar == 0)
         {
             const auto x1 = tickToX (perBar * loopBars, perBar);
             g.setColour (theme::accent.withAlpha (0.10f));
@@ -57,7 +66,7 @@ namespace beatforge
         }
 
         // Bars and beats.
-        for (int bar = 0; bar < visibleBars(); ++bar)
+        for (int bar = firstBar; bar < firstBar + visibleBars(); ++bar)
         {
             const auto x = tickToX (bar * perBar, perBar);
             g.setColour (theme::border);

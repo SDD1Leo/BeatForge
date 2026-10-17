@@ -23,6 +23,7 @@ namespace beatforge::audio
     {
         transport.prepare (newSampleRate);
         metronome.prepare (newSampleRate);
+        drums.prepare (newSampleRate);   // allocates the kit; never runs alongside process()
         sampleRate.store (newSampleRate, std::memory_order_release);
     }
 
@@ -31,6 +32,7 @@ namespace beatforge::audio
         playRequested.store (false, std::memory_order_release);
         transport.rewind();
         metronome.reset();
+        drums.reset();
         publishPosition();
         state.store (TransportState::stopped, std::memory_order_release);
     }
@@ -80,6 +82,15 @@ namespace beatforge::audio
         positionSamples.store (transport.getElapsedSamples(), std::memory_order_release);
     }
 
+    void AudioEngine::renderVoices (float* const* outputs, int numOutputs, int start, int num) noexcept
+    {
+        if (num <= 0)
+            return;
+
+        metronome.render (outputs, numOutputs, start, num);
+        drums.render (outputs, numOutputs, start, num);
+    }
+
     void AudioEngine::process (float* const* outputs, int numOutputs, int numSamples) noexcept
     {
         for (int ch = 0; ch < numOutputs; ++ch)
@@ -94,49 +105,56 @@ namespace beatforge::audio
                 pair[numPair++] = outputs[ch];
 
         applySettings();
+        drums.beginBlock();
+        drums.startPendingPreviews();
 
         const bool wantPlay = playRequested.load (std::memory_order_acquire);
 
         if (wantPlay)
         {
-            // Collect this block's beats, then render the click voice between them
-            // so each click starts on its exact sample.
-            std::array<time::Transport::Beat, maxBeatsPerBlock> beats;
-            int numBeats = 0;
+            // Collect this block's grid lines, then render between them so every
+            // click and drum hit starts on its exact sample.
+            std::array<time::Transport::GridLine, maxGridLinesPerBlock> lines;
+            int numLines = 0;
 
-            transport.advance (numSamples, [&] (const time::Transport::Beat& b)
+            transport.advance (numSamples, [&] (const time::Transport::GridLine& line)
             {
-                if (numBeats < maxBeatsPerBlock)
-                    beats[(size_t) numBeats++] = b;
+                if (numLines < maxGridLinesPerBlock)
+                    lines[(size_t) numLines++] = line;
             });
 
             const bool clicks = metronomeEnabled.load (std::memory_order_acquire);
             int rendered = 0;
+            std::uint64_t beats = 0;
 
-            for (int i = 0; i < numBeats; ++i)
+            for (int i = 0; i < numLines; ++i)
             {
-                metronome.render (pair, numPair, rendered, beats[(size_t) i].sampleOffset - rendered);
-                rendered = beats[(size_t) i].sampleOffset;
+                const auto& line = lines[(size_t) i];
+                renderVoices (pair, numPair, rendered, line.sampleOffset - rendered);
+                rendered = line.sampleOffset;
 
-                if (clicks)
-                    metronome.trigger (beats[(size_t) i].isDownbeat());
+                if (line.isBeat)
+                {
+                    ++beats;
+                    if (clicks)
+                        metronome.trigger (line.isDownbeat());
+                }
+
+                if (line.isStep)
+                    drums.triggerStep ((int) ((line.tick / time::Transport::stepTicks) % DrumMachine::numSteps));
             }
 
-            metronome.render (pair, numPair, rendered, numSamples - rendered);
-            beatCount.fetch_add ((std::uint64_t) numBeats, std::memory_order_relaxed);
+            renderVoices (pair, numPair, rendered, numSamples - rendered);
+            beatCount.fetch_add (beats, std::memory_order_relaxed);
             publishPosition();
             state.store (TransportState::playing, std::memory_order_release);
         }
         else
         {
-            // Let a ringing click finish instead of cutting it off.
-            metronome.render (pair, numPair, 0, numSamples);
+            // Previews and ringing tails keep sounding while stopped.
+            renderVoices (pair, numPair, 0, numSamples);
 
-            if (metronome.isSounding())
-            {
-                state.store (TransportState::stopping, std::memory_order_release);
-            }
-            else if (state.load (std::memory_order_relaxed) != TransportState::stopped)
+            if (state.load (std::memory_order_relaxed) != TransportState::stopped)
             {
                 transport.rewind();
                 publishPosition();

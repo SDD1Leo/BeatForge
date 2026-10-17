@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.3.0] — Phase 3: first drum machine (awaiting user test)
+
+### Added
+- 16-step, 5-lane drum machine: kick, snare, closed hat, open hat, clap.
+- Built-in kit synthesised deterministically into sample buffers at startup.
+- Sample-accurate step triggering on the 16th-note grid; pattern loops every
+  bar in sync with tempo changes.
+- Per-drum volume (−60…+6 dB, 5 ms click-free ramps), mute, solo; closed hat
+  chokes open hat; click-free retriggers.
+- Drum grid UI: click or drag-paint steps, audition on click while stopped,
+  click a drum name to hear it, playing-step highlight, trigger lights, Clear.
+- `Biquad` filter and deterministic `Noise` DSP blocks.
+- `tools/analyze_onsets.py --rise` for overlapping hits.
+- 18 new unit tests (kit, drums, controls, step grid).
+
+### Changed
+- Transport emits 16th-note grid lines (beats flagged) instead of beats only.
+- Stop rewinds immediately; tails ring out (no more "stopping" state).
+- Metronome is off by default (M toggles it).
+- Ruler pages with the playhead past bar 8.
+
+### Fixed
+- Default kit levels clipped when several drums hit together.
+- Lane gain ramps no longer depend on the audio buffer size.
+
 ## [0.2.0] — Phase 2: tempo engine & metronome (approved 2026-10-18)
 
 ### Added

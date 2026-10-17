@@ -10,6 +10,7 @@ target_sources(BeatForge
         Source/MainComponent.cpp
         Source/audio/AudioDeviceController.cpp
         Source/ui/BeatForgeLookAndFeel.cpp
+        Source/ui/DrumMachinePanel.cpp
         Source/ui/LevelMeterComponent.cpp
         Source/ui/StatusBar.cpp
         Source/ui/TempoField.cpp

@@ -1,5 +1,7 @@
 #include "beatforge/time/Transport.h"
 
+#include <numeric>
+
 namespace beatforge::time
 {
     void Transport::prepare (double newSampleRate) noexcept
@@ -13,7 +15,7 @@ namespace beatforge::time
     {
         now = 0;
         reanchor (0, 0.0);
-        lastBeatTick = -1;
+        lastLineTick = -1;
     }
 
     void Transport::setTempo (double newBpm) noexcept
@@ -26,6 +28,11 @@ namespace beatforge::time
         reanchor (now, tickAt (now));
         bpm = newBpm;
         samplesPerTick = TempoMap::secondsPerTick (bpm) * sampleRate;
+    }
+
+    Tick Transport::gridTicks() const noexcept
+    {
+        return std::gcd (stepTicks, signature.ticksPerBeat());
     }
 
     void Transport::setTimeSignature (TimeSignature sig) noexcept

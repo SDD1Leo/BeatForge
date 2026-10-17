@@ -34,11 +34,13 @@ namespace
             {
                 const int n = (int) std::min<std::int64_t> (blockSize, numSamples - done);
                 const auto start = elapsed;
-                transport.advance (n, [&] (const Transport::Beat& b)
+                transport.advance (n, [&] (const Transport::GridLine& line)
                 {
-                    REQUIRE (b.sampleOffset >= 0);
-                    REQUIRE (b.sampleOffset < n);
-                    beats.push_back ({ start + b.sampleOffset, b.tick, b.beatInBar });
+                    REQUIRE (line.sampleOffset >= 0);
+                    REQUIRE (line.sampleOffset < n);
+                    lines.push_back ({ start + line.sampleOffset, line.tick, line.beatInBar });
+                    if (line.isBeat)
+                        beats.push_back (lines.back());
                 });
                 elapsed += n;
                 done += n;
@@ -46,7 +48,7 @@ namespace
         }
 
         Transport transport;
-        std::vector<Fired> beats;
+        std::vector<Fired> beats, lines;
         std::int64_t elapsed = 0;
     };
 }
@@ -216,8 +218,31 @@ TEST_CASE ("Rewind returns to tick 0 and replays the downbeat", "[transport]")
     REQUIRE (r.transport.getPositionTicks() == 0.0);
 
     r.beats.clear();
+    r.lines.clear();
     r.elapsed = 0;
     r.run (1, 1);
     REQUIRE (r.beats.size() == 1);
     REQUIRE (r.beats[0].tick == 0);
+}
+
+TEST_CASE ("Every 16th note is a grid line, beats are flagged", "[transport][steps]")
+{
+    Runner r (48000.0, 120.0);   // 16th = 240 ticks = 6000 samples
+    r.run (96000, 333);
+    REQUIRE (r.lines.size() == 16);
+    for (size_t i = 0; i < r.lines.size(); ++i)
+    {
+        REQUIRE (r.lines[i].sample == (std::int64_t) i * 6000);
+        REQUIRE (r.lines[i].tick == (Tick) i * 240);
+    }
+    REQUIRE (r.beats.size() == 4);
+}
+
+TEST_CASE ("6/8 beats fall on every other 16th", "[transport][steps]")
+{
+    Runner r (48000.0, 120.0, { 6, 8 });
+    r.run (96000, 512);
+    REQUIRE (r.lines.size() == 16);
+    REQUIRE (r.beats.size() == 8);
+    REQUIRE (r.beats[6].beatInBar == 1);   // second bar
 }

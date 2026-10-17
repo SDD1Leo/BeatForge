@@ -36,22 +36,48 @@ def read_wav(path):
     return rate, channels, samples[0::channels]
 
 
+def silence_onsets(x, rate, threshold, min_gap):
+    onsets, quiet = [], 10**12
+    for k, v in enumerate(x):
+        if abs(v) > threshold:
+            if quiet > rate * min_gap:
+                onsets.append(k)
+            quiet = 0
+        else:
+            quiet += 1
+    return onsets
+
+
+def rise_onsets(x, rate, threshold, ratio=2.0):
+    """1 ms peak envelope; an onset is a hop at least `ratio` times louder than the loudest
+    of the previous 10 ms, at least 50 ms after the previous onset. Reports the
+    first sample of that hop that exceeds the old level (sample-accurate)."""
+    hop = max(1, int(rate * 0.001))
+    env = [max(abs(v) for v in x[i:i + hop]) for i in range(0, len(x) - hop, hop)]
+    onsets, last = [], -10**9
+    for i in range(10, len(env)):
+        before = max(env[i - 10:i])
+        if env[i] > threshold and env[i] > ratio * before and (i - last) * hop > rate * 0.05:
+            start = i * hop
+            k = next((k for k in range(start, start + hop) if abs(x[k]) > 1.5 * before), start)
+            onsets.append(k)
+            last = i
+    return onsets
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("wav")
     ap.add_argument("--threshold", type=float, default=0.02, help="onset level (linear)")
     ap.add_argument("--min-gap", type=float, default=0.1, help="silence needed before an onset (s)")
+    ap.add_argument("--rise", action="store_true",
+                    help="detect sudden level jumps instead of sound-after-silence "
+                         "(for hits that overlap the previous one's tail)")
+    ap.add_argument("--ratio", type=float, default=2.0, help="level jump that counts as a hit (--rise)")
     args = ap.parse_args()
 
     rate, channels, x = read_wav(args.wav)
-    onsets, quiet = [], 10**12
-    for k, v in enumerate(x):
-        if abs(v) > args.threshold:
-            if quiet > rate * args.min_gap:
-                onsets.append(k)
-            quiet = 0
-        else:
-            quiet += 1
+    onsets = rise_onsets(x, rate, args.threshold, args.ratio) if args.rise else silence_onsets(x, rate, args.threshold, args.min_gap)
 
     print(f"{args.wav}: {len(x) / rate:.2f} s @ {rate} Hz, {channels} ch; {len(onsets)} onsets")
     if len(onsets) > 1:

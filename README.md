@@ -3,18 +3,22 @@
 A native desktop DAW for electronic music, built in C++ with JUCE.
 Small feature set, reliable audio, pleasant workflow.
 
-**Status:** Phase 2 (tempo engine & metronome) built — awaiting hands-on test.
-BeatForge has a musical clock (40–240 BPM, time signatures, bar.beat.tick
-display), a sample-accurate metronome and loop playback.
+**Status:** Phase 3 (first drum machine) built — awaiting hands-on test.
+A 16-step drum machine (kick, snare, closed/open hat, clap) on a sample-accurate
+musical clock (40–240 BPM, time signatures, loop, metronome).
 
 ### Controls
 
 | Action | How |
 |---|---|
+| Build a beat | Click steps in the drum grid; click-drag along a row to paint several. While stopped, a newly set step is auditioned |
+| Hear a drum | Click its name |
+| Drum level / mute / solo | Row slider (double-click = 0 dB), **M**, **S** buttons |
+| Clear the pattern | **Clear** |
 | Play / Stop | Play/Stop buttons, or **Space** |
 | Tempo | Drag the BPM field up/down or scroll (Shift = 0.1 BPM), double-click to type |
 | Time signature | Dropdown next to the tempo (2/4 … 7/8) |
-| Metronome | Metronome button or **M** |
+| Metronome (off by default) | Metronome button or **M** |
 | Loop | Loop button or **L**; length (1/2/4/8 bars from bar 1) in the dropdown |
 See [ROADMAP.md](ROADMAP.md).
 

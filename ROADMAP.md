@@ -10,7 +10,7 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 | 0 | Environment & project foundation | ✅ |
 | 1 | Audio output & transport (device selection, test tone, play/stop, level meter) | ✅ |
 | 2 | Tempo engine & metronome (BPM, bars/beats, loop foundation) | ✅ |
-| 3 | First drum machine (16-step sequencer, 5 drum sounds) | ⏳ |
+| 3 | First drum machine (16-step sequencer, 5 drum sounds) | 🧪 |
 | 4 | Project save/load (versioned format) | ⏳ |
 | 5 | MIDI engine & piano roll | ⏳ |
 | 6 | Built-in synth & mono bass | ⏳ |
@@ -31,11 +31,16 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 - Loop always starts at bar 1 (1/2/4/8 bars); dragging loop points arrives with
   the arrangement view (Phase 7). No seek/pause yet — Stop returns to bar 1.
 - One time signature for the whole project (time-signature changes later).
-- The ruler is display-only.
+- The ruler is display-only (it pages along with the playhead).
+- One 16-step pattern (one 4/4 bar of 16ths, aligned to bar 1); in other time
+  signatures it still repeats every 16 sixteenths. No step velocity/accent,
+  swing, or pattern length options yet. Loading your own samples comes later.
+- The pattern is lost on quit until project saving (Phase 4).
 - In Debug builds, if the ALSA MIDI sequencer cannot be opened JUCE raises a
   debug assertion (`juce_Midi_linux.cpp`). Seen only with ALSA deliberately broken.
 
-## Next up: Phase 3
+## Next up: Phase 4
 
-First drum machine: a 16-step sequencer with kick, snare, closed/open hi-hat
-and clap; pattern looping in sync with the tempo; basic track controls.
+Project saving and loading: a versioned project file that preserves tempo,
+time signature, the drum pattern and drum lane settings; New/Open/Save; useful
+errors for invalid files without silently discarding data.

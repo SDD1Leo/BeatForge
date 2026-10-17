@@ -17,17 +17,24 @@ namespace beatforge::time
     // does not drift.
     //
     // A musical event at tick T fires at the first sample s with tick(s) >= T,
-    // i.e. s = ceil(sampleFor(T)). Each beat fires exactly once, whatever the
-    // block size.
+    // i.e. s = ceil(sampleFor(T)). Each grid line fires exactly once, whatever
+    // the block size.
+    //
+    // The grid is every 16th note (sequencer step) and every beat; with the
+    // usual time signatures beats are a subset of the 16th-note lines.
     class Transport
     {
     public:
-        struct Beat
+        static constexpr Tick stepTicks = ppq / 4;   // one 16th note
+
+        struct GridLine
         {
             int sampleOffset = 0;   // within the block passed to advance()
             Tick tick = 0;
-            int beatInBar = 1;      // 1-based
-            bool isDownbeat() const noexcept { return beatInBar == 1; }
+            bool isStep = false;    // on the 16th-note grid
+            bool isBeat = false;    // on a beat of the time signature
+            int beatInBar = 0;      // 1-based when isBeat
+            bool isDownbeat() const noexcept { return isBeat && beatInBar == 1; }
         };
 
         void prepare (double sampleRate) noexcept;
@@ -42,10 +49,10 @@ namespace beatforge::time
         // Loop [start, end) in ticks. Ignored unless 0 <= start < end.
         void setLoop (bool enabled, Tick start, Tick end) noexcept;
 
-        // Advances the clock by numSamples, calling onBeat (const Beat&) for every
-        // beat that falls inside this block, in order.
-        template <typename OnBeat>
-        void advance (int numSamples, OnBeat&& onBeat) noexcept;
+        // Advances the clock by numSamples, calling onLine (const GridLine&) for
+        // every grid line that falls inside this block, in order.
+        template <typename OnLine>
+        void advance (int numSamples, OnLine&& onLine) noexcept;
 
         double getPositionTicks() const noexcept      { return tickAt (now); }
         std::int64_t getElapsedSamples() const noexcept { return now; }
@@ -67,8 +74,10 @@ namespace beatforge::time
 
         bool loopActive() const noexcept { return loopEnabled && loopStart >= 0 && loopEnd > loopStart; }
 
-        template <typename OnBeat>
-        void emitBeats (std::int64_t from, std::int64_t to, std::int64_t blockStart, OnBeat& onBeat) noexcept;
+        Tick gridTicks() const noexcept;
+
+        template <typename OnLine>
+        void emitGridLines (std::int64_t from, std::int64_t to, std::int64_t blockStart, OnLine& onLine) noexcept;
 
         void reanchor (std::int64_t sample, double tick) noexcept
         {
@@ -84,25 +93,25 @@ namespace beatforge::time
         std::int64_t now = 0;           // samples since rewind
         std::int64_t anchorSample = 0;
         double anchorTick = 0.0;
-        Tick lastBeatTick = -1;         // de-duplicates beats across tempo changes
+        Tick lastLineTick = -1;         // de-duplicates grid lines across tempo changes
 
         bool loopEnabled = false;
         Tick loopStart = 0, loopEnd = 0;
     };
 
-    template <typename OnBeat>
-    void Transport::emitBeats (std::int64_t from, std::int64_t to, std::int64_t blockStart, OnBeat& onBeat) noexcept
+    template <typename OnLine>
+    void Transport::emitGridLines (std::int64_t from, std::int64_t to, std::int64_t blockStart, OnLine& onLine) noexcept
     {
+        const auto grid = gridTicks();
         const auto perBeat = signature.ticksPerBeat();
-        const auto startTick = tickAt (from);
-        auto beatTick = (Tick) std::floor (startTick / (double) perBeat) * perBeat;
+        auto lineTick = (Tick) std::floor (tickAt (from) / (double) grid) * grid;
 
-        for (;; beatTick += perBeat)
+        for (;; lineTick += grid)
         {
-            if (beatTick <= lastBeatTick)
+            if (lineTick <= lastLineTick)
                 continue;
 
-            const auto s = firstSampleAtOrAfter ((double) beatTick);
+            const auto s = firstSampleAtOrAfter ((double) lineTick);
 
             if (s >= to)
                 break;
@@ -110,14 +119,20 @@ namespace beatforge::time
             if (s < from)
                 continue;
 
-            lastBeatTick = beatTick;
-            const auto bbt = toBarBeatTick (beatTick, signature);
-            onBeat (Beat { (int) (s - blockStart), beatTick, bbt.beat });
+            lastLineTick = lineTick;
+
+            GridLine line;
+            line.sampleOffset = (int) (s - blockStart);
+            line.tick = lineTick;
+            line.isStep = lineTick % stepTicks == 0;
+            line.isBeat = lineTick % perBeat == 0;
+            line.beatInBar = line.isBeat ? toBarBeatTick (lineTick, signature).beat : 0;
+            onLine (line);
         }
     }
 
-    template <typename OnBeat>
-    void Transport::advance (int numSamples, OnBeat&& onBeat) noexcept
+    template <typename OnLine>
+    void Transport::advance (int numSamples, OnLine&& onLine) noexcept
     {
         const auto blockStart = now;
         const auto blockEnd = now + numSamples;
@@ -140,13 +155,13 @@ namespace beatforge::time
                 }
             }
 
-            emitBeats (now, segmentEnd, blockStart, onBeat);
+            emitGridLines (now, segmentEnd, blockStart, onLine);
             now = segmentEnd;
 
             if (wraps)
             {
                 reanchor (now, (double) loopStart);
-                lastBeatTick = loopStart - 1;
+                lastLineTick = loopStart - 1;
             }
         }
     }

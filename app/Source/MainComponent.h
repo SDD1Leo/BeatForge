@@ -1,6 +1,7 @@
 #pragma once
 
 #include "audio/AudioDeviceController.h"
+#include "ui/DrumMachinePanel.h"
 #include "ui/LevelMeterComponent.h"
 #include "ui/StatusBar.h"
 #include "ui/TimelineRuler.h"
@@ -38,6 +39,7 @@ namespace beatforge
         AudioDeviceController& devices;
         TransportBar transportBar;
         TimelineRuler ruler;
+        DrumMachinePanel drumPanel;
         LevelMeterComponent outputMeter;
         StatusBar statusBar;
         juce::TooltipWindow tooltips { this, 600 };

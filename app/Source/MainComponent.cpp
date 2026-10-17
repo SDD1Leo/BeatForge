@@ -14,7 +14,7 @@ namespace beatforge
     }
 
     MainComponent::MainComponent (audio::AudioEngine& engine, AudioDeviceController& d)
-        : devices (d), transportBar (engine), ruler (engine), outputMeter (engine.getOutputMeter())
+        : devices (d), transportBar (engine), ruler (engine), drumPanel (engine), outputMeter (engine.getOutputMeter())
     {
         transportBar.onOpenAudioSettings = [this] { openAudioSettings(); };
         transportBar.onLoopChanged = [this] (bool on, int bars) { ruler.setLoop (on, bars); };
@@ -22,6 +22,7 @@ namespace beatforge
 
         addAndMakeVisible (transportBar);
         addAndMakeVisible (ruler);
+        addAndMakeVisible (drumPanel);
         addAndMakeVisible (outputMeter);
         addAndMakeVisible (statusBar);
 
@@ -66,7 +67,7 @@ namespace beatforge
             text = "Audio error: " + s.error + dot + text;
 
         statusBar.setStatus (text, s.error.isNotEmpty());
-        setWorkspaceHint ("Space: play / stop    M: metronome    L: loop    Drag or scroll the tempo to change it");
+        setWorkspaceHint ("Click steps to build a beat    Space: play / stop    M: metronome    L: loop");
     }
 
     void MainComponent::setWorkspaceHint (const juce::String& hint)
@@ -134,7 +135,7 @@ namespace beatforge
         // Empty workspace hint until the sequencer/timeline arrive.
         g.setColour (theme::textMuted.withAlpha (0.7f));
         g.setFont (juce::FontOptions (14.0f));
-        g.drawText (workspaceHint, workspaceArea.withTrimmedTop (ruler.getBottom() - workspaceArea.getY()),
+        g.drawText (workspaceHint, workspaceArea.withTrimmedTop (drumPanel.getBottom() - workspaceArea.getY()),
                     juce::Justification::centred);
 
         // Master output panel.
@@ -160,6 +161,8 @@ namespace beatforge
         body.removeFromRight (16);
         workspaceArea = body;
         ruler.setBounds (body.removeFromTop (64));
+        body.removeFromTop (12);
+        drumPanel.setBounds (body.removeFromTop (DrumMachinePanel::preferredHeight));
         outputMeter.setBounds (outputCard.reduced (16, 0).withTrimmedTop (36).withTrimmedBottom (16));
     }
 }

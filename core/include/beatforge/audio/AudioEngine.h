@@ -1,5 +1,6 @@
 #pragma once
 
+#include "beatforge/audio/DrumMachine.h"
 #include "beatforge/audio/LevelMeter.h"
 #include "beatforge/audio/Metronome.h"
 #include "beatforge/time/Transport.h"
@@ -9,11 +10,11 @@
 
 namespace beatforge::audio
 {
+    // Stop rewinds immediately; sounds that are still ringing finish on their own.
     enum class TransportState
     {
         stopped,
-        playing,
-        stopping   // stop requested; the last click is still ringing out
+        playing
     };
 
     // Everything the audio callback runs. Device-agnostic: the app feeds it
@@ -63,23 +64,26 @@ namespace beatforge::audio
         std::uint64_t getBeatCount() const noexcept { return beatCount.load (std::memory_order_relaxed); }
 
         LevelMeter& getOutputMeter() noexcept { return outputMeter; }
+        DrumMachine& getDrumMachine() noexcept { return drums; }
 
-        static constexpr int maxBeatsPerBlock = 64;
+        static constexpr int maxGridLinesPerBlock = 64;
 
     private:
         void applySettings() noexcept;
         void publishPosition() noexcept;
+        void renderVoices (float* const* outputs, int numOutputs, int start, int num) noexcept;
 
         // Audio-thread state.
         time::Transport transport;
         Metronome metronome;
+        DrumMachine drums;
         LevelMeter outputMeter;
 
         // Settings written by any thread, read by the audio thread.
         std::atomic<bool> playRequested { false };
         std::atomic<double> tempo { time::defaultTempo };
         std::atomic<std::uint32_t> packedSignature;   // numerator << 8 | denominator
-        std::atomic<bool> metronomeEnabled { true };
+        std::atomic<bool> metronomeEnabled { false };
         std::atomic<bool> loopEnabled { false };
         std::atomic<time::Tick> loopStart { 0 }, loopEnd { 0 };
 

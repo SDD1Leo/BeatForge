@@ -22,6 +22,7 @@ namespace beatforge
         void timerCallback() override;
         float tickToX (double tick, double ticksPerBar) const;
         int visibleBars() const;
+        int firstVisibleBar (double ticksPerBar) const;   // 0-based; pages with the playhead
 
         audio::AudioEngine& engine;
         bool loopOn = false;

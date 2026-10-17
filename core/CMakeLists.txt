@@ -8,8 +8,11 @@ configure_file(src/BuildInfo.cpp.in "${CMAKE_CURRENT_BINARY_DIR}/BuildInfo.cpp" 
 add_library(beatforge_core STATIC
     "${CMAKE_CURRENT_BINARY_DIR}/BuildInfo.cpp"
     src/audio/AudioEngine.cpp
+    src/audio/DrumKit.cpp
+    src/audio/DrumMachine.cpp
     src/audio/LevelMeter.cpp
     src/audio/Metronome.cpp
+    src/dsp/Biquad.cpp
     src/time/MusicalTime.cpp
     src/time/TempoMap.cpp
     src/time/Transport.cpp)

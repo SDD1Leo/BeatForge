@@ -70,9 +70,20 @@ TEST_CASE ("Stopped engine outputs exact silence and clears garbage", "[audio][e
     REQUIRE (engine.getPositionTicks() == 0.0);
 }
 
+TEST_CASE ("Metronome is off by default", "[audio][engine][metronome]")
+{
+    AudioEngine engine;
+    REQUIRE_FALSE (engine.isMetronomeEnabled());
+    FakeDevice device (engine, 48000.0, 512);
+    engine.play();
+    REQUIRE (device.runBlocks (200) == 0.0f);   // empty pattern, no clicks: silence
+    REQUIRE (engine.getBeatCount() == 5);
+}
+
 TEST_CASE ("Metronome clicks are heard exactly on the beats", "[audio][engine][metronome]")
 {
     AudioEngine engine;
+    engine.setMetronomeEnabled (true);
     FakeDevice device (engine, 48000.0, 512);
     engine.play();
     device.runBlocks (48000 * 4 / 512);   // 4 s at 120 BPM
@@ -94,6 +105,7 @@ TEST_CASE ("Metronome clicks are heard exactly on the beats", "[audio][engine][m
 TEST_CASE ("Tempo set from another thread applies at the next block", "[audio][engine][tempo]")
 {
     AudioEngine engine;
+    engine.setMetronomeEnabled (true);
     engine.setTempo (100.0);
     FakeDevice device (engine, 44100.0, 441);
     engine.play();
@@ -119,20 +131,19 @@ TEST_CASE ("Metronome can be muted while the clock keeps running", "[audio][engi
     REQUIRE (engine.getPositionTicks() == Catch::Approx (300 * 480 / 25.0));
 }
 
-TEST_CASE ("Stop lets the click ring out, then rewinds", "[audio][engine]")
+TEST_CASE ("Stop rewinds at once and lets the click ring out", "[audio][engine]")
 {
     AudioEngine engine;
+    engine.setMetronomeEnabled (true);
     FakeDevice device (engine, 48000.0, 128);
     engine.play();
     device.runBlocks (2);   // inside the first click
     engine.stop();
-    device.runBlocks (1);
-    REQUIRE (engine.getState() == TransportState::stopping);
-    REQUIRE (engine.getPositionTicks() > 0.0);
-
-    device.runBlocks (20);  // 30 ms click < 23 * 128 samples
+    REQUIRE (device.runBlocks (1) > 0.0f);   // tail still sounding
     REQUIRE (engine.getState() == TransportState::stopped);
     REQUIRE (engine.getPositionTicks() == 0.0);
+
+    device.runBlocks (20);  // 30 ms click < 23 * 128 samples
     REQUIRE (device.runBlocks (5) == 0.0f);
 
     // Next play starts again from the downbeat.
@@ -146,6 +157,7 @@ TEST_CASE ("Stop lets the click ring out, then rewinds", "[audio][engine]")
 TEST_CASE ("Loop region in the engine wraps the musical position", "[audio][engine][loop]")
 {
     AudioEngine engine;
+    engine.setMetronomeEnabled (true);
     engine.setLoop (true, 0, 3840);   // 1 bar @ 120 BPM = 2 s
     FakeDevice device (engine, 48000.0, 1000);
     engine.play();
@@ -157,6 +169,7 @@ TEST_CASE ("Loop region in the engine wraps the musical position", "[audio][engi
 TEST_CASE ("Repeated play/stop stays well-formed", "[audio][engine]")
 {
     AudioEngine engine;
+    engine.setMetronomeEnabled (true);
     FakeDevice device (engine, 48000.0, 128);
 
     for (int cycle = 0; cycle < 500; ++cycle)
@@ -190,6 +203,7 @@ TEST_CASE ("Changing sample rate (device restart) keeps the engine usable", "[au
     REQUIRE (engine.getPositionTicks() == 0.0);
 
     FakeDevice device (engine, 96000.0, 64);
+    engine.setMetronomeEnabled (true);
     REQUIRE (engine.getSampleRate() == 96000.0);
     REQUIRE (device.runBlocks (4) == 0.0f);
 
@@ -203,6 +217,7 @@ TEST_CASE ("Changing sample rate (device restart) keeps the engine usable", "[au
 TEST_CASE ("Output meter sees the clicks", "[audio][engine][meter]")
 {
     AudioEngine engine;
+    engine.setMetronomeEnabled (true);
     FakeDevice device (engine, 48000.0, 480);
     engine.play();
     device.runBlocks (20);
@@ -217,9 +232,18 @@ TEST_CASE ("Audio callback path never allocates", "[audio][engine][realtime]")
     FakeDevice device (engine, 48000.0, 256);   // allocates here, outside the guard
     device.recording.reserve (1 << 20);
 
+    for (int step = 0; step < 16; ++step)
+        for (int lane = 0; lane < DrumMachine::numLanes; ++lane)
+            engine.getDrumMachine().setStep (lane, step, (step + lane) % 3 == 0);
+
     beatforge::test::ScopedAllocationCounter allocations;
+    engine.setMetronomeEnabled (true);
+    engine.getDrumMachine().preview (2);
     engine.play();
     device.runBlocks (100);
+    engine.getDrumMachine().setLaneMuted (1, true);
+    engine.getDrumMachine().setLaneSoloed (0, true);
+    engine.getDrumMachine().setLaneGainDb (0, -6.0f);
     engine.setTempo (90.0);
     engine.setTimeSignature ({ 7, 8 });
     engine.setLoop (true, 0, 3360);

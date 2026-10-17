@@ -9,14 +9,15 @@ BeatForge/
 ├── core/                 beatforge_core: GUI-free static library
 │   ├── include/beatforge/  public headers
 │   └── src/
-│       ├── audio/          AudioEngine, Metronome, LevelMeter (pure C++, no JUCE)
+│       ├── audio/          AudioEngine, DrumMachine, DrumKit, Metronome, LevelMeter
+│       ├── dsp/            Biquad filter, deterministic Noise (pure C++, no JUCE)
 │       └── time/           MusicalTime (PPQ 960, bar/beat/tick), TempoMap, Transport
 ├── app/                  BeatForge GUI executable (JUCE)
 │   └── Source/
 │       ├── Main.cpp        application, main window, smoke-test mode
 │       ├── MainComponent.* root content: header, transport, master meter, status
 │       ├── audio/          AudioDeviceController (JUCE AudioDeviceManager <-> engine)
-│       └── ui/             theme, LookAndFeel, TransportBar, TempoField, TimelineRuler,
+│       └── ui/             theme, LookAndFeel, TransportBar, TempoField, TimelineRuler, DrumMachinePanel,
 │                           LevelMeterComponent, StatusBar
 ├── tools/                analyze_onsets.py (timing analysis of captured audio)
 ├── tests/                Catch2 unit tests + app launch test (CTest)
@@ -47,6 +48,27 @@ Rules that hold from day one:
   lock-free queues / atomics (introduced in Phase 1).
 - **Timing comes from the audio timeline**, never from UI timers or frame rate.
 - **Live playback and offline export share** the same instrument and mixing code.
+
+## Drum machine (Phase 3)
+
+- **Grid:** the transport emits every 16th-note grid line (`stepTicks` = 240)
+  flagged `isStep` / `isBeat`; step index = (tick / 240) mod 16, so the
+  pattern repeats every 3840 ticks (one 4/4 bar) from bar 1.
+- **Kit:** `DrumKit::generate(sampleRate)` synthesises the five one-shots into
+  buffers (deterministic: fixed-seed noise, so renders are repeatable). It
+  runs in `prepare()`, never on the audio thread. Peak levels are set so all
+  five drums on one step stay below 0 dBFS (tested). Playback is sample-based,
+  so user samples can replace a slot later.
+- **Voices:** two per lane; a retrigger fades the previous hit over 1.5 ms (no
+  clicks). The closed hat chokes the open hat (5 ms fade).
+- **Controls:** pattern steps, lane volume/mute/solo and audition requests are
+  atomics written by the UI. Gain changes ramp linearly over a fixed 5 ms,
+  independent of buffer size.
+- **Timing:** the engine renders voices segment-by-segment between grid lines,
+  so every hit starts on its exact sample; output is bit-identical for any
+  block size (tested 1…4096).
+- **Stop** rewinds immediately; ringing tails (drums, metronome) finish
+  naturally. Auditions play while stopped.
 
 ## Musical clock (Phase 2)
 
@@ -79,7 +101,7 @@ Rules that hold from day one:
                                          │
  AudioDeviceController                   ▼
    AudioDeviceManager ──callback──► AudioEngine::process(outputs, n)
-   (ALSA → PipeWire)                       ├─ Transport → Metronome clicks (Phase 2)
+   (ALSA → PipeWire)                       ├─ Transport grid → Metronome clicks + DrumMachine steps
                                            ├─ position, state  ──► atomics ──► TransportBar (30 Hz poll)
                                            └─ LevelMeter peaks ──► atomic max ──► LevelMeterComponent (30 Hz)
 ```
