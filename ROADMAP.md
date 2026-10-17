@@ -1,0 +1,29 @@
+# BeatForge roadmap
+
+Each phase ends with a build, automated tests, and a hands-on test by the
+user. The next phase starts only after approval.
+
+Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
+
+| # | Phase | Status |
+|---|---|---|
+| 0 | Environment & project foundation | 🧪 |
+| 1 | Audio output & transport (device selection, test tone, play/stop, level meter) | ⏳ |
+| 2 | Tempo engine & metronome (BPM, bars/beats, loop foundation) | ⏳ |
+| 3 | First drum machine (16-step sequencer, 5 drum sounds) | ⏳ |
+| 4 | Project save/load (versioned format) | ⏳ |
+| 5 | MIDI engine & piano roll | ⏳ |
+| 6 | Built-in synth & mono bass | ⏳ |
+| 7 | Arrangement view (tracks, clips, volume/pan, loop, undo) | ⏳ |
+| 8 | MIDI device input, recording, MIDI file export | ⏳ |
+| 9 | Offline render & WAV export | ⏳ |
+| 10 | MCP server (TypeScript, local IPC) | ⏳ |
+| 11 | Polish & creative workflow | ⏳ |
+| 12 | Advanced features (one at a time) | ⏳ |
+
+**First major goal:** a complete four-bar electronic composition, exported.
+
+## Next up: Phase 1
+
+Open the native audio device (via PipeWire/ALSA/JACK), device selection +
+status, a test tone, Play/Stop in a transport bar, and an output level meter.

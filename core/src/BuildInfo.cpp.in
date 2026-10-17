@@ -1,0 +1,7 @@
+#include "beatforge/BuildInfo.h"
+
+namespace beatforge
+{
+    std::string_view versionString() noexcept     { return "@PROJECT_VERSION@"; }
+    std::string_view juceVersionString() noexcept { return "@JUCE_VERSION@"; }
+}

@@ -1,0 +1,26 @@
+cmake_minimum_required(VERSION 3.22)
+
+project(BeatForge VERSION 0.0.1 LANGUAGES C CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+option(BEATFORGE_BUILD_TESTS "Build BeatForge tests" ON)
+
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/JUCE/CMakeLists.txt")
+    message(FATAL_ERROR "JUCE submodule missing. Run: git submodule update --init --depth 1")
+endif()
+
+add_subdirectory(external/JUCE EXCLUDE_FROM_ALL)
+
+# GUI-free code (project model, transport, engine, ...) lives in core so it can
+# be unit tested and later driven by the command API without a window.
+add_subdirectory(core)
+add_subdirectory(app)
+
+if(BEATFORGE_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
