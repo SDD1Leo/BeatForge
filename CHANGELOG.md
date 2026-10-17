@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.5.0] — Phase 5: MIDI engine and piano roll (awaiting user test)
+## [0.5.0] — Phase 5: MIDI engine and piano roll (approved 2026-10-18)
 
 ### Added
 - MIDI note/clip model, quantize (1/4…1/32), note constraints.
