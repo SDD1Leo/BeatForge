@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.4.0] — Phase 4: project saving and loading + Nebula transport (awaiting user test)
+## [0.4.0] — Phase 4: project saving and loading + Nebula transport (approved 2026-10-18)
 
 ### Added
 - `.beatforge` project files: versioned JSON (format v1) with tempo, time

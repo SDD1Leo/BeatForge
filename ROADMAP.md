@@ -11,7 +11,7 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 | 1 | Audio output & transport (device selection, test tone, play/stop, level meter) | ✅ |
 | 2 | Tempo engine & metronome (BPM, bars/beats, loop foundation) | ✅ |
 | 3 | First drum machine (16-step sequencer, 5 drum sounds) | ✅ |
-| 4 | Project save/load (versioned format) | 🧪 |
+| 4 | Project save/load (versioned format) | ✅ |
 | 5 | MIDI engine & piano roll | ⏳ |
 | 6 | Built-in synth & mono bass | ⏳ |
 | 7 | Arrangement view (tracks, clips, volume/pan, loop, undo) | ⏳ |
