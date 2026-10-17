@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.6.0] — Phase 6: built-in synthesizer and bass (awaiting user test)
+
+### Added
+- Nebula Poly: 16-voice subtractive synth (sine/saw/square/triangle, resonant
+  low-pass with envelope amount, ADSR, level).
+- Nebula Bass: monophonic bass with last-note priority, legato glide and a
+  filter pluck envelope.
+- DSP: PolyBLEP oscillators, TPT state-variable low-pass, sample-exact ADSR.
+- Instrument tab (Ctrl+3): instrument choice, OSCILLATOR / FILTER / ENVELOPE
+  sections with Nebula knobs and live waveform, filter-response and envelope
+  displays; Reset to defaults.
+- Reusable Nebula rotary knob (design step 3, part 1).
+- Instrument and both instruments' settings saved in projects.
+- 15 new unit tests.
+
+### Changed
+- Gain staging: drum kit 6 dB quieter, Poly default −10 dB, Bass default
+  −6 dB, so drums + chords + bass stay below 0 dBFS at defaults.
+- 0.5 projects' `basicSynth` track now plays with Nebula Poly.
+- The synth track is always saved (its settings matter before a clip exists).
+
+### Fixed
+- Envelope releases stretched when parameters were re-applied each block.
+
 ## [0.5.0] — Phase 5: MIDI engine and piano roll (approved 2026-10-18)
 
 ### Added

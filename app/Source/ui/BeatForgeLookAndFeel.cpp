@@ -261,4 +261,53 @@ namespace beatforge
         textLayout.draw (g, juce::Rectangle<int> (left, 30, alert.getWidth() - left,
                                                   alert.getHeight() - getAlertWindowButtonHeight() - 20).toFloat());
     }
+
+    //==============================================================================
+    void BeatForgeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
+                                                 float startAngle, float endAngle, juce::Slider& slider)
+    {
+        const auto bounds = juce::Rectangle<int> (x, y, width, height).toFloat().reduced (3.0f);
+        const auto size = juce::jmin (bounds.getWidth(), bounds.getHeight());
+        const auto centre = bounds.getCentre();
+        const float arcRadius = size * 0.5f - 2.0f;
+        const float lineWidth = 3.5f;
+        const auto signal = slider.findColour (juce::Slider::rotarySliderFillColourId);
+        const bool hot = slider.isMouseOverOrDragging() && slider.isEnabled();
+        const auto angle = startAngle + sliderPos * (endAngle - startAngle);
+
+        // Track and value arcs.
+        juce::Path track, value;
+        track.addCentredArc (centre.x, centre.y, arcRadius, arcRadius, 0.0f, startAngle, endAngle, true);
+        value.addCentredArc (centre.x, centre.y, arcRadius, arcRadius, 0.0f, startAngle, angle, true);
+        const juce::PathStrokeType stroke (lineWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
+        g.setColour (theme::control.brighter (0.1f));
+        g.strokePath (track, stroke);
+        g.setColour (slider.isEnabled() ? (slider.isMouseButtonDown() ? signal.brighter (0.25f) : signal) : theme::textMuted);
+        g.strokePath (value, stroke);
+
+        // Knob body with a pointer.
+        const float bodyRadius = arcRadius - lineWidth - 3.0f;
+        const auto body = juce::Rectangle<float> (bodyRadius * 2.0f, bodyRadius * 2.0f).withCentre (centre);
+        g.setColour (theme::panelRaised.brighter (hot ? 0.08f : 0.0f));
+        g.fillEllipse (body);
+        g.setColour (hot ? theme::borderStrong : theme::border);
+        g.drawEllipse (body, 1.0f);
+
+        const juce::Point<float> tip (centre.x + std::sin (angle) * (bodyRadius - 3.0f),
+                                      centre.y - std::cos (angle) * (bodyRadius - 3.0f));
+        const juce::Point<float> base (centre.x + std::sin (angle) * bodyRadius * 0.35f,
+                                       centre.y - std::cos (angle) * bodyRadius * 0.35f);
+        g.setColour (theme::textPrimary);
+        g.drawLine ({ base, tip }, 2.0f);
+    }
+
+    juce::Label* BeatForgeLookAndFeel::createSliderTextBox (juce::Slider& slider)
+    {
+        auto* label = LookAndFeel_V4::createSliderTextBox (slider);
+        label->setFont (juce::Font (theme::numericFont (11.5f)));
+        label->setColour (juce::Label::textColourId, theme::textPrimary);
+        label->setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+        label->setColour (juce::Label::outlineColourId, juce::Colours::transparentBlack);
+        return label;
+    }
 }

@@ -164,10 +164,112 @@ namespace beatforge::project
 
     namespace
     {
+        const char* waveNames[] { "sine", "saw", "square", "triangle" };
+
+        json paramsToJson (const Project& p, audio::InstrumentType type)
+        {
+            json out = parseOr (p.extraInstrumentParams[(size_t) type], json::object());
+            if (! out.is_object())
+                out = json::object();
+
+            for (int i = 0; i < audio::numParams; ++i)
+            {
+                const auto param = (audio::Param) i;
+                const auto value = p.instrumentParams[(size_t) type][(size_t) i];
+                const auto id = std::string (audio::paramSpec (param).id);
+                if (param == audio::Param::wave)
+                    out[id] = waveNames[std::clamp ((int) value, 0, 3)];
+                else
+                    out[id] = value;
+            }
+            return out;
+        }
+
+        void readParams (const json& source, Project& p, audio::InstrumentType type, std::vector<std::string>& warnings)
+        {
+            const auto name = std::string (audio::instrumentName (type));
+            std::vector<const char*> known;
+            int corrected = 0;
+
+            for (int i = 0; i < audio::numParams; ++i)
+            {
+                const auto param = (audio::Param) i;
+                const auto& spec = audio::paramSpec (param);
+                const auto id = std::string (spec.id);
+                known.push_back (spec.id.data());
+
+                if (! source.contains (id))
+                    continue;   // keeps the default
+
+                const auto& v = source[id];
+                float value = 0.0f;
+
+                if (param == audio::Param::wave)
+                {
+                    const auto* found = v.is_string() ? std::find_if (std::begin (waveNames), std::end (waveNames),
+                                                                      [&] (const char* w) { return v.get<std::string>() == w; })
+                                                      : std::end (waveNames);
+                    if (found == std::end (waveNames)) { ++corrected; continue; }
+                    value = (float) (found - std::begin (waveNames));
+                }
+                else
+                {
+                    if (! v.is_number() || ! std::isfinite (v.get<double>())) { ++corrected; continue; }
+                    value = (float) v.get<double>();
+                    const auto clamped = std::clamp (value, spec.min, spec.max);
+                    if (clamped != value) ++corrected;
+                    value = clamped;
+                }
+
+                p.instrumentParams[(size_t) type][(size_t) i] = value;
+            }
+
+            if (corrected > 0)
+                warnings.push_back (std::to_string (corrected) + " " + name + " setting(s) were out of range or unreadable and were corrected.");
+
+            // Unknown keys (settings from a newer version) are kept.
+            json extra = json::object();
+            for (auto it = source.begin(); it != source.end(); ++it)
+                if (std::find_if (known.begin(), known.end(), [&] (const char* k) { return it.key() == k; }) == known.end())
+                    extra[it.key()] = it.value();
+            p.extraInstrumentParams[(size_t) type] = extra.dump();
+        }
+
         void readSynthTrack (const json& track, Project& p, std::vector<std::string>& warnings)
         {
             p.synthTrackName = readName (track, "name", "Synth", Project::maxNameLength, "Synth track name", warnings);
-            p.extraSynthTrack = extrasOf (track, { "type", "instrument", "name", "clip" });
+            p.extraSynthTrack = extrasOf (track, { "type", "instrument", "name", "clip", "params" });
+
+            // "basicSynth" (0.5) became Nebula Poly in 0.6.
+            p.instrument = track["instrument"] == "monoBass" ? audio::InstrumentType::monoBass : audio::InstrumentType::polySynth;
+
+            if (track.contains ("params"))
+            {
+                const auto& params = track["params"];
+                if (params.is_object())
+                {
+                    for (int t = 0; t < audio::numInstrumentTypes; ++t)
+                    {
+                        const auto id = std::string (audio::instrumentId ((audio::InstrumentType) t));
+                        if (params.contains (id) && params[id].is_object())
+                            readParams (params[id], p, (audio::InstrumentType) t, warnings);
+                    }
+                    auto extra = parseOr (p.extraSynthTrack, json::object());
+                    json unknownParams = json::object();
+                    for (auto it = params.begin(); it != params.end(); ++it)
+                        if (it.key() != "polySynth" && it.key() != "monoBass")
+                            unknownParams[it.key()] = it.value();
+                    if (! unknownParams.empty())
+                    {
+                        extra["otherInstrumentParams"] = unknownParams;
+                        p.extraSynthTrack = extra.dump();
+                    }
+                }
+                else
+                {
+                    warnings.push_back ("The instrument settings were unreadable; using defaults.");
+                }
+            }
 
             if (! track.contains ("clip"))
                 return;   // a synth track without a clip yet
@@ -286,40 +388,55 @@ namespace beatforge::project
 
         json tracks = json::array ({ track });
 
-        if (p.synthClip)
+        // The synth track is always written: its instrument settings matter even
+        // before a clip exists.
         {
             json synth = parseOr (p.extraSynthTrack, json::object());
             if (! synth.is_object())
                 synth = json::object();
 
+            json params = { { "polySynth", paramsToJson (p, audio::InstrumentType::polySynth) },
+                            { "monoBass", paramsToJson (p, audio::InstrumentType::monoBass) } };
+            if (synth.contains ("otherInstrumentParams"))
+            {
+                // Settings of instruments this version does not know go back where they came from.
+                for (auto it = synth["otherInstrumentParams"].begin(); it != synth["otherInstrumentParams"].end(); ++it)
+                    params[it.key()] = it.value();
+                synth.erase ("otherInstrumentParams");
+            }
+
             synth["type"] = "instrument";
-            synth["instrument"] = "basicSynth";
+            synth["instrument"] = std::string (audio::instrumentId (p.instrument));
             synth["name"] = p.synthTrackName;
+            synth["params"] = params;
 
             json clip = parseOr (p.extraClip, json::object());
             if (! clip.is_object())
                 clip = json::object();
 
-            clip["lengthTicks"] = p.synthClip->length;
-            json notes = json::array();
-            for (auto& n : p.synthClip->notes)
+            if (p.synthClip)
             {
-                json note = { { "pitch", n.pitch }, { "velocity", n.velocity }, { "start", n.start }, { "length", n.length } };
-                if (auto it = p.noteExtra.find (n.id); it != p.noteExtra.end())
+                clip["lengthTicks"] = p.synthClip->length;
+                json notes = json::array();
+                for (auto& n : p.synthClip->notes)
                 {
-                    auto extra = parseOr (it->second, json::object());
-                    if (extra.is_object())
-                        for (auto e = extra.begin(); e != extra.end(); ++e)
-                            if (! note.contains (e.key()))
-                                note[e.key()] = e.value();
+                    json note = { { "pitch", n.pitch }, { "velocity", n.velocity }, { "start", n.start }, { "length", n.length } };
+                    if (auto it = p.noteExtra.find (n.id); it != p.noteExtra.end())
+                    {
+                        auto extra = parseOr (it->second, json::object());
+                        if (extra.is_object())
+                            for (auto e = extra.begin(); e != extra.end(); ++e)
+                                if (! note.contains (e.key()))
+                                    note[e.key()] = e.value();
+                    }
+                    notes.push_back (note);
                 }
-                notes.push_back (note);
-            }
-            for (auto& raw : parseOr (p.invalidNotes, json::array()))
-                notes.push_back (raw);
+                for (auto& raw : parseOr (p.invalidNotes, json::array()))
+                    notes.push_back (raw);
 
-            clip["notes"] = notes;
-            synth["clip"] = clip;
+                clip["notes"] = notes;
+                synth["clip"] = clip;
+            }
             tracks.push_back (synth);
         }
         for (auto& extraTrack : parseOr (p.extraTracks, json::array()))
@@ -431,7 +548,9 @@ namespace beatforge::project
             {
                 const bool isDrums = track.is_object() && track.contains ("type") && track["type"] == "drumMachine";
                 const bool isSynth = track.is_object() && track.contains ("type") && track["type"] == "instrument"
-                                  && track.contains ("instrument") && track["instrument"] == "basicSynth";
+                                  && track.contains ("instrument")
+                                  && (track["instrument"] == "basicSynth" || track["instrument"] == "polySynth"
+                                      || track["instrument"] == "monoBass");
 
                 if (isSynth && ! haveSynth)
                 {

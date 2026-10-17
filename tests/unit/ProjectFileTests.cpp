@@ -202,8 +202,9 @@ TEST_CASE ("Unknown data survives a load/save cycle", "[project][file][compat]")
     REQUIRE (resaved["tracks"][0]["lanes"][0]["probability"] == nlohmann::ordered_json::array ({ 1, 1 }));
     REQUIRE (resaved["tracks"][0]["lanes"][0]["stepsAfter16"] == "x.x.x.x.x.x.x.x.");
     REQUIRE (resaved["tracks"][0]["lanes"][5]["sound"] == "cowbell");
-    REQUIRE (resaved["tracks"][1]["type"] == "audio");
-    REQUIRE (resaved["tracks"][1]["clips"] == nlohmann::ordered_json::array ({ 1, 2, 3 }));
+    REQUIRE (resaved["tracks"][1]["type"] == "instrument");   // the synth track is always written
+    REQUIRE (resaved["tracks"][2]["type"] == "audio");
+    REQUIRE (resaved["tracks"][2]["clips"] == nlohmann::ordered_json::array ({ 1, 2, 3 }));
 
     // And it stays stable on the next cycle.
     const auto second = fromJson (resaved.dump());

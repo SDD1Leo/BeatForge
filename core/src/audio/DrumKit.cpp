@@ -20,12 +20,12 @@ namespace beatforge::audio
 
         double decay (double t, double timeConstant) { return std::exp (-t / timeConstant); }
 
-        // Peak levels leave headroom for every drum landing on the same step:
-        // all five together stay below 0 dBFS at default lane volumes.
-        constexpr float kickPeak = 0.44f;    // -7 dBFS
-        constexpr float snarePeak = 0.32f;   // -10 dBFS
-        constexpr float hatPeak = 0.18f;     // -15 dBFS
-        constexpr float clapPeak = 0.28f;    // -11 dBFS
+        // Gain staging: the kit as a whole peaks around -7 dBFS when every drum
+        // lands on one step, leaving room for the synth tracks on top.
+        constexpr float kickPeak = 0.22f;    // -13 dBFS
+        constexpr float snarePeak = 0.16f;   // -16 dBFS
+        constexpr float hatPeak = 0.09f;     // -21 dBFS
+        constexpr float clapPeak = 0.14f;    // -17 dBFS
 
         // Scales to the target peak and fades the last 3 ms so every sample ends at 0.
         void finish (std::vector<float>& s, double sampleRate, float peakTarget)

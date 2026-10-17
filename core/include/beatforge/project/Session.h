@@ -26,6 +26,7 @@ namespace beatforge::project
             pattern,      // drum steps
             lanes,        // lane names, volume, mute, solo
             notes,        // the synth clip: created, resized, notes edited
+            instrument,   // synth track instrument choice or settings
             metadata      // name, file path, saved/unsaved
         };
 
@@ -63,6 +64,13 @@ namespace beatforge::project
         // Empty `ids` = every note.
         void quantizeNotes (const std::vector<midi::NoteId>& ids, time::Tick grid);
         const midi::Note* findNote (midi::NoteId) const noexcept;
+
+        // --- Synth track instrument -----------------------------------------------
+        void setInstrument (audio::InstrumentType);
+        // Clamped to the parameter's range; wave is rounded to a waveform index.
+        void setInstrumentParam (audio::InstrumentType, audio::Param, float value);
+        float getInstrumentParam (audio::InstrumentType, audio::Param) const noexcept;
+        void resetInstrumentParams (audio::InstrumentType);
 
         // --- Lifecycle --------------------------------------------------------
         void newProject();

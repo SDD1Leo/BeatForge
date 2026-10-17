@@ -12,6 +12,8 @@ target_sources(BeatForge
         Source/project/ProjectActions.cpp
         Source/ui/BeatForgeLookAndFeel.cpp
         Source/ui/DrumMachinePanel.cpp
+        Source/ui/InstrumentPanel.cpp
+        Source/ui/Knob.cpp
         Source/ui/LevelMeterComponent.cpp
         Source/ui/PianoRollPanel.cpp
         Source/ui/ProjectButton.cpp

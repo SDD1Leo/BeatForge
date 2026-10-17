@@ -3,10 +3,11 @@
 A native desktop DAW for electronic music, built in C++ with JUCE.
 Small feature set, reliable audio, pleasant workflow.
 
-**Status:** Phase 5 (MIDI engine and piano roll) built — awaiting hands-on test.
-A 16-step drum machine and a Synth track with a looping MIDI clip edited in a
-piano roll, on a sample-accurate musical clock (40–240 BPM, time signatures,
-loop, metronome), saved as versioned `.beatforge` project files.
+**Status:** Phase 6 (built-in synthesizer and bass) built — awaiting hands-on test.
+A 16-step drum machine and a Synth track (Nebula Poly or Nebula Bass) playing
+a looping MIDI clip edited in a piano roll, on a sample-accurate musical clock
+(40–240 BPM, time signatures, loop, metronome), saved as versioned
+`.beatforge` project files.
 
 ### Controls
 
@@ -19,7 +20,9 @@ loop, metronome), saved as versioned `.beatforge` project files.
 | Rename a drum | Double-click its name |
 | Project menu | Click the project name (top left): New, Open, Open Recent, Save, Save As, Rename |
 | New / Open / Save / Save As | **Ctrl+N** / **Ctrl+O** / **Ctrl+S** / **Ctrl+Shift+S** |
-| Switch Drums / Piano Roll | Tabs above the editor, or **Ctrl+1** / **Ctrl+2** |
+| Switch Drums / Piano Roll / Instrument | Tabs above the editor, or **Ctrl+1** / **Ctrl+2** / **Ctrl+3** |
+| Choose the synth track's instrument | Instrument tab → **Nebula Poly** (chords, leads) or **Nebula Bass** (mono, glide) |
+| Shape the sound | Instrument tab: wave buttons; knobs (drag up/down or scroll, Shift = fine, double-click = default); **Reset** restores defaults |
 | Create a MIDI clip | Piano Roll tab → **Create 4-bar MIDI clip**; length 1/2/4/8 bars in the header |
 | Draw / select notes | Click empty grid to add a note; drag on empty grid to box-select; Shift/Ctrl+click adds to the selection |
 | Move / resize / delete | Drag a note; drag its right edge; right-click it or press **Delete** |

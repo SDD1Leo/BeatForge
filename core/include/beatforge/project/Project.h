@@ -1,6 +1,7 @@
 #pragma once
 
 #include "beatforge/audio/DrumMachine.h"
+#include "beatforge/audio/Instruments.h"
 #include "beatforge/midi/Note.h"
 #include "beatforge/time/MusicalTime.h"
 #include "beatforge/time/TempoMap.h"
@@ -51,6 +52,14 @@ namespace beatforge::project
         std::string extraClip = "{}";                  // unknown keys of the clip
         std::map<midi::NoteId, std::string> noteExtra; // unknown keys per note
         std::string invalidNotes = "[]";               // unreadable notes, kept verbatim
+
+        // The synth track's instrument and the settings of each instrument
+        // (both kept, so switching back restores the sound).
+        audio::InstrumentType instrument = audio::InstrumentType::polySynth;
+        std::array<std::array<float, audio::numParams>, audio::numInstrumentTypes> instrumentParams = defaultInstrumentParams();
+        std::array<std::string, audio::numInstrumentTypes> extraInstrumentParams { "{}", "{}" };
+
+        static std::array<std::array<float, audio::numParams>, audio::numInstrumentTypes> defaultInstrumentParams();
         std::string extraTracks = "[]";     // tracks of types this version cannot play
 
         static std::array<DrumLane, audio::DrumMachine::numLanes> defaultLanes();

@@ -13,6 +13,7 @@ add_executable(beatforge_tests
     unit/DrumKitTests.cpp
     unit/DrumMachineTests.cpp
     unit/LevelMeterTests.cpp
+    unit/InstrumentTests.cpp
     unit/MetronomeTests.cpp
     unit/MidiSessionTests.cpp
     unit/MidiTests.cpp

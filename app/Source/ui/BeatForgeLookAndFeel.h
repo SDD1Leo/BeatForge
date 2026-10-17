@@ -27,6 +27,10 @@ namespace beatforge
                                juce::Slider::SliderStyle, juce::Slider&) override;
         int getSliderThumbRadius (juce::Slider&) override;
 
+        void drawRotarySlider (juce::Graphics&, int x, int y, int width, int height, float sliderPos,
+                               float rotaryStartAngle, float rotaryEndAngle, juce::Slider&) override;
+        juce::Label* createSliderTextBox (juce::Slider&) override;
+
         void drawTooltip (juce::Graphics&, const juce::String& text, int width, int height) override;
 
         void drawAlertBox (juce::Graphics&, juce::AlertWindow&, const juce::Rectangle<int>& textArea,

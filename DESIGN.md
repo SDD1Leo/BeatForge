@@ -45,6 +45,9 @@ to its default elsewhere); **Ubuntu Sans Mono** (`theme::numericFont`) for
 tabular values: position, time, BPM. Captions (`DRUMS`, `MASTER`, `BPM`) use
 `theme::captionFont` (small, bold, tracked).
 
+Section colours inside instruments: oscillator **violet**, filter **cyan**,
+envelope **magenta** — knob arcs and displays use their section's colour.
+
 ## Track colours
 
 Fixed per musical role (`theme::track`), identical in every view:
@@ -78,11 +81,13 @@ Colour always comes with a text label; it is never the only signal.
 |---|---|---|
 | 1 | Tokens + central LookAndFeel applied to every existing screen (no layout change) | done (0.3.x) |
 | 2 | Transport bar: project button + saved state, captioned readout strip (BPM / SIG / BAR.BEAT.TICK / TIME), icon buttons; Nebula alert dialogs and file browser | done (0.4.0) |
-| 3 | Shared controls: rotary `Knob`, `Panel` with header, compact M/S, Nebula meter strip; replace one-off painting | planned |
+| 3a | Rotary `Knob` (arc in section colour, pointer, hover/drag states, unit-aware value) | done (0.6.0) |
+| 3 | Remaining shared controls: `Panel` with header, compact M/S, meter strip; replace one-off painting | planned |
 | 4 | Step sequencer polish to the reference (velocity lane when velocity exists) | planned |
 | 5 | Arrangement-first layout (track headers + clips, timeline takes most space) with Phase 7 | planned |
 | 6a | Piano roll (keyboard, grid, notes in track colour, velocity lane, header controls) + workspace tabs | done (0.5.0) |
-| 6 | Synth, mixer, export dialog in the same language as each feature lands (Phases 6, 9, 11) | planned |
+| 6b | Instrument editor (sections, wave buttons, live waveform/filter/envelope displays) | done (0.6.0) |
+| 6 | Mixer, export dialog in the same language as each feature lands (Phases 7, 9, 11) | planned |
 
 Not shown until implemented: record, menus (File/Edit…), browser, AI
 co-producer, mixer, synth, export.

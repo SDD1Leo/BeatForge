@@ -3,6 +3,7 @@
 #include "audio/AudioDeviceController.h"
 #include "project/ProjectActions.h"
 #include "ui/DrumMachinePanel.h"
+#include "ui/InstrumentPanel.h"
 #include "ui/LevelMeterComponent.h"
 #include "ui/PianoRollPanel.h"
 #include "ui/TabBar.h"
@@ -54,7 +55,8 @@ namespace beatforge
         TimelineRuler ruler;
         DrumMachinePanel drumPanel;
         PianoRollPanel pianoRoll;
-        TabBar workspaceTabs { { "Drums", "Piano Roll" } };
+        InstrumentPanel instrumentPanel;
+        TabBar workspaceTabs { { "Drums", "Piano Roll", "Instrument" } };
         void showTab (int index);
         LevelMeterComponent outputMeter;
         StatusBar statusBar;

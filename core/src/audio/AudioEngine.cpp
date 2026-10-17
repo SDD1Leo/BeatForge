@@ -25,7 +25,7 @@ namespace beatforge::audio
         transport.prepare (newSampleRate);
         metronome.prepare (newSampleRate);
         drums.prepare (newSampleRate);   // allocates the kit; never runs alongside process()
-        synth.prepare (newSampleRate);
+        instruments.prepare (newSampleRate);
         sampleRate.store (newSampleRate, std::memory_order_release);
     }
 
@@ -35,7 +35,7 @@ namespace beatforge::audio
         transport.rewind();
         metronome.reset();
         drums.reset();
-        synth.reset();
+        instruments.reset();
         publishPosition();
         state.store (TransportState::stopped, std::memory_order_release);
     }
@@ -103,16 +103,16 @@ namespace beatforge::audio
 
         metronome.render (outputs, numOutputs, start, num);
         drums.render (outputs, numOutputs, start, num);
-        synth.render (outputs, numOutputs, start, num);
+        instruments.render (outputs, numOutputs, start, num);
     }
 
     void AudioEngine::releaseNotesNotCovering (double absoluteTick) noexcept
     {
         if (schedule == nullptr)
-            return synth.releaseAll();
+            return instruments.releaseAll();
 
         const auto local = std::fmod (absoluteTick, (double) schedule->clipLength);
-        synth.releaseUnless ([&] (midi::NoteId id) { return schedule->covers (id, local); });
+        instruments.releaseUnless ([&] (midi::NoteId id) { return schedule->covers (id, local); });
     }
 
     void AudioEngine::process (float* const* outputs, int numOutputs, int numSamples) noexcept
@@ -132,11 +132,13 @@ namespace beatforge::audio
         drums.beginBlock();
         drums.startPendingPreviews();
 
+        instruments.beginBlock();
+
         PreviewQueue::Request preview;
         while (previews.pop (preview))
         {
-            if (preview.velocity > 0) synth.noteOn (PolySynth::previewId, preview.pitch, preview.velocity);
-            else                      synth.previewOff (preview.pitch);
+            if (preview.velocity > 0) instruments.noteOn (PolySynthInstrument::previewId, preview.pitch, preview.velocity);
+            else                      instruments.previewOff (preview.pitch);
         }
 
         bool scheduleChanged = false;
@@ -215,8 +217,8 @@ namespace beatforge::audio
 
                 switch (e.kind)
                 {
-                    case noteOff:  synth.noteOff (e.note->id); break;
-                    case noteOn:   synth.noteOn (e.note->id, e.note->pitch, e.note->velocity); break;
+                    case noteOff:  instruments.noteOff (e.note->id); break;
+                    case noteOn:   instruments.noteOn (e.note->id, e.note->pitch, e.note->velocity); break;
                     case jump:     releaseNotesNotCovering (e.tick); break;
                     case gridLine:
                         if (e.line.isBeat)
@@ -242,7 +244,7 @@ namespace beatforge::audio
             // Stopping releases every clip note (no stuck notes); auditions and
             // ringing tails keep sounding while stopped.
             if (wasPlaying)
-                synth.releaseUnless ([] (midi::NoteId) { return false; });
+                instruments.releaseUnless ([] (midi::NoteId) { return false; });
 
             renderVoices (pair, numPair, 0, numSamples);
 
@@ -254,7 +256,7 @@ namespace beatforge::audio
             }
         }
 
-        activeSynthVoices.store (synth.getActiveVoiceCount(), std::memory_order_relaxed);
+        activeSynthVoices.store (instruments.activeVoices(), std::memory_order_relaxed);
         outputMeter.process (outputs, std::min (numOutputs, LevelMeter::maxChannels), numSamples);
     }
 }

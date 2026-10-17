@@ -3,7 +3,7 @@
 #include "beatforge/audio/DrumMachine.h"
 #include "beatforge/audio/LevelMeter.h"
 #include "beatforge/audio/Metronome.h"
-#include "beatforge/audio/PolySynth.h"
+#include "beatforge/audio/Instruments.h"
 #include "beatforge/audio/PreviewQueue.h"
 #include "beatforge/midi/NoteSchedule.h"
 #include "beatforge/time/Transport.h"
@@ -84,6 +84,9 @@ namespace beatforge::audio
 
         int getActiveSynthVoices() const noexcept { return activeSynthVoices.load (std::memory_order_relaxed); }
 
+        // The synth track's instrument and its parameters (any thread).
+        InstrumentRack& getInstruments() noexcept { return instruments; }
+
         static constexpr int maxGridLinesPerBlock = 64;
         static constexpr int maxEventsPerBlock = 256;
 
@@ -97,7 +100,7 @@ namespace beatforge::audio
         time::Transport transport;
         Metronome metronome;
         DrumMachine drums;
-        PolySynth synth;
+        InstrumentRack instruments;
         LevelMeter outputMeter;
         midi::ScheduleExchange schedules;
         const midi::NoteSchedule* schedule = nullptr;   // audio thread

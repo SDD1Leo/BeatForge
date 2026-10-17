@@ -217,7 +217,7 @@ TEST_CASE ("Preview plays a lane while stopped", "[drums]")
     f.drums().preview (snare);
     const auto out = render (f.engine, 9600, 512);
     REQUIRE (onsets (out) == std::vector<size_t> { 0 });
-    REQUIRE (peakIn (out, 0, 9600) > 0.2f);
+    REQUIRE (peakIn (out, 0, 9600) > 0.1f);
     REQUIRE (f.engine.getState() == TransportState::stopped);
     REQUIRE (f.drums().getTriggerCount (snare) == 1);
 }
@@ -235,7 +235,7 @@ TEST_CASE ("Closed hat chokes the open hat", "[drums]")
         return peakIn (out, 19000, 23000);
     };
 
-    REQUIRE (openHatTail (false) > 0.01f);   // open hat still ringing
+    REQUIRE (openHatTail (false) > 0.003f);  // open hat still ringing
     REQUIRE (openHatTail (true) == 0.0f);    // choked
 }
 

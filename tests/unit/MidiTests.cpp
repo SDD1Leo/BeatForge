@@ -53,7 +53,20 @@ namespace
 
     // 120 BPM @ 48 kHz: 25 samples per tick, a beat is 24000 samples.
     constexpr int samplesPerTick = 25;
-    const int releaseSamples = (int) (audio::PolySynth::releaseSeconds * 48000.0) + 2;
+    // Default Nebula Poly release, plus a little for the filter to ring out.
+    const int releaseSamples = (int) (audio::defaultValue (audio::InstrumentType::polySynth, audio::Param::release) * 48000.0) + 64;
+
+    audio::PolySynthInstrument makeSynth (float cutoff = 16000.0f, dsp::Waveform wave = dsp::Waveform::saw)
+    {
+        audio::ParamBlock params (audio::InstrumentType::polySynth);
+        params.set (audio::Param::cutoff, cutoff);
+        params.set (audio::Param::wave, (float) wave);
+        params.set (audio::Param::envAmount, 0.0f);
+        audio::PolySynthInstrument synth;
+        synth.prepare (48000.0);
+        synth.setParams (audio::BlockParams::from (params));
+        return synth;
+    }
 }
 
 //==============================================================================
@@ -165,8 +178,7 @@ TEST_CASE ("Schedule exchange hands over without losing or leaking", "[midi][sch
 //==============================================================================
 TEST_CASE ("Synth plays the right pitch at the right level", "[midi][synth]")
 {
-    audio::PolySynth synth;
-    synth.prepare (48000.0);
+    auto synth = makeSynth();
     synth.noteOn (1, 69, 127);
 
     std::vector<float> out (48000, 0.0f);
@@ -178,16 +190,15 @@ TEST_CASE ("Synth plays the right pitch at the right level", "[midi][synth]")
         if (out[i - 1] < 0.0f && out[i] >= 0.0f) ++crossings;
     REQUIRE (std::abs (crossings - 220) <= 1);   // 440 Hz over 0.5 s
 
-    REQUIRE (peak (out, 0, 48000) <= audio::PolySynth::voiceGain * 1.1f);
-    REQUIRE (peak (out, 0, 48000) > audio::PolySynth::voiceGain * 0.5f);
+    REQUIRE (peak (out, 0, 48000) < 0.5f);    // headroom for chords
+    REQUIRE (peak (out, 0, 48000) > 0.05f);
 }
 
 TEST_CASE ("Velocity scales the level; release fades to silence", "[midi][synth]")
 {
     auto level = [] (int velocity)
     {
-        audio::PolySynth synth;
-        synth.prepare (48000.0);
+        auto synth = makeSynth();
         synth.noteOn (1, 60, velocity);
         std::vector<float> out (9600, 0.0f);
         float* ch[] { out.data() };
@@ -196,40 +207,37 @@ TEST_CASE ("Velocity scales the level; release fades to silence", "[midi][synth]
     };
     REQUIRE (level (64) == Catch::Approx (level (127) * 64.0f / 127.0f).epsilon (0.01));
 
-    audio::PolySynth synth;
-    synth.prepare (48000.0);
+    auto synth = makeSynth();
     synth.noteOn (1, 60, 100);
     std::vector<float> out (48000, 0.0f);
     float* ch[] { out.data() };
     synth.render (ch, 1, 0, 4800);
     synth.noteOff (1);
     synth.render (ch, 1, 4800, 43200);
-    REQUIRE (peak (out, 4800 + (size_t) releaseSamples, 48000) == 0.0f);
-    REQUIRE_FALSE (synth.isSounding());
+    REQUIRE (peak (out, 4800 + (size_t) releaseSamples, 48000) < 1e-4f);
+    REQUIRE (synth.activeVoices() == 0);
 }
 
 TEST_CASE ("Overlapping notes of the same pitch release by id", "[midi][synth]")
 {
-    audio::PolySynth synth;
-    synth.prepare (48000.0);
+    auto synth = makeSynth();
     synth.noteOn (1, 60, 100);
     synth.noteOn (2, 60, 100);
-    REQUIRE (synth.getActiveVoiceCount() == 2);
+    REQUIRE (synth.activeVoices() == 2);
     synth.noteOff (1);
 
     std::vector<float> out (48000, 0.0f);
     float* ch[] { out.data() };
     synth.render (ch, 1, 0, 48000);
-    REQUIRE (synth.getActiveVoiceCount() == 1);   // note 2 still holds
+    REQUIRE (synth.activeVoices() == 1);   // note 2 still holds
 }
 
 TEST_CASE ("Voice stealing keeps polyphony bounded", "[midi][synth]")
 {
-    audio::PolySynth synth;
-    synth.prepare (48000.0);
+    auto synth = makeSynth();
     for (int i = 0; i < 40; ++i)
         synth.noteOn ((midi::NoteId) i + 1, 40 + i, 100);
-    REQUIRE (synth.getActiveVoiceCount() == audio::PolySynth::numVoices);
+    REQUIRE (synth.activeVoices() == audio::PolySynthInstrument::numVoices);
 }
 
 //==============================================================================

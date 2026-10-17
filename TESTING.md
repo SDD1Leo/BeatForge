@@ -28,6 +28,9 @@ ctest --preset debug
 | `[midi][engine]` | Note-on and note-off on exact samples, **bit-identical for block sizes 1/37/256/1000**, clip loops, tempo change keeps notes on the grid, **random tempo changes at block sizes 1/37/64/4096 bit-identical**, auditions while stopped, zero allocations with clip swaps | nothing |
 | `[stuck]` | Deleting or moving a sounding note releases it; Stop releases all; a loop wrap releases notes crossing the loop end | nothing |
 | `[session][midi]` | Clip creation, add/update/quantize/remove notes, notes kept beyond a shortened clip, clip+notes survive save/load, bad notes corrected or kept verbatim | nothing |
+| `[dsp]` | Every waveform at 110/440/1000 Hz in range, low-pass passband/stopband/resonance matching `magnitude()`, stable under per-sample sweeps at full resonance, ADSR sample-exact (incl. release not stretched by parameter updates), retrigger from current level | nothing |
+| `[instrument]` | Poly: cutoff/level/wave/attack audibly change output, filter envelope opens then closes; Bass: mono, last-note priority, glide halfway point exact, no glide from silence; switching instruments releases old notes; engine cutoff changes the sound; parameter changes and switching allocation-free; **chords + bass + full beat < 0 dBFS at defaults** | nothing |
+| `[session][instrument]` | Choice/settings through the session (clamping, dirty, no-op), save/load round trip incl. both instruments, 0.5 `basicSynth` compat, out-of-range corrected, unknown settings and instruments preserved | nothing |
 | `app_open_*` | Real app opens fixture files: valid demo (0 warnings), corrected tempo (1 warning listed), newer format refused, truncated JSON refused | X server |
 | `[realtime]` | **Callback path makes zero heap allocations** (global `operator new` counter), plus a self-check that the counter works | nothing |
 | `app_smoke_launch` | Real GUI app starts, window reaches the screen, app quits cleanly. **Fails on any JUCE assertion or leaked object.** | X server (uses `xvfb-run` if installed) |
@@ -82,6 +85,16 @@ Proof levels we keep separate (from Phase 1 on):
 2. **Generated audio** — render to buffers/files and analyse samples.
 3. **Real device** — only a human (or a run on real hardware) proves sound
    actually comes out of the speakers. Automated tests never claim this.
+
+## Manual checklist — Phase 6
+
+1. Program a beat (Drums tab). **Ctrl+3** → choose **Nebula Bass**.
+2. **Ctrl+2** → create a clip, scroll down to C1–C2, draw a bassline on the off-beats.
+3. Press **Space** — bass and drums together.
+4. While it plays, try the wave buttons, turn **Cutoff**, **Resonance**, **Env Amt**, **Decay** — the sound changes smoothly; the displays follow.
+5. Overlap two notes and raise **Glide** — the bass slides between them.
+6. Switch to **Nebula Poly**, draw a chord — all notes sound; turn Attack/Release.
+7. Save, reopen — instrument and settings come back.
 
 ## Manual checklist — Phase 5
 
@@ -143,6 +156,7 @@ Proof levels we keep separate (from Phase 1 on):
 
 | Date | Phase | Result |
 |---|---|---|
+| 2026-10-18 | 6 | 118/118 ctest pass in Debug and Release (15 new). Real UI (Xvfb, sandboxed HOME, virtual sink): Instrument tab screenshots match the Nebula reference with live displays; chose Nebula Bass (Glide shown, A/S/R hidden); programmed drums + drew an 8-note off-beat bassline; bass alone analysed with YIN: **C2 C2 D#2 C2 G1 G1 A#1 C2** at **0.5 s** spacing; switching to square + cutoff 13.4 kHz while playing → display followed, capture **1.4× brighter**; saved and reopened with instrument/settings restored; your own `save test` / `save2` projects load read-only in 0.6 without warnings (unchanged on disk). Found & fixed: envelope release stretched by per-block parameter updates (and buffer-size dependent); filter pacing depended on the block size; **mix clipped (+3.2 dBFS) with chords + drums** → gain staging (kit −6 dB, Poly −10 dB, Bass −6 dB default), typical mix now **−4.5 dBFS**; settings could be lost when no clip existed. **Not yet heard by the user.** |
 | 2026-10-18 | 5 | 103/103 ctest pass in Debug and Release (24 new). Real UI (Xvfb, sandboxed HOME, virtual sink): created a 4-bar clip, set 1/8, clicked an 8-note melody (8 auditions heard), dragged C5 → one eighth later + D5, stretched F4 to 3 eighths, dragged a velocity bar; playback analysed note by note: onsets **0 / 0.5 / 1.0 / 1.75 / 2.0 / 2.5 / 3.0 / 3.5 s**, pitches **C4 E4 G4 D5 B4 G4 A4 F4**, quieter C4 (−5.8 dB), F4 sounding through 4.05 s; off-grid note quantized with Q; Delete, Ctrl+A, Up/Shift+Up work; saved and reopened from the command line with all notes. Found & fixed: notes fired one sample early at some block sizes (event window now sample-exact), loop-wrap release missed when a wrap ended a block, piano-roll **Ctrl+Q quantized instead of quitting** (and Ctrl+M/L toggled), keyboard drawing. User hands-on test: approved 2026-10-18. |
 | 2026-10-18 | 4 | 79/79 ctest pass in Debug and Release (21 new: file format, session, 4 app-level open tests). Isolated real-UI run (Xvfb, `HOME` sandboxed, virtual sink): built a 124 BPM beat by mouse, renamed Kick → "808 Kick", muted Snare, **Ctrl+S** via the JUCE browser → project named "Night Drive", **Saved**, readable JSON on disk; quit (no prompt); relaunched → **Open Recent** → identical state, playback **0.4839 s** intervals before and after (124 BPM); edit → quit prompt → **Cancel** keeps app open; **Ctrl+S** wrote directly; Ctrl+Shift+S, Escape, Space all work with real key input; clean exit, 0 assertions. Found & fixed: alert icon clipped; tests wrote recent files into real settings; settings were in `~/BeatForge` (moved to `~/.config/BeatForge`, migrated); zenity 4.0.1 ignored the suggested file name (switched to JUCE's themed browser); shortcuts made window-level. User hands-on test: approved 2026-10-18. |
 | 2026-10-18 | Nebula 1 | 58/58 ctest pass. Xvfb UI session with the restyled app: house beat entered by mouse, loop/solo/mute toggled, captured mix identical to pre-restyle (**0.5000 s** grid, peaks **-1.5 / -5.4 dBFS**); screenshots of main view, dropdown menu, tooltip and Audio Settings dialog all themed; clean shutdown, zero JUCE assertions. No hard-coded colours outside Theme.h. |

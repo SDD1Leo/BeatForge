@@ -9,8 +9,9 @@ BeatForge/
 ├── core/                 beatforge_core: GUI-free static library
 │   ├── include/beatforge/  public headers
 │   └── src/
-│       ├── audio/          AudioEngine, DrumMachine, DrumKit, PolySynth, Metronome, LevelMeter, PreviewQueue
-│       ├── dsp/            Biquad filter, deterministic Noise (pure C++, no JUCE)
+│       ├── audio/          AudioEngine, DrumMachine, DrumKit, Instruments (Poly, Bass, rack, params),
+│       │                   Metronome, LevelMeter, PreviewQueue
+│       ├── dsp/            Biquad, Noise, Oscillator (PolyBLEP), StateVariableLowPass, Envelope (ADSR)
 │       ├── midi/           Note/Clip model, quantize, NoteSchedule + lock-free ScheduleExchange
 │       └── project/        Project model, ProjectFile (JSON), Session (single mutation path)
 │       └── time/           MusicalTime (PPQ 960, bar/beat/tick), TempoMap, Transport
@@ -21,7 +22,7 @@ BeatForge/
 │       ├── audio/          AudioDeviceController (JUCE AudioDeviceManager <-> engine)
 │       ├── project/        ProjectActions (file commands, dialogs, recent files)
 │       └── ui/             theme, LookAndFeel, TransportBar, ProjectButton, SignatureField, TempoField,
-│                           TimelineRuler, DrumMachinePanel, PianoRollPanel, TabBar,
+│                           TimelineRuler, DrumMachinePanel, PianoRollPanel, InstrumentPanel, Knob, TabBar,
 │                           LevelMeterComponent, StatusBar
 ├── tools/                analyze_onsets.py (timing analysis of captured audio)
 ├── tests/                Catch2 unit tests + app launch test (CTest)
@@ -52,6 +53,29 @@ Rules that hold from day one:
   lock-free queues / atomics (introduced in Phase 1).
 - **Timing comes from the audio timeline**, never from UI timers or frame rate.
 - **Live playback and offline export share** the same instrument and mixing code.
+
+## Instruments (Phase 6)
+
+- **DSP blocks** (`core/dsp`): PolyBLEP saw/square, integrated triangle, sine;
+  a TPT state-variable low-pass (stable under per-sample cutoff modulation and
+  high resonance; `magnitude()` gives the exact response for the UI curve); a
+  linear ADSR whose stage lengths are sample-exact and whose running release
+  keeps its slope when parameters are re-applied each block.
+- **Nebula Poly:** 16 voices of oscillator → low-pass (opened up to 4 octaves
+  by the envelope) → amp ADSR; oldest voice stolen.
+- **Nebula Bass:** one voice, held-note stack with last-note priority, legato
+  glide (log-frequency), gate-like amp and a filter "pluck" envelope (up to
+  5 octaves) that decays to the base cutoff.
+- **Parameters:** one table (`ParamSpec`) defines ids, ranges, log/linear
+  feel, per-instrument defaults and which knobs an instrument uses; it drives
+  validation, the file format and the UI. Values reach the audio thread via
+  `ParamBlock` atomics read once per block; cutoff and level are smoothed per
+  sample (20 ms); filter coefficients update every 8 samples per voice
+  (counted per voice, so output is independent of the buffer size).
+- **InstrumentRack:** both instruments exist; the selected one gets new notes.
+  Switching releases the old instrument's notes, which ring out.
+- **Gain staging:** sources are calibrated so drums (−7.5 dBFS typical),
+  four-note chords (−7.3) and bass sum below 0 dBFS at defaults (tested).
 
 ## MIDI (Phase 5)
 
@@ -118,13 +142,16 @@ Rules that hold from day one:
         "soloed": false, "steps": "x...x...x...x..." } ] } ] }
 ```
 
-Synth track (added in 0.5, still format version 1 — 0.4 keeps it as an
-unknown track):
+Synth track (format version 1; always written since 0.6). `instrument` is
+`polySynth` or `monoBass` (0.5's `basicSynth` loads as `polySynth`); both
+instruments' settings are kept so switching back restores the sound:
 
 ```json
-{ "type": "instrument", "instrument": "basicSynth", "name": "Synth",
+{ "type": "instrument", "instrument": "monoBass", "name": "Synth",
+  "params": { "polySynth": { "wave": "saw", "attack": 0.005, "cutoff": 2800.0, "level": -10.0, "...": 0 },
+              "monoBass":  { "wave": "square", "cutoff": 650.0, "glide": 0.08, "...": 0 } },
   "clip": { "lengthTicks": 15360,
-            "notes": [ { "pitch": 60, "velocity": 100, "start": 0, "length": 480 } ] } }
+            "notes": [ { "pitch": 36, "velocity": 100, "start": 480, "length": 480 } ] } }
 ```
 
 Loading rules:
@@ -134,8 +161,9 @@ Loading rules:
 - Out-of-range or wrong-typed values → corrected, each with a warning shown to
   the user; nothing changes on disk until they save.
 - Unknown keys, extra steps beyond 16, unknown lanes and track types,
-  unknown note keys and unreadable notes → kept and written back on save (no
-  silent data loss). Out-of-range pitch/velocity is limited with a warning.
+  unknown note keys and unreadable notes, unknown instrument settings and
+  settings of unknown instruments → kept and written back on save (no silent
+  data loss). Out-of-range pitch/velocity/settings are limited with a warning.
 - Notes beyond a shortened clip stay in the project (silent, hidden).
 - Save = write `<file>.tmp`, then rename over the target.
 

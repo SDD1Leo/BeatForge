@@ -43,8 +43,8 @@ TEST_CASE ("Every built-in drum is a usable one-shot", "[audio][drumkit]")
         REQUIRE (s.size() > (size_t) (0.1 * rate));
         REQUIRE (s.size() < (size_t) (0.7 * rate));
         REQUIRE (std::all_of (s.begin(), s.end(), [] (float v) { return std::isfinite (v); }));
-        REQUIRE (peak (s) > 0.15f);
-        REQUIRE (peak (s) <= 0.45f);          // headroom for several drums at once
+        REQUIRE (peak (s) > 0.05f);
+        REQUIRE (peak (s) <= 0.25f);          // gain staging: room for several drums and synths
         REQUIRE (s.back() == 0.0f);           // ends exactly at zero (no click)
 
         // Attack: loud within the first 2 ms, so hits sound on the step.

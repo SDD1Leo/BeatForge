@@ -16,7 +16,7 @@ namespace beatforge
     MainComponent::MainComponent (audio::AudioEngine& e, AudioDeviceController& d,
                                   project::Session& s, juce::PropertiesFile& settings)
         : devices (d), engine (e), session (s), actions (s, settings, *this),
-          transportBar (e, s), ruler (e), drumPanel (e, s), pianoRoll (e, s), outputMeter (e.getOutputMeter())
+          transportBar (e, s), ruler (e), drumPanel (e, s), pianoRoll (e, s), instrumentPanel (s), outputMeter (e.getOutputMeter())
     {
         transportBar.onOpenAudioSettings = [this] { openAudioSettings(); };
         transportBar.onProjectMenu = [this] (juce::Component& anchor) { actions.showMenu (anchor); };
@@ -38,6 +38,7 @@ namespace beatforge
         addAndMakeVisible (ruler);
         addAndMakeVisible (drumPanel);
         addChildComponent (pianoRoll);
+        addChildComponent (instrumentPanel);
         addAndMakeVisible (workspaceTabs);
         workspaceTabs.onChange = [this] (int index) { showTab (index); };
         addAndMakeVisible (outputMeter);
@@ -72,6 +73,7 @@ namespace beatforge
         workspaceTabs.setCurrentTab (index, juce::dontSendNotification);
         drumPanel.setVisible (index == 0);
         pianoRoll.setVisible (index == 1);
+        instrumentPanel.setVisible (index == 2);
         repaint (workspaceArea);
     }
 
@@ -148,6 +150,7 @@ namespace beatforge
 
         if (key == juce::KeyPress ('1', ctrl, 0))  { showTab (0); return true; }
         if (key == juce::KeyPress ('2', ctrl, 0))  { showTab (1); return true; }
+        if (key == juce::KeyPress ('3', ctrl, 0))  { showTab (2); return true; }
 
         if (key == juce::KeyPress::spaceKey)      { transportBar.togglePlayStop();  return true; }
         // Single-letter shortcuts only without modifiers (Ctrl+L etc. stay free).
@@ -220,6 +223,7 @@ namespace beatforge
         workspaceTabs.setBounds (body.removeFromTop (34).withWidth (workspaceTabs.getPreferredWidth()));
         body.removeFromTop (8);
         pianoRoll.setBounds (body);
+        instrumentPanel.setBounds (body.withHeight (juce::jmin (body.getHeight(), 380)));
         drumPanel.setBounds (body.removeFromTop (DrumMachinePanel::preferredHeight));
         outputMeter.setBounds (outputCard.reduced (16, 0).withTrimmedTop (36).withTrimmedBottom (16));
     }

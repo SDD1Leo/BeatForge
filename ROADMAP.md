@@ -13,7 +13,7 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 | 3 | First drum machine (16-step sequencer, 5 drum sounds) | ✅ |
 | 4 | Project save/load (versioned format) | ✅ |
 | 5 | MIDI engine & piano roll | ✅ |
-| 6 | Built-in synth & mono bass | ⏳ |
+| 6 | Built-in synth & mono bass | 🧪 |
 | 7 | Arrangement view (tracks, clips, volume/pan, loop, undo) | ⏳ |
 | 8 | MIDI device input, recording, MIDI file export | ⏳ |
 | 9 | Offline render & WAV export | ⏳ |
@@ -40,14 +40,15 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
   (files containing them keep them).
 - Opening a project does not stop playback first (the new pattern plays from
   the next step).
-- One Synth track with one clip (looping from bar 1); the arrangement of
-  several clips comes in Phase 7. The synth voice is a basic placeholder
-  until Phase 6. No undo yet (Phase 7). Grid choice is not saved.
+- One Synth track with one clip (looping from bar 1); several tracks and
+  clips come in Phase 7. No undo yet (Phase 7). Grid choice is not saved.
+- Instruments: one oscillator per voice, low-pass only, no LFO/modulation
+  matrix/effects/presets yet (the Nebula reference shows these as future).
 - In Debug builds, if the ALSA MIDI sequencer cannot be opened JUCE raises a
   debug assertion (`juce_Midi_linux.cpp`). Seen only with ALSA deliberately broken.
 
-## Next up: Phase 6
+## Next up: Phase 7
 
-Built-in synthesizer and bass: sine/saw/square/triangle oscillators, ADSR,
-low-pass filter, a monophonic bass instrument, instrument selection and
-instrument controls (Nebula knobs).
+Arrangement view: multiple tracks (drums, synth/bass), clips on a timeline
+(move, duplicate, length), track volume and pan, loop regions, and undo/redo
+for editing. The Nebula arrangement layout becomes the main screen.

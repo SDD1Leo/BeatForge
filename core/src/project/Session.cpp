@@ -1,6 +1,7 @@
 #include "beatforge/project/Session.h"
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace beatforge::project
@@ -257,6 +258,51 @@ namespace beatforge::project
         return nullptr;
     }
 
+    void Session::setInstrument (audio::InstrumentType type)
+    {
+        if (type == project.instrument)
+            return;
+
+        project.instrument = type;
+        engine.getInstruments().setType (type);
+        changed (Change::instrument);
+    }
+
+    void Session::setInstrumentParam (audio::InstrumentType type, audio::Param param, float value)
+    {
+        const auto& spec = audio::paramSpec (param);
+        if (! std::isfinite (value))
+            return;
+        if (param == audio::Param::wave)
+            value = std::round (value);
+        value = std::clamp (value, spec.min, spec.max);
+
+        auto& stored = project.instrumentParams[(size_t) type][(size_t) param];
+        if (stored == value)
+            return;
+
+        stored = value;
+        engine.getInstruments().params (type).set (param, value);
+        changed (Change::instrument);
+    }
+
+    float Session::getInstrumentParam (audio::InstrumentType type, audio::Param param) const noexcept
+    {
+        return project.instrumentParams[(size_t) type][(size_t) param];
+    }
+
+    void Session::resetInstrumentParams (audio::InstrumentType type)
+    {
+        const auto defaults = Project::defaultInstrumentParams()[(size_t) type];
+        if (project.instrumentParams[(size_t) type] == defaults)
+            return;
+
+        project.instrumentParams[(size_t) type] = defaults;
+        for (int p = 0; p < audio::numParams; ++p)
+            engine.getInstruments().params (type).set ((audio::Param) p, defaults[(size_t) p]);
+        changed (Change::instrument);
+    }
+
     void Session::notesChanged()
     {
         engine.setMidiClip (project.synthClip ? &*project.synthClip : nullptr);
@@ -319,6 +365,12 @@ namespace beatforge::project
         }
 
         engine.setMidiClip (project.synthClip ? &*project.synthClip : nullptr);
+
+        auto& rack = engine.getInstruments();
+        rack.setType (project.instrument);
+        for (int t = 0; t < audio::numInstrumentTypes; ++t)
+            for (int p = 0; p < audio::numParams; ++p)
+                rack.params ((audio::InstrumentType) t).set ((audio::Param) p, project.instrumentParams[(size_t) t][(size_t) p]);
     }
 
     //==============================================================================
