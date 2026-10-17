@@ -9,7 +9,7 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 |---|---|---|
 | 0 | Environment & project foundation | ✅ |
 | 1 | Audio output & transport (device selection, test tone, play/stop, level meter) | ✅ |
-| 2 | Tempo engine & metronome (BPM, bars/beats, loop foundation) | 🧪 |
+| 2 | Tempo engine & metronome (BPM, bars/beats, loop foundation) | ✅ |
 | 3 | First drum machine (16-step sequencer, 5 drum sounds) | ⏳ |
 | 4 | Project save/load (versioned format) | ⏳ |
 | 5 | MIDI engine & piano roll | ⏳ |

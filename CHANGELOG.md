@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.2.0] — Phase 2: tempo engine & metronome (awaiting user test)
+## [0.2.0] — Phase 2: tempo engine & metronome (approved 2026-10-18)
 
 ### Added
 - Musical time core: 960 PPQ ticks, time signatures, bar.beat.tick conversion.
