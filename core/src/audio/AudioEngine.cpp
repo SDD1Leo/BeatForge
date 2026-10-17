@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstring>
 
 namespace beatforge::audio
@@ -24,6 +25,7 @@ namespace beatforge::audio
         transport.prepare (newSampleRate);
         metronome.prepare (newSampleRate);
         drums.prepare (newSampleRate);   // allocates the kit; never runs alongside process()
+        synth.prepare (newSampleRate);
         sampleRate.store (newSampleRate, std::memory_order_release);
     }
 
@@ -33,6 +35,7 @@ namespace beatforge::audio
         transport.rewind();
         metronome.reset();
         drums.reset();
+        synth.reset();
         publishPosition();
         state.store (TransportState::stopped, std::memory_order_release);
     }
@@ -82,6 +85,17 @@ namespace beatforge::audio
         positionSamples.store (transport.getElapsedSamples(), std::memory_order_release);
     }
 
+    void AudioEngine::setMidiClip (const midi::Clip* clip)
+    {
+        schedules.publish (clip != nullptr ? midi::NoteSchedule::build (*clip)
+                                           : std::make_unique<midi::NoteSchedule>());
+    }
+
+    void AudioEngine::collectGarbage()
+    {
+        schedules.collectGarbage();
+    }
+
     void AudioEngine::renderVoices (float* const* outputs, int numOutputs, int start, int num) noexcept
     {
         if (num <= 0)
@@ -89,6 +103,16 @@ namespace beatforge::audio
 
         metronome.render (outputs, numOutputs, start, num);
         drums.render (outputs, numOutputs, start, num);
+        synth.render (outputs, numOutputs, start, num);
+    }
+
+    void AudioEngine::releaseNotesNotCovering (double absoluteTick) noexcept
+    {
+        if (schedule == nullptr)
+            return synth.releaseAll();
+
+        const auto local = std::fmod (absoluteTick, (double) schedule->clipLength);
+        synth.releaseUnless ([&] (midi::NoteId id) { return schedule->covers (id, local); });
     }
 
     void AudioEngine::process (float* const* outputs, int numOutputs, int numSamples) noexcept
@@ -108,40 +132,104 @@ namespace beatforge::audio
         drums.beginBlock();
         drums.startPendingPreviews();
 
+        PreviewQueue::Request preview;
+        while (previews.pop (preview))
+        {
+            if (preview.velocity > 0) synth.noteOn (PolySynth::previewId, preview.pitch, preview.velocity);
+            else                      synth.previewOff (preview.pitch);
+        }
+
+        bool scheduleChanged = false;
+        schedule = schedules.acquire (scheduleChanged);
+
         const bool wantPlay = playRequested.load (std::memory_order_acquire);
+        const bool wasPlaying = state.load (std::memory_order_relaxed) == TransportState::playing;
 
         if (wantPlay)
         {
-            // Collect this block's grid lines, then render between them so every
-            // click and drum hit starts on its exact sample.
-            std::array<time::Transport::GridLine, maxGridLinesPerBlock> lines;
-            int numLines = 0;
+            // A clip edit while playing: notes that were deleted or moved away
+            // from the playhead must not keep sounding.
+            if (scheduleChanged && wasPlaying)
+                releaseNotesNotCovering (transport.getPositionTicks());
 
-            transport.advance (numSamples, [&] (const time::Transport::GridLine& line)
+            // Everything that happens in this block, in sample order: grid lines
+            // (metronome, drum steps), note on/off, loop jumps.
+            enum Kind : std::uint8_t { noteOff, jump, gridLine, noteOn };
+            struct Event
             {
-                if (numLines < maxGridLinesPerBlock)
-                    lines[(size_t) numLines++] = line;
-            });
+                int offset;
+                Kind kind;
+                time::Transport::GridLine line;
+                const midi::NoteEvent* note;
+                double tick;
+            };
+
+            std::array<Event, maxEventsPerBlock> events;
+            int numEvents = 0;
+            auto add = [&] (const Event& e) { if (numEvents < maxEventsPerBlock) events[(size_t) numEvents++] = e; };
+
+            transport.advance (numSamples,
+                [&] (const time::Transport::GridLine& line)
+                {
+                    add ({ line.sampleOffset, gridLine, line, nullptr, 0.0 });
+                },
+                [&] (const time::Transport::Segment& seg)
+                {
+                    if (seg.afterJump)
+                        add ({ seg.sampleOffset, jump, {}, nullptr, seg.startTick });
+
+                    if (schedule == nullptr || schedule->events.empty())
+                        return;
+
+                    // Events with absolute tick in (eventsAfter, eventsUpTo], walking
+                    // each repetition of the looping clip that overlaps that range.
+                    const auto clipLength = (double) schedule->clipLength;
+                    for (double cycle = std::floor (seg.eventsAfter / clipLength) * clipLength;
+                         cycle <= seg.eventsUpTo; cycle += clipLength)
+                    {
+                        const double from = seg.eventsAfter - cycle, upTo = seg.eventsUpTo - cycle;
+                        auto it = std::upper_bound (schedule->events.begin(), schedule->events.end(), from,
+                                                    [] (double t, const midi::NoteEvent& e) { return t < (double) e.tick; });
+
+                        for (; it != schedule->events.end() && (double) it->tick <= upTo; ++it)
+                            add ({ seg.sampleFor (cycle + (double) it->tick), it->on ? noteOn : noteOff, {}, &*it, 0.0 });
+                    }
+                });
+
+            // Stable insertion sort by (offset, kind): blocks hold few events.
+            for (int i = 1; i < numEvents; ++i)
+                for (int j = i; j > 0 && (events[(size_t) j].offset < events[(size_t) j - 1].offset
+                                          || (events[(size_t) j].offset == events[(size_t) j - 1].offset
+                                              && events[(size_t) j].kind < events[(size_t) j - 1].kind)); --j)
+                    std::swap (events[(size_t) j], events[(size_t) j - 1]);
 
             const bool clicks = metronomeEnabled.load (std::memory_order_acquire);
             int rendered = 0;
             std::uint64_t beats = 0;
 
-            for (int i = 0; i < numLines; ++i)
+            for (int i = 0; i < numEvents; ++i)
             {
-                const auto& line = lines[(size_t) i];
-                renderVoices (pair, numPair, rendered, line.sampleOffset - rendered);
-                rendered = line.sampleOffset;
+                const auto& e = events[(size_t) i];
+                renderVoices (pair, numPair, rendered, e.offset - rendered);
+                rendered = e.offset;
 
-                if (line.isBeat)
+                switch (e.kind)
                 {
-                    ++beats;
-                    if (clicks)
-                        metronome.trigger (line.isDownbeat());
-                }
+                    case noteOff:  synth.noteOff (e.note->id); break;
+                    case noteOn:   synth.noteOn (e.note->id, e.note->pitch, e.note->velocity); break;
+                    case jump:     releaseNotesNotCovering (e.tick); break;
+                    case gridLine:
+                        if (e.line.isBeat)
+                        {
+                            ++beats;
+                            if (clicks)
+                                metronome.trigger (e.line.isDownbeat());
+                        }
 
-                if (line.isStep)
-                    drums.triggerStep ((int) ((line.tick / time::Transport::stepTicks) % DrumMachine::numSteps));
+                        if (e.line.isStep)
+                            drums.triggerStep ((int) ((e.line.tick / time::Transport::stepTicks) % DrumMachine::numSteps));
+                        break;
+                }
             }
 
             renderVoices (pair, numPair, rendered, numSamples - rendered);
@@ -151,7 +239,11 @@ namespace beatforge::audio
         }
         else
         {
-            // Previews and ringing tails keep sounding while stopped.
+            // Stopping releases every clip note (no stuck notes); auditions and
+            // ringing tails keep sounding while stopped.
+            if (wasPlaying)
+                synth.releaseUnless ([] (midi::NoteId) { return false; });
+
             renderVoices (pair, numPair, 0, numSamples);
 
             if (state.load (std::memory_order_relaxed) != TransportState::stopped)
@@ -162,6 +254,7 @@ namespace beatforge::audio
             }
         }
 
+        activeSynthVoices.store (synth.getActiveVoiceCount(), std::memory_order_relaxed);
         outputMeter.process (outputs, std::min (numOutputs, LevelMeter::maxChannels), numSamples);
     }
 }

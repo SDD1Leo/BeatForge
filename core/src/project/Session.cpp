@@ -158,6 +158,126 @@ namespace beatforge::project
     }
 
     //==============================================================================
+    //==============================================================================
+    void Session::createMidiClip (int bars)
+    {
+        if (project.synthClip || ! Project::isValidClipBars (bars))
+            return;
+
+        project.synthClip = midi::Clip { project.timeSignature.ticksPerBar() * bars, {} };
+        notesChanged();
+    }
+
+    void Session::setMidiClipBars (int bars)
+    {
+        if (! project.synthClip || ! Project::isValidClipBars (bars))
+            return;
+
+        const auto length = project.timeSignature.ticksPerBar() * bars;
+        if (length == project.synthClip->length)
+            return;
+
+        // Notes past a shorter end are kept (silent and hidden) so lengthening
+        // the clip again brings them back.
+        project.synthClip->length = length;
+        notesChanged();
+    }
+
+    int Session::getMidiClipBars() const noexcept
+    {
+        return project.synthClip ? (int) (project.synthClip->length / project.timeSignature.ticksPerBar()) : 0;
+    }
+
+    midi::NoteId Session::addNote (midi::Note note)
+    {
+        if (! project.synthClip)
+            return 0;
+
+        note = midi::constrained (note, project.synthClip->length);
+        note.id = nextNoteId++;
+        project.synthClip->notes.push_back (note);
+        notesChanged();
+        return note.id;
+    }
+
+    void Session::updateNotes (const std::vector<midi::Note>& updates)
+    {
+        if (! project.synthClip)
+            return;
+
+        bool any = false;
+        for (const auto& update : updates)
+            for (auto& n : project.synthClip->notes)
+                if (n.id == update.id)
+                {
+                    const auto next = midi::constrained (update, project.synthClip->length);
+                    any |= ! (next == n);
+                    n = next;
+                }
+
+        if (any)
+            notesChanged();
+    }
+
+    void Session::removeNotes (const std::vector<midi::NoteId>& ids)
+    {
+        if (! project.synthClip)
+            return;
+
+        const auto removed = std::erase_if (project.synthClip->notes, [&] (const midi::Note& n)
+        {
+            return std::find (ids.begin(), ids.end(), n.id) != ids.end();
+        });
+
+        for (auto id : ids)
+            project.noteExtra.erase (id);
+
+        if (removed > 0)
+            notesChanged();
+    }
+
+    void Session::quantizeNotes (const std::vector<midi::NoteId>& ids, time::Tick grid)
+    {
+        if (! project.synthClip || ! midi::isValidGrid (grid))
+            return;
+
+        const auto before = project.synthClip->notes;
+        midi::quantize (project.synthClip->notes, grid, project.synthClip->length, ids);
+
+        if (project.synthClip->notes != before)
+            notesChanged();
+    }
+
+    const midi::Note* Session::findNote (midi::NoteId id) const noexcept
+    {
+        if (project.synthClip)
+            for (auto& n : project.synthClip->notes)
+                if (n.id == id)
+                    return &n;
+        return nullptr;
+    }
+
+    void Session::notesChanged()
+    {
+        engine.setMidiClip (project.synthClip ? &*project.synthClip : nullptr);
+        changed (Change::notes);
+    }
+
+    // Notes loaded from a file have no ids yet; ids only need to be unique.
+    void Session::assignNoteIds()
+    {
+        nextNoteId = 1;
+        if (project.synthClip)
+            for (auto& n : project.synthClip->notes)
+                nextNoteId = std::max (nextNoteId, n.id + 1);
+
+        if (project.synthClip)
+            for (auto& n : project.synthClip->notes)
+                if (n.id == 0)
+                    n.id = nextNoteId++;
+    }
+
+    //==============================================================================
     void Session::newProject()
     {
         openProject (Project {}, std::nullopt);
@@ -168,6 +288,7 @@ namespace beatforge::project
         project = std::move (p);
         file = std::move (f);
         dirty = false;
+        assignNoteIds();
         applyAllToEngine();
         changed (Change::replaced, false);
     }
@@ -196,6 +317,8 @@ namespace beatforge::project
             for (int step = 0; step < audio::DrumMachine::numSteps; ++step)
                 drums.setStep (lane, step, l.steps[(size_t) step]);
         }
+
+        engine.setMidiClip (project.synthClip ? &*project.synthClip : nullptr);
     }
 
     //==============================================================================

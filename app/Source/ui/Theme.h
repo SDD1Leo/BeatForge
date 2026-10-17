@@ -53,7 +53,8 @@ namespace beatforge::theme
         inline const juce::Colour closedHat = cyan;
         inline const juce::Colour openHat   = teal;
         inline const juce::Colour clap      = violet;
-        // Planned roles (bass, lead, pads, vocals, FX) get colours when they exist.
+        inline const juce::Colour synth     = electricBlue;   // synth / lead MIDI track
+        // Planned roles (bass, pads, vocals, FX) get colours when they exist.
     }
 
     // --- Geometry ----------------------------------------------------------------

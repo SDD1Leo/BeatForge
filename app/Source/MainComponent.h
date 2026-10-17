@@ -4,6 +4,8 @@
 #include "project/ProjectActions.h"
 #include "ui/DrumMachinePanel.h"
 #include "ui/LevelMeterComponent.h"
+#include "ui/PianoRollPanel.h"
+#include "ui/TabBar.h"
 #include "ui/StatusBar.h"
 #include "ui/TimelineRuler.h"
 #include "ui/TransportBar.h"
@@ -44,12 +46,16 @@ namespace beatforge
 
 
         AudioDeviceController& devices;
+        audio::AudioEngine& engine;
         project::Session& session;
         ProjectActions actions;
         int sessionListenerId = 0;
         TransportBar transportBar;
         TimelineRuler ruler;
         DrumMachinePanel drumPanel;
+        PianoRollPanel pianoRoll;
+        TabBar workspaceTabs { { "Drums", "Piano Roll" } };
+        void showTab (int index);
         LevelMeterComponent outputMeter;
         StatusBar statusBar;
         juce::TooltipWindow tooltips { this, 600 };

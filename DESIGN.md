@@ -56,6 +56,7 @@ Fixed per musical role (`theme::track`), identical in every view:
 | Closed hat | cyan |
 | Open hat | teal |
 | Clap | violet |
+| Synth (lead MIDI track) | electric blue |
 
 Bass, lead, pads, vocals, FX and master get colours when those tracks exist.
 Colour always comes with a text label; it is never the only signal.
@@ -80,7 +81,8 @@ Colour always comes with a text label; it is never the only signal.
 | 3 | Shared controls: rotary `Knob`, `Panel` with header, compact M/S, Nebula meter strip; replace one-off painting | planned |
 | 4 | Step sequencer polish to the reference (velocity lane when velocity exists) | planned |
 | 5 | Arrangement-first layout (track headers + clips, timeline takes most space) with Phase 7 | planned |
-| 6 | Piano roll, synth, mixer, export dialog in the same language as each feature lands (Phases 5, 6, 9, 11) | planned |
+| 6a | Piano roll (keyboard, grid, notes in track colour, velocity lane, header controls) + workspace tabs | done (0.5.0) |
+| 6 | Synth, mixer, export dialog in the same language as each feature lands (Phases 6, 9, 11) | planned |
 
 Not shown until implemented: record, menus (File/Edit…), browser, AI
 co-producer, mixer, synth, export.

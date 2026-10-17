@@ -3,6 +3,9 @@
 #include "beatforge/audio/DrumMachine.h"
 #include "beatforge/audio/LevelMeter.h"
 #include "beatforge/audio/Metronome.h"
+#include "beatforge/audio/PolySynth.h"
+#include "beatforge/audio/PreviewQueue.h"
+#include "beatforge/midi/NoteSchedule.h"
 #include "beatforge/time/Transport.h"
 
 #include <atomic>
@@ -44,6 +47,17 @@ namespace beatforge::audio
         void setMetronomeEnabled (bool) noexcept;
         void setLoop (bool enabled, time::Tick start, time::Tick end) noexcept;
 
+        // --- MIDI clip (message thread) ---------------------------------------
+        // Replaces what the synth track plays; nullptr = no clip. Builds the
+        // schedule here and hands it to the audio thread lock-free.
+        void setMidiClip (const midi::Clip*);
+        // Frees schedules the audio thread has finished with. Call regularly.
+        void collectGarbage();
+
+        // Editor auditions (any thread except audio): note on until note off.
+        void previewNoteOn (int pitch, int velocity) noexcept  { previews.push ({ pitch, velocity }); }
+        void previewNoteOff (int pitch) noexcept               { previews.push ({ pitch, 0 }); }
+
         // Writes the output for one block into every output channel.
         void process (float* const* outputs, int numOutputs, int numSamples) noexcept;
 
@@ -68,18 +82,26 @@ namespace beatforge::audio
         LevelMeter& getOutputMeter() noexcept { return outputMeter; }
         DrumMachine& getDrumMachine() noexcept { return drums; }
 
+        int getActiveSynthVoices() const noexcept { return activeSynthVoices.load (std::memory_order_relaxed); }
+
         static constexpr int maxGridLinesPerBlock = 64;
+        static constexpr int maxEventsPerBlock = 256;
 
     private:
         void applySettings() noexcept;
         void publishPosition() noexcept;
         void renderVoices (float* const* outputs, int numOutputs, int start, int num) noexcept;
+        void releaseNotesNotCovering (double absoluteTick) noexcept;
 
         // Audio-thread state.
         time::Transport transport;
         Metronome metronome;
         DrumMachine drums;
+        PolySynth synth;
         LevelMeter outputMeter;
+        midi::ScheduleExchange schedules;
+        const midi::NoteSchedule* schedule = nullptr;   // audio thread
+        PreviewQueue previews;
 
         // Settings written by any thread, read by the audio thread.
         std::atomic<bool> playRequested { false };
@@ -95,5 +117,6 @@ namespace beatforge::audio
         std::atomic<std::int64_t> positionSamples { 0 };
         std::atomic<double> sampleRate { 0.0 };
         std::atomic<std::uint64_t> beatCount { 0 };
+        std::atomic<int> activeSynthVoices { 0 };
     };
 }

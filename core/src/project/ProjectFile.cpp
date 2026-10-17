@@ -162,6 +162,84 @@ namespace beatforge::project
         }
     }
 
+    namespace
+    {
+        void readSynthTrack (const json& track, Project& p, std::vector<std::string>& warnings)
+        {
+            p.synthTrackName = readName (track, "name", "Synth", Project::maxNameLength, "Synth track name", warnings);
+            p.extraSynthTrack = extrasOf (track, { "type", "instrument", "name", "clip" });
+
+            if (! track.contains ("clip"))
+                return;   // a synth track without a clip yet
+
+            const auto& clip = track["clip"];
+            if (! clip.is_object())
+            {
+                warnings.push_back ("The synth clip was unreadable; it is kept in the file but not shown.");
+                auto extra = parseOr (p.extraSynthTrack, json::object());
+                extra["unreadableClip"] = clip;
+                p.extraSynthTrack = extra.dump();
+                return;
+            }
+
+            midi::Clip result;
+            if (clip.contains ("lengthTicks") && clip["lengthTicks"].is_number_integer() && clip["lengthTicks"].get<std::int64_t>() > 0
+                && clip["lengthTicks"].get<std::int64_t>() <= 32 * 3840)
+                result.length = clip["lengthTicks"].get<std::int64_t>();
+            else
+                warnings.push_back ("The synth clip length was missing or invalid; using 4 bars.");
+
+            p.extraClip = extrasOf (clip, { "lengthTicks", "notes" });
+            json invalid = json::array();
+            midi::NoteId nextId = 1;
+            int corrected = 0;
+
+            if (clip.contains ("notes") && clip["notes"].is_array())
+            {
+                for (auto& n : clip["notes"])
+                {
+                    const bool readable = n.is_object() && n.contains ("pitch") && n.contains ("start") && n.contains ("length")
+                                       && n["pitch"].is_number_integer() && n["start"].is_number_integer()
+                                       && n["length"].is_number_integer()
+                                       && n["start"].get<std::int64_t>() >= 0 && n["length"].get<std::int64_t>() >= 1;
+                    if (! readable)
+                    {
+                        invalid.push_back (n);
+                        continue;
+                    }
+
+                    midi::Note note;
+                    note.id = nextId++;
+                    note.pitch = n["pitch"].get<int>();
+                    note.start = n["start"].get<std::int64_t>();
+                    note.length = n["length"].get<std::int64_t>();
+                    note.velocity = n.contains ("velocity") && n["velocity"].is_number_integer() ? n["velocity"].get<int>() : 100;
+
+                    const auto clampedPitch = std::clamp (note.pitch, midi::minPitch, midi::maxPitch);
+                    const auto clampedVelocity = std::clamp (note.velocity, midi::minVelocity, midi::maxVelocity);
+                    if (clampedPitch != note.pitch || clampedVelocity != note.velocity)
+                        ++corrected;
+                    note.pitch = clampedPitch;
+                    note.velocity = clampedVelocity;
+
+                    const auto extra = extrasOf (n, { "pitch", "velocity", "start", "length" });
+                    if (extra != "{}")
+                        p.noteExtra[note.id] = extra;
+
+                    result.notes.push_back (note);
+                }
+            }
+
+            if (corrected > 0)
+                warnings.push_back (std::to_string (corrected) + " synth note(s) had a pitch or velocity out of range and were limited.");
+            if (! invalid.empty())
+                warnings.push_back (std::to_string (invalid.size()) + " synth note(s) were unreadable; they are kept in the file but not shown.");
+
+            p.invalidNotes = invalid.dump();
+            p.synthClip = std::move (result);
+        }
+    }
+
     //==============================================================================
     std::string toJson (const Project& p, const std::string& appVersion)
     {
@@ -207,6 +285,43 @@ namespace beatforge::project
         track["lanes"] = lanes;
 
         json tracks = json::array ({ track });
+
+        if (p.synthClip)
+        {
+            json synth = parseOr (p.extraSynthTrack, json::object());
+            if (! synth.is_object())
+                synth = json::object();
+
+            synth["type"] = "instrument";
+            synth["instrument"] = "basicSynth";
+            synth["name"] = p.synthTrackName;
+
+            json clip = parseOr (p.extraClip, json::object());
+            if (! clip.is_object())
+                clip = json::object();
+
+            clip["lengthTicks"] = p.synthClip->length;
+            json notes = json::array();
+            for (auto& n : p.synthClip->notes)
+            {
+                json note = { { "pitch", n.pitch }, { "velocity", n.velocity }, { "start", n.start }, { "length", n.length } };
+                if (auto it = p.noteExtra.find (n.id); it != p.noteExtra.end())
+                {
+                    auto extra = parseOr (it->second, json::object());
+                    if (extra.is_object())
+                        for (auto e = extra.begin(); e != extra.end(); ++e)
+                            if (! note.contains (e.key()))
+                                note[e.key()] = e.value();
+                }
+                notes.push_back (note);
+            }
+            for (auto& raw : parseOr (p.invalidNotes, json::array()))
+                notes.push_back (raw);
+
+            clip["notes"] = notes;
+            synth["clip"] = clip;
+            tracks.push_back (synth);
+        }
         for (auto& extraTrack : parseOr (p.extraTracks, json::array()))
             tracks.push_back (extraTrack);
 
@@ -308,13 +423,24 @@ namespace beatforge::project
 
         // Tracks: the first drum machine is ours; anything else is kept verbatim.
         json extraTracks = json::array();
-        bool haveDrums = false;
+        bool haveDrums = false, haveSynth = false;
 
         if (j.contains ("tracks") && j["tracks"].is_array())
         {
             for (auto& track : j["tracks"])
             {
-                if (haveDrums || ! track.is_object() || ! track.contains ("type") || track["type"] != "drumMachine")
+                const bool isDrums = track.is_object() && track.contains ("type") && track["type"] == "drumMachine";
+                const bool isSynth = track.is_object() && track.contains ("type") && track["type"] == "instrument"
+                                  && track.contains ("instrument") && track["instrument"] == "basicSynth";
+
+                if (isSynth && ! haveSynth)
+                {
+                    haveSynth = true;
+                    readSynthTrack (track, p, warnings);
+                    continue;
+                }
+
+                if (haveDrums || ! isDrums)
                 {
                     extraTracks.push_back (track);
                     warnings.push_back ("A track this version cannot play was kept in the file but is not shown.");

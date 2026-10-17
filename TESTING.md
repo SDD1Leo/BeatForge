@@ -22,6 +22,12 @@ ctest --preset debug
 | `[steps]` | Every 16th is a grid line with exact samples; 6/8 beat flags | nothing |
 | `[project][file]` | JSON round trip, readable step strings, save/load file, atomic save leaves the old file intact on failure, missing folder error, non-project files refused with reasons, newer version refused, minimal v1 file, out-of-range values corrected with 5 warnings, **unknown data survives two load/save cycles**, optional fields silent | temp dir |
 | `[session]` | Edits update project + engine + dirty flag + listeners, no-op edits stay clean, loop length follows the time signature, rename validation, open replaces engine state, **save → reopen sounds bit-identical** | nothing |
+| `[midi][quantize]` | Nearest-line rounding, ties later, clip-end clamp, all grids, selection-only | nothing |
+| `[midi][schedule]` | Event order (offs first), clip-end offs wrap to tick 0, notes beyond the clip skipped, lock-free exchange hand-over/garbage, zero allocations on acquire | nothing |
+| `[midi][synth]` | A4 = 440 Hz, level bounds, velocity scaling, release to silence, same-pitch overlap released by id, voice stealing | nothing |
+| `[midi][engine]` | Note-on and note-off on exact samples, **bit-identical for block sizes 1/37/256/1000**, clip loops, tempo change keeps notes on the grid, **random tempo changes at block sizes 1/37/64/4096 bit-identical**, auditions while stopped, zero allocations with clip swaps | nothing |
+| `[stuck]` | Deleting or moving a sounding note releases it; Stop releases all; a loop wrap releases notes crossing the loop end | nothing |
+| `[session][midi]` | Clip creation, add/update/quantize/remove notes, notes kept beyond a shortened clip, clip+notes survive save/load, bad notes corrected or kept verbatim | nothing |
 | `app_open_*` | Real app opens fixture files: valid demo (0 warnings), corrected tempo (1 warning listed), newer format refused, truncated JSON refused | X server |
 | `[realtime]` | **Callback path makes zero heap allocations** (global `operator new` counter), plus a self-check that the counter works | nothing |
 | `app_smoke_launch` | Real GUI app starts, window reaches the screen, app quits cleanly. **Fails on any JUCE assertion or leaked object.** | X server (uses `xvfb-run` if installed) |
@@ -77,6 +83,16 @@ Proof levels we keep separate (from Phase 1 on):
 3. **Real device** — only a human (or a run on real hardware) proves sound
    actually comes out of the speakers. Automated tests never claim this.
 
+## Manual checklist — Phase 5
+
+1. Press **Ctrl+2** (or the Piano Roll tab) → **Create 4-bar MIDI clip**.
+2. Pick grid **1/8**, click to draw a short melody (each click plays the note).
+3. Drag one note to a new time/pitch; drag another note's right edge to make it longer.
+4. In the velocity lane drag one bar down — that note gets quieter.
+5. Press **Space** — the melody loops with your drums; the playhead moves through the piano roll.
+6. Draw a note with grid 1/32 off the beat, switch to 1/4, select it, press **Q** — it snaps.
+7. Save (Ctrl+S), reopen — the melody comes back.
+
 ## Manual checklist — Phase 4
 
 1. Build a beat, set the tempo to e.g. 124, rename a drum (double-click its name).
@@ -127,6 +143,7 @@ Proof levels we keep separate (from Phase 1 on):
 
 | Date | Phase | Result |
 |---|---|---|
+| 2026-10-18 | 5 | 103/103 ctest pass in Debug and Release (24 new). Real UI (Xvfb, sandboxed HOME, virtual sink): created a 4-bar clip, set 1/8, clicked an 8-note melody (8 auditions heard), dragged C5 → one eighth later + D5, stretched F4 to 3 eighths, dragged a velocity bar; playback analysed note by note: onsets **0 / 0.5 / 1.0 / 1.75 / 2.0 / 2.5 / 3.0 / 3.5 s**, pitches **C4 E4 G4 D5 B4 G4 A4 F4**, quieter C4 (−5.8 dB), F4 sounding through 4.05 s; off-grid note quantized with Q; Delete, Ctrl+A, Up/Shift+Up work; saved and reopened from the command line with all notes. Found & fixed: notes fired one sample early at some block sizes (event window now sample-exact), loop-wrap release missed when a wrap ended a block, piano-roll **Ctrl+Q quantized instead of quitting** (and Ctrl+M/L toggled), keyboard drawing. **Not yet heard by the user.** |
 | 2026-10-18 | 4 | 79/79 ctest pass in Debug and Release (21 new: file format, session, 4 app-level open tests). Isolated real-UI run (Xvfb, `HOME` sandboxed, virtual sink): built a 124 BPM beat by mouse, renamed Kick → "808 Kick", muted Snare, **Ctrl+S** via the JUCE browser → project named "Night Drive", **Saved**, readable JSON on disk; quit (no prompt); relaunched → **Open Recent** → identical state, playback **0.4839 s** intervals before and after (124 BPM); edit → quit prompt → **Cancel** keeps app open; **Ctrl+S** wrote directly; Ctrl+Shift+S, Escape, Space all work with real key input; clean exit, 0 assertions. Found & fixed: alert icon clipped; tests wrote recent files into real settings; settings were in `~/BeatForge` (moved to `~/.config/BeatForge`, migrated); zenity 4.0.1 ignored the suggested file name (switched to JUCE's themed browser); shortcuts made window-level. User hands-on test: approved 2026-10-18. |
 | 2026-10-18 | Nebula 1 | 58/58 ctest pass. Xvfb UI session with the restyled app: house beat entered by mouse, loop/solo/mute toggled, captured mix identical to pre-restyle (**0.5000 s** grid, peaks **-1.5 / -5.4 dBFS**); screenshots of main view, dropdown menu, tooltip and Audio Settings dialog all themed; clean shutdown, zero JUCE assertions. No hard-coded colours outside Theme.h. |
 | 2026-10-18 | 3 | 58/58 ctest pass in Debug and Release. Real UI driven in Xvfb (audio to a virtual PipeWire sink): clicking steps while stopped auditioned 6 hits; drag-painted 16 hats; played the user-checklist beat — solo captures: kick **0.5000 s**, clap **1.0000 s**, hats **0.1250 s** @ 120 BPM; typed 100 BPM mid-playback → **0.6000 s**; muting the kick left hats at **0.1500 s**. Found & fixed: default kit clipped (+3.2 dBFS on kick+hat+clap; red clip lights on kick+snare) → kit rebalanced, busy house beat now peaks **-1.5 dBFS, 0 clipped**; ruler lost the playhead after bar 8 → pages now; dangling-reference crash in a test. `--smoke-play` on real device OK. User hands-on test: approved 2026-10-18. |

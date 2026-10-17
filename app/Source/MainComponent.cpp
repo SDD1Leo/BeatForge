@@ -13,10 +13,10 @@ namespace beatforge
         const juce::String dot = juce::String::fromUTF8 ("  \xc2\xb7  ");
     }
 
-    MainComponent::MainComponent (audio::AudioEngine& engine, AudioDeviceController& d,
+    MainComponent::MainComponent (audio::AudioEngine& e, AudioDeviceController& d,
                                   project::Session& s, juce::PropertiesFile& settings)
-        : devices (d), session (s), actions (s, settings, *this),
-          transportBar (engine, s), ruler (engine), drumPanel (engine, s), outputMeter (engine.getOutputMeter())
+        : devices (d), engine (e), session (s), actions (s, settings, *this),
+          transportBar (e, s), ruler (e), drumPanel (e, s), pianoRoll (e, s), outputMeter (e.getOutputMeter())
     {
         transportBar.onOpenAudioSettings = [this] { openAudioSettings(); };
         transportBar.onProjectMenu = [this] (juce::Component& anchor) { actions.showMenu (anchor); };
@@ -37,6 +37,9 @@ namespace beatforge
         addAndMakeVisible (transportBar);
         addAndMakeVisible (ruler);
         addAndMakeVisible (drumPanel);
+        addChildComponent (pianoRoll);
+        addAndMakeVisible (workspaceTabs);
+        workspaceTabs.onChange = [this] (int index) { showTab (index); };
         addAndMakeVisible (outputMeter);
         addAndMakeVisible (statusBar);
 
@@ -58,7 +61,19 @@ namespace beatforge
     }
 
     void MainComponent::changeListenerCallback (juce::ChangeBroadcaster*) { refreshDeviceStatus(); }
-    void MainComponent::timerCallback()                                  { refreshDeviceStatus(); }
+    void MainComponent::timerCallback()
+    {
+        refreshDeviceStatus();
+        engine.collectGarbage();   // free note schedules the audio thread has finished with
+    }
+
+    void MainComponent::showTab (int index)
+    {
+        workspaceTabs.setCurrentTab (index, juce::dontSendNotification);
+        drumPanel.setVisible (index == 0);
+        pianoRoll.setVisible (index == 1);
+        repaint (workspaceArea);
+    }
 
     void MainComponent::refreshDeviceStatus()
     {
@@ -82,7 +97,7 @@ namespace beatforge
             text = "Audio error: " + s.error + dot + text;
 
         statusBar.setStatus (text, s.error.isNotEmpty());
-        setWorkspaceHint ("Click steps to build a beat    Space: play / stop    M: metronome    L: loop    Ctrl+S: save");
+        setWorkspaceHint ("Click steps to build a beat    Space: play / stop    M: metronome    L: loop    Ctrl+2: piano roll");
     }
 
     void MainComponent::setWorkspaceHint (const juce::String& hint)
@@ -131,9 +146,13 @@ namespace beatforge
         if (key == juce::KeyPress ('s', ctrl | juce::ModifierKeys::shiftModifier, 0)
             || key == juce::KeyPress ('S', ctrl | juce::ModifierKeys::shiftModifier, 0)) { actions.saveAs(); return true; }
 
+        if (key == juce::KeyPress ('1', ctrl, 0))  { showTab (0); return true; }
+        if (key == juce::KeyPress ('2', ctrl, 0))  { showTab (1); return true; }
+
         if (key == juce::KeyPress::spaceKey)      { transportBar.togglePlayStop();  return true; }
-        if (key.isKeyCode ('M') || key.isKeyCode ('m')) { transportBar.toggleMetronome(); return true; }
-        if (key.isKeyCode ('L') || key.isKeyCode ('l')) { transportBar.toggleLoop();      return true; }
+        // Single-letter shortcuts only without modifiers (Ctrl+L etc. stay free).
+        if (key == juce::KeyPress ('m') || key == juce::KeyPress ('M')) { transportBar.toggleMetronome(); return true; }
+        if (key == juce::KeyPress ('l') || key == juce::KeyPress ('L')) { transportBar.toggleLoop();      return true; }
 
         return false;
     }
@@ -170,8 +189,9 @@ namespace beatforge
         // Empty workspace hint until the sequencer/timeline arrive.
         g.setColour (theme::textMuted);
         g.setFont (theme::font (14.0f));
-        g.drawText (workspaceHint, workspaceArea.withTrimmedTop (drumPanel.getBottom() - workspaceArea.getY()),
-                    juce::Justification::centred);
+        if (drumPanel.isVisible())
+            g.drawText (workspaceHint, workspaceArea.withTrimmedTop (drumPanel.getBottom() - workspaceArea.getY()),
+                        juce::Justification::centred);
 
         // Master output panel.
         g.setColour (theme::panel);
@@ -196,7 +216,10 @@ namespace beatforge
         body.removeFromRight (16);
         workspaceArea = body;
         ruler.setBounds (body.removeFromTop (64));
-        body.removeFromTop (12);
+        body.removeFromTop (6);
+        workspaceTabs.setBounds (body.removeFromTop (34).withWidth (workspaceTabs.getPreferredWidth()));
+        body.removeFromTop (8);
+        pianoRoll.setBounds (body);
         drumPanel.setBounds (body.removeFromTop (DrumMachinePanel::preferredHeight));
         outputMeter.setBounds (outputCard.reduced (16, 0).withTrimmedTop (36).withTrimmedBottom (16));
     }

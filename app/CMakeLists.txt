@@ -13,9 +13,11 @@ target_sources(BeatForge
         Source/ui/BeatForgeLookAndFeel.cpp
         Source/ui/DrumMachinePanel.cpp
         Source/ui/LevelMeterComponent.cpp
+        Source/ui/PianoRollPanel.cpp
         Source/ui/ProjectButton.cpp
         Source/ui/SignatureField.cpp
         Source/ui/StatusBar.cpp
+        Source/ui/TabBar.cpp
         Source/ui/TempoField.cpp
         Source/ui/TimelineRuler.cpp
         Source/ui/TransportBar.cpp

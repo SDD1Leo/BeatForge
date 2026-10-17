@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.5.0] — Phase 5: MIDI engine and piano roll (awaiting user test)
+
+### Added
+- MIDI note/clip model, quantize (1/4…1/32), note constraints.
+- Sample-exact note scheduling from transport segments; lock-free schedule
+  hand-over; no stuck notes on edit, Stop or loop wrap.
+- Basic 16-voice synth (PolyBLEP saw, low-pass, ADSR, velocity).
+- Synth track with a looping MIDI clip (1/2/4/8 bars) saved in projects;
+  unknown/invalid note data preserved.
+- Session note editing (add, update, remove, quantize) as the single path.
+- NEBULA piano roll: piano keyboard (click to hear), grid with bar/beat/grid
+  lines, draw / box-select / move / resize / delete, keyboard editing
+  (Delete, Ctrl+A, arrows, Q), velocity lane, playhead, note count.
+- Workspace tabs Drums | Piano Roll (Ctrl+1 / Ctrl+2).
+- 24 new unit tests incl. randomized tempo-change stress test.
+
+### Fixed
+- One-letter shortcuts (M, L, Q) no longer fire with Ctrl held (Ctrl+Q quits).
+
 ## [0.4.0] — Phase 4: project saving and loading + Nebula transport (approved 2026-10-18)
 
 ### Added

@@ -9,8 +9,9 @@ BeatForge/
 ├── core/                 beatforge_core: GUI-free static library
 │   ├── include/beatforge/  public headers
 │   └── src/
-│       ├── audio/          AudioEngine, DrumMachine, DrumKit, Metronome, LevelMeter
+│       ├── audio/          AudioEngine, DrumMachine, DrumKit, PolySynth, Metronome, LevelMeter, PreviewQueue
 │       ├── dsp/            Biquad filter, deterministic Noise (pure C++, no JUCE)
+│       ├── midi/           Note/Clip model, quantize, NoteSchedule + lock-free ScheduleExchange
 │       └── project/        Project model, ProjectFile (JSON), Session (single mutation path)
 │       └── time/           MusicalTime (PPQ 960, bar/beat/tick), TempoMap, Transport
 ├── app/                  BeatForge GUI executable (JUCE)
@@ -20,7 +21,7 @@ BeatForge/
 │       ├── audio/          AudioDeviceController (JUCE AudioDeviceManager <-> engine)
 │       ├── project/        ProjectActions (file commands, dialogs, recent files)
 │       └── ui/             theme, LookAndFeel, TransportBar, ProjectButton, SignatureField, TempoField,
-│                           TimelineRuler, DrumMachinePanel,
+│                           TimelineRuler, DrumMachinePanel, PianoRollPanel, TabBar,
 │                           LevelMeterComponent, StatusBar
 ├── tools/                analyze_onsets.py (timing analysis of captured audio)
 ├── tests/                Catch2 unit tests + app launch test (CTest)
@@ -51,6 +52,40 @@ Rules that hold from day one:
   lock-free queues / atomics (introduced in Phase 1).
 - **Timing comes from the audio timeline**, never from UI timers or frame rate.
 - **Live playback and offline export share** the same instrument and mixing code.
+
+## MIDI (Phase 5)
+
+```
+ PianoRoll ─► Session::addNote/updateNotes/... ─► Project.synthClip
+                       │
+                       └─► AudioEngine::setMidiClip ─► NoteSchedule::build (message thread)
+                                                        │  sorted on/off events, offs first
+                                                        ▼
+                         ScheduleExchange: pending ──acquire()──► current (audio thread)
+                                           retired ◄──────────────┘  freed later by collectGarbage()
+```
+
+- **Note** = id, pitch, velocity, start tick, length (clip-local). The clip
+  loops from bar 1 every `length` ticks. Quantize moves starts to the nearest
+  grid line (ties later), keeps lengths, keeps notes inside the clip.
+- **Hand-over without locks or frees on the audio thread:** the message
+  thread publishes an immutable schedule; the audio thread swaps it in at a
+  block start and parks the old one in a "retired" slot that only the message
+  thread empties. A newer schedule waits until that slot is free.
+- **Sample-exact scheduling:** the transport reports each block as segments
+  with an event-tick window `(eventsAfter, eventsUpTo]`, the exact inverse of
+  "first sample at or after the tick". Bounds are carried from segment to
+  segment, so every event has exactly one owner across blocks, tempo changes
+  and loop wraps (stress-tested with random tempo changes at block sizes
+  1/37/64/4096: bit-identical output).
+- Within a block, note on/off, loop jumps and grid lines (drums, metronome)
+  are merged in sample order (offs, jumps, grid, ons) and voices are rendered
+  between them.
+- **No stuck notes:** voices are keyed by note id; on a schedule change, a loop
+  wrap, or Stop, voices whose note no longer covers the playhead are released.
+- **PolySynth** (16 voices): PolyBLEP saw, one-pole low-pass, linear ADSR,
+  velocity gain, voice stealing. A placeholder sound until Phase 6.
+- Editor auditions go through a lock-free SPSC `PreviewQueue`.
 
 ## Projects and the command path (Phase 4)
 
@@ -83,14 +118,25 @@ Rules that hold from day one:
         "soloed": false, "steps": "x...x...x...x..." } ] } ] }
 ```
 
+Synth track (added in 0.5, still format version 1 — 0.4 keeps it as an
+unknown track):
+
+```json
+{ "type": "instrument", "instrument": "basicSynth", "name": "Synth",
+  "clip": { "lengthTicks": 15360,
+            "notes": [ { "pitch": 60, "velocity": 100, "start": 0, "length": 480 } ] } }
+```
+
 Loading rules:
 - Not JSON, wrong `format`, or missing `version` → refused with a reason.
 - `version` newer than this build → refused ("saved by a newer BeatForge"),
   never half-read.
 - Out-of-range or wrong-typed values → corrected, each with a warning shown to
   the user; nothing changes on disk until they save.
-- Unknown keys, extra steps beyond 16, unknown lanes and track types → kept
-  and written back on save (no silent data loss).
+- Unknown keys, extra steps beyond 16, unknown lanes and track types,
+  unknown note keys and unreadable notes → kept and written back on save (no
+  silent data loss). Out-of-range pitch/velocity is limited with a warning.
+- Notes beyond a shortened clip stay in the project (silent, hidden).
 - Save = write `<file>.tmp`, then rename over the target.
 
 ## Drum machine (Phase 3)

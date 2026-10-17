@@ -246,3 +246,18 @@ TEST_CASE ("6/8 beats fall on every other 16th", "[transport][steps]")
     REQUIRE (r.beats.size() == 8);
     REQUIRE (r.beats[6].beatInBar == 1);   // second bar
 }
+
+TEST_CASE ("A loop wrap on a block boundary is reported to the next block", "[transport][loop]")
+{
+    Transport t;
+    t.setTempo (120.0);
+    t.prepare (48000.0);
+    t.setLoop (true, 0, 3840);   // wraps after exactly 96000 samples
+
+    int jumps = 0;
+    auto none = [] (const Transport::GridLine&) {};
+    for (int i = 0; i < 3 * 96000 / 1000; ++i)   // 1000-sample blocks: wrap lands on a boundary
+        t.advance (1000, none, [&] (const Transport::Segment& s) { jumps += s.afterJump ? 1 : 0; });
+
+    REQUIRE (jumps == 2);   // after bar 1 and after bar 2 (the 3rd wrap is at the very end)
+}

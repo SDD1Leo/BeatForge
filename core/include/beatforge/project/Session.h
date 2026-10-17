@@ -25,6 +25,7 @@ namespace beatforge::project
             transport,    // tempo, signature, loop, metronome
             pattern,      // drum steps
             lanes,        // lane names, volume, mute, solo
+            notes,        // the synth clip: created, resized, notes edited
             metadata      // name, file path, saved/unsaved
         };
 
@@ -48,6 +49,21 @@ namespace beatforge::project
         bool renameLane (int lane, const std::string& name);
         bool renameProject (const std::string& name);
 
+        // --- Synth clip ---------------------------------------------------------
+        // Creates the clip (if missing) with the given length in bars (1/2/4/8).
+        void createMidiClip (int bars);
+        void setMidiClipBars (int bars);
+        int getMidiClipBars() const noexcept;
+
+        // Adds a note (constrained to the clip); returns its new id, 0 if there is no clip.
+        midi::NoteId addNote (midi::Note);
+        // Replaces notes with matching ids (move/resize/velocity). Unknown ids are ignored.
+        void updateNotes (const std::vector<midi::Note>&);
+        void removeNotes (const std::vector<midi::NoteId>&);
+        // Empty `ids` = every note.
+        void quantizeNotes (const std::vector<midi::NoteId>& ids, time::Tick grid);
+        const midi::Note* findNote (midi::NoteId) const noexcept;
+
         // --- Lifecycle --------------------------------------------------------
         void newProject();
         // Replaces the project (after loading); `file` is where it came from.
@@ -65,6 +81,8 @@ namespace beatforge::project
     private:
         void applyAllToEngine();
         void applyLoop();
+        void notesChanged();
+        void assignNoteIds();
         void changed (Change, bool makesDirty = true);
         static bool validLane (int lane) noexcept;
 
@@ -72,6 +90,7 @@ namespace beatforge::project
         Project project;
         std::optional<std::filesystem::path> file;
         bool dirty = false;
+        midi::NoteId nextNoteId = 1;
 
         std::vector<std::pair<int, Listener>> listeners;
         int nextListenerId = 1;

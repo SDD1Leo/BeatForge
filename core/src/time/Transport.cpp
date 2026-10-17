@@ -16,6 +16,8 @@ namespace beatforge::time
         now = 0;
         reanchor (0, 0.0);
         lastLineTick = -1;
+        jumpPending = false;
+        eventBoundary = -0.5;
     }
 
     void Transport::setTempo (double newBpm) noexcept

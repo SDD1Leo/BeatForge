@@ -1,10 +1,13 @@
 #pragma once
 
 #include "beatforge/audio/DrumMachine.h"
+#include "beatforge/midi/Note.h"
 #include "beatforge/time/MusicalTime.h"
 #include "beatforge/time/TempoMap.h"
 
 #include <array>
+#include <map>
+#include <optional>
 #include <string>
 
 namespace beatforge::project
@@ -40,10 +43,19 @@ namespace beatforge::project
         std::string extraTopLevel = "{}";   // unknown top-level keys (JSON object)
         std::string extraDrumTrack = "{}";  // unknown keys of the drum track
         std::string extraLanes = "[]";      // lanes we do not understand, kept verbatim
+
+        // Synth track with one looping MIDI clip (absent until created).
+        std::string synthTrackName = "Synth";
+        std::optional<midi::Clip> synthClip;
+        std::string extraSynthTrack = "{}";            // unknown keys of the synth track
+        std::string extraClip = "{}";                  // unknown keys of the clip
+        std::map<midi::NoteId, std::string> noteExtra; // unknown keys per note
+        std::string invalidNotes = "[]";               // unreadable notes, kept verbatim
         std::string extraTracks = "[]";     // tracks of types this version cannot play
 
         static std::array<DrumLane, audio::DrumMachine::numLanes> defaultLanes();
         static bool isValidLoopBars (int bars) noexcept { return bars == 1 || bars == 2 || bars == 4 || bars == 8; }
+        static bool isValidClipBars (int bars) noexcept { return isValidLoopBars (bars); }
 
         static constexpr int maxNameLength = 64;
         static constexpr int maxLaneNameLength = 32;

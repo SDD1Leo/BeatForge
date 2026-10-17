@@ -12,7 +12,10 @@ add_library(beatforge_core STATIC
     src/audio/DrumMachine.cpp
     src/audio/LevelMeter.cpp
     src/audio/Metronome.cpp
+    src/audio/PolySynth.cpp
     src/dsp/Biquad.cpp
+    src/midi/Note.cpp
+    src/midi/NoteSchedule.cpp
     src/project/Project.cpp
     src/project/ProjectFile.cpp
     src/project/Session.cpp

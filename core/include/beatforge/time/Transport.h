@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <utility>
 
 namespace beatforge::time
 {
@@ -49,10 +50,44 @@ namespace beatforge::time
         // Loop [start, end) in ticks. Ignored unless 0 <= start < end.
         void setLoop (bool enabled, Tick start, Tick end) noexcept;
 
+        // A stretch of the block with continuous musical time. Blocks split into
+        // several segments only at loop wraps.
+        //
+        // Events: an event at tick T belongs to this segment iff
+        // eventsAfter < T <= eventsUpTo. Those bounds are chosen so that exactly
+        // the events whose firing sample (first sample at or after T) lies in this
+        // segment are included, and consecutive segments share their bound, so
+        // no event is lost or repeated - also across tempo changes and blocks.
+        struct Segment
+        {
+            int sampleOffset = 0;      // within the block
+            int numSamples = 0;
+            double startTick = 0.0;    // musical position of the first sample
+            double endTick = 0.0;      // position after the last sample
+            double eventsAfter = 0.0;  // exclusive
+            double eventsUpTo = 0.0;   // inclusive
+            double samplesPerTick = 1.0;
+            bool afterJump = false;    // starts right after a loop wrap
+
+            // Block sample offset at which an event at `tick` (inside the segment) fires.
+            int sampleFor (double tick) const noexcept
+            {
+                const auto s = sampleOffset + (int) std::ceil ((tick - startTick) * samplesPerTick - 1e-7);
+                return std::clamp (s, sampleOffset, sampleOffset + numSamples - 1);
+            }
+        };
+
         // Advances the clock by numSamples, calling onLine (const GridLine&) for
         // every grid line that falls inside this block, in order.
         template <typename OnLine>
-        void advance (int numSamples, OnLine&& onLine) noexcept;
+        void advance (int numSamples, OnLine&& onLine) noexcept
+        {
+            advance (numSamples, std::forward<OnLine> (onLine), [] (const Segment&) {});
+        }
+
+        // As above, also calling onSegment (const Segment&) for each segment.
+        template <typename OnLine, typename OnSegment>
+        void advance (int numSamples, OnLine&& onLine, OnSegment&& onSegment) noexcept;
 
         double getPositionTicks() const noexcept      { return tickAt (now); }
         std::int64_t getElapsedSamples() const noexcept { return now; }
@@ -94,6 +129,8 @@ namespace beatforge::time
         std::int64_t anchorSample = 0;
         double anchorTick = 0.0;
         Tick lastLineTick = -1;         // de-duplicates grid lines across tempo changes
+        double eventBoundary = -0.5;    // events up to here belong to earlier segments
+        bool jumpPending = false;       // a loop wrap happened; the next segment reports it
 
         bool loopEnabled = false;
         Tick loopStart = 0, loopEnd = 0;
@@ -131,8 +168,8 @@ namespace beatforge::time
         }
     }
 
-    template <typename OnLine>
-    void Transport::advance (int numSamples, OnLine&& onLine) noexcept
+    template <typename OnLine, typename OnSegment>
+    void Transport::advance (int numSamples, OnLine&& onLine, OnSegment&& onSegment) noexcept
     {
         const auto blockStart = now;
         const auto blockEnd = now + numSamples;
@@ -156,12 +193,36 @@ namespace beatforge::time
             }
 
             emitGridLines (now, segmentEnd, blockStart, onLine);
+
+            if (segmentEnd > now)
+            {
+                Segment segment;
+                segment.sampleOffset = (int) (now - blockStart);
+                segment.numSamples = (int) (segmentEnd - now);
+                segment.startTick = tickAt (now);
+                segment.endTick = wraps ? (double) loopEnd : tickAt (segmentEnd);
+                segment.samplesPerTick = samplesPerTick;
+
+                // Last tick that still fires on or before this segment's last sample
+                // (inverse of firstSampleAtOrAfter). Before a wrap, nothing at or
+                // after the loop end plays (ticks are whole numbers).
+                const auto lastTickHere = anchorTick + ((double) (segmentEnd - 1 - anchorSample) + 1e-7) / samplesPerTick;
+                segment.eventsAfter = eventBoundary;
+                segment.eventsUpTo = wraps ? std::min (lastTickHere, (double) loopEnd - 0.5) : lastTickHere;
+                eventBoundary = segment.eventsUpTo;
+                segment.afterJump = jumpPending;
+                jumpPending = false;
+                onSegment (segment);
+            }
+
             now = segmentEnd;
 
             if (wraps)
             {
                 reanchor (now, (double) loopStart);
                 lastLineTick = loopStart - 1;
+                eventBoundary = (double) loopStart - 0.5;
+                jumpPending = true;   // flags the next segment, even if it is in the next block
             }
         }
     }
