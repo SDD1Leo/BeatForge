@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.1.0] — Phase 1: audio output & transport (awaiting user test)
+## [0.1.0] — Phase 1: audio output & transport (approved 2026-10-18)
 
 ### Added
 - `AudioEngine` (core, pure C++): lock-free play/stop, transport state and
