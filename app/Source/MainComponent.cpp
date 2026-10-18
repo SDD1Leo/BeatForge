@@ -1,5 +1,6 @@
 #include "MainComponent.h"
 #include "ui/ShortcutsDialog.h"
+#include "ui/UserGuideDialog.h"
 #include "ui/Theme.h"
 
 #include <beatforge/BuildInfo.h>
@@ -42,6 +43,7 @@ namespace beatforge
         actions.onExportAudio = [this] { openExportAudio(); };
         actions.onOpenBrowser = [this] { openProjectBrowser(); };
         actions.onShowShortcuts = [this] { showShortcuts(); };
+        actions.onShowGuide = [this] { showGuide(); };
         arrangement.onMessage = [this] (const juce::String& text) { statusBar.showNotice (text); };
         transportBar.onComputerKeys = [this] { toggleComputerKeys(); };
         pianoRoll.keyFilter = [this] (const juce::KeyPress& key) { return computerKeys.keyPressed (key); };
@@ -87,6 +89,8 @@ namespace beatforge
             delete exportWindow.getComponent();   // cancels a running export
         if (browserWindow != nullptr)
             delete browserWindow.getComponent();
+        if (guideWindow != nullptr)
+            delete guideWindow.getComponent();
     }
 
     void MainComponent::changeListenerCallback (juce::ChangeBroadcaster*) { refreshDeviceStatus(); }
@@ -314,6 +318,24 @@ namespace beatforge
         options.resizable = true;
         options.escapeKeyTriggersCloseButton = true;
         settingsWindow = options.launchAsync();
+    }
+
+    void MainComponent::showGuide()
+    {
+        if (guideWindow != nullptr)
+        {
+            guideWindow->toFront (true);
+            return;
+        }
+        juce::DialogWindow::LaunchOptions options;
+        options.dialogTitle = "BeatForge User Guide";
+        options.dialogBackgroundColour = theme::panel;
+        options.content.setOwned (new UserGuideDialog());
+        options.componentToCentreAround = this;
+        options.useNativeTitleBar = true;
+        options.resizable = true;
+        options.escapeKeyTriggersCloseButton = true;
+        guideWindow = options.launchAsync();
     }
 
     void MainComponent::showShortcuts()

@@ -305,10 +305,6 @@ namespace beatforge
         menu.addItem (item (4, "Save As...", "Ctrl+Shift+S"));
         menu.addSeparator();
         menu.addItem (item (5, "Rename...", {}));
-        menu.addItem (item (9, "Export Audio...", "Ctrl+Shift+E"));
-        menu.addItem (item (8, "Export MIDI...", "Ctrl+E"));
-        menu.addSeparator();
-        menu.addItem (item (10, "Keyboard Shortcuts", "F1"));
         menu.addSeparator();
         auto undoItem = item (6, session.canUndo() ? "Undo " + toJuce (session.undoLabel()) : juce::String ("Undo"), "Ctrl+Z");
         undoItem.isEnabled = session.canUndo();
@@ -316,6 +312,12 @@ namespace beatforge
         redoItem.isEnabled = session.canRedo();
         menu.addItem (undoItem);
         menu.addItem (redoItem);
+        menu.addSeparator();
+        menu.addItem (item (9, "Export Audio...", "Ctrl+Shift+E"));
+        menu.addItem (item (8, "Export MIDI...", "Ctrl+E"));
+        menu.addSectionHeader ("Help");
+        menu.addItem (item (11, "User Guide", {}));
+        menu.addItem (item (10, "Keyboard Shortcuts", "F1"));
 
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&anchor).withMinimumWidth (anchor.getWidth()),
                              [this] (int id)
@@ -333,6 +335,7 @@ namespace beatforge
                 case 8: exportMidiWithChooser(); break;
                 case 9: if (onExportAudio) onExportAudio(); break;
                 case 10: if (onShowShortcuts) onShowShortcuts(); break;
+                case 11: if (onShowGuide) onShowGuide(); break;
                 default:
                     if (id >= recentBase)
                         openFile (recent.getFile (id - recentBase));

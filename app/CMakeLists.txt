@@ -30,7 +30,8 @@ target_sources(BeatForge
         Source/ui/TabBar.cpp
         Source/ui/TempoField.cpp
         Source/ui/TransportBar.cpp
-        Source/ui/TransportButton.cpp)
+        Source/ui/TransportButton.cpp
+        Source/ui/UserGuideDialog.cpp)
 
 target_include_directories(BeatForge PRIVATE Source)
 
@@ -44,9 +45,13 @@ target_compile_definitions(BeatForge
         JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:BeatForge,JUCE_PRODUCT_NAME>"
         JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:BeatForge,JUCE_VERSION>")
 
+# The user guide is built into the app, so Help always shows the matching version.
+juce_add_binary_data(BeatForgeDocs SOURCES "${PROJECT_SOURCE_DIR}/USER_GUIDE.md")
+
 target_link_libraries(BeatForge
     PRIVATE
         beatforge_core
+        BeatForgeDocs
         juce::juce_audio_utils
         juce::juce_gui_extra
     PUBLIC

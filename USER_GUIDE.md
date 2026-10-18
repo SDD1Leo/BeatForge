@@ -1,8 +1,9 @@
 # BeatForge user guide: your first track
 
-This walks you through a four-bar electronic track: drums, bass, chords and a
-lead, mixed, saved and exported. It takes about ten minutes. Every step can be
-undone with **Ctrl+Z**; **F1** shows all keyboard shortcuts.
+This walks you through a four-bar electronic track: drums, bass and chords,
+mixed, saved and exported. It takes about ten minutes. Every step can be
+undone with **Ctrl+Z**; **F1** shows all keyboard shortcuts. This guide is also
+in the app: project menu → Help → User Guide.
 
 ## The screen
 

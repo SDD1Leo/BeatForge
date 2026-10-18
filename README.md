@@ -41,6 +41,7 @@ as versioned `.beatforge` project files.
 | Instrument presets | Instrument tab → preset menu (Pluck, Soft Pad, Bright Lead, Keys, Warm Sine; Sub, Acid, Punchy, Smooth Saw) |
 | Copy / cut / paste a clip | **Ctrl+C** / **Ctrl+X**; select a track, click the ruler where it should go, **Ctrl+V** |
 | All shortcuts | **F1** |
+| User guide | Project menu → Help → **User Guide** |
 | Build a beat | Click steps in the step grid; click-drag along a row to paint several. While stopped, a newly set step is auditioned. The pattern repeats every bar of the clip |
 | Hear a drum | Click its name |
 | Drum level / mute / solo | Row slider (double-click = 0 dB), **M**, **S** buttons |

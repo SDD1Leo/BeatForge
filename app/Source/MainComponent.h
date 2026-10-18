@@ -68,6 +68,8 @@ namespace beatforge
         void openExportAudio();
         void openProjectBrowser();
         void showShortcuts();
+        void showGuide();
+        juce::Component::SafePointer<juce::DialogWindow> guideWindow;
         juce::Component::SafePointer<juce::DialogWindow> browserWindow;
         juce::Component::SafePointer<juce::DialogWindow> exportWindow;
 

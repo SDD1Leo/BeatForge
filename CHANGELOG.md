@@ -23,7 +23,9 @@
 - **Keyboard Shortcuts** overview (F1, project menu).
 - Status bar: audio CPU load; short notices (e.g. after copying a clip).
 - MCP: `set_master_volume`; project state includes the master volume.
-- USER_GUIDE.md: making your first four-bar track.
+- USER_GUIDE.md: making your first four-bar track - also inside the app:
+  project menu → Help → **User Guide** (built into the app, rendered in a
+  NEBULA window); Help also lists the keyboard shortcuts.
 - 9 new test cases (177 ctest in total).
 
 ### Changed
