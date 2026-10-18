@@ -18,7 +18,7 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 | 8 | MIDI device input, recording, MIDI file export (+ arrangement zoom/scroll/reorder) | ✅ |
 | 9 | Offline render & WAV export | ✅ |
 | 10 | MCP server (TypeScript, local IPC) | ✅ |
-| 11 | Polish & creative workflow | 🧪 |
+| 11 | Polish & creative workflow | ✅ |
 | 11b | UI work and polishing pass (your list, after Phase 11) | ⏳ |
 | 12 | Advanced features (one at a time) | ⏳ |
 

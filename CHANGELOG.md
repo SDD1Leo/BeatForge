@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.11.0] — Phase 11: polish and creative workflow (awaiting user test)
+## [0.11.0] — Phase 11: polish and creative workflow (approved 2026-10-18)
 
 ### Added
 - **Mixer** tab (Ctrl+3): a channel strip per track (fader, pan, mute/solo,
