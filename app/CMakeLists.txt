@@ -1,6 +1,7 @@
 juce_add_gui_app(BeatForge
     PRODUCT_NAME "BeatForge"
     COMPANY_NAME "BeatForge"
+    ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/Resources/icon.png"
     NEEDS_WEB_BROWSER FALSE
     NEEDS_CURL FALSE)
 

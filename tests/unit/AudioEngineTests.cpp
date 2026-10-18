@@ -266,8 +266,8 @@ TEST_CASE ("Audio callback path never allocates", "[audio][engine][realtime]")
 TEST_CASE ("Allocation counter actually detects allocations", "[realtime]")
 {
     beatforge::test::ScopedAllocationCounter allocations;
-    auto* p = new int (3);
-    asm volatile ("" : : "g" (p) : "memory");   // keep the optimiser from eliding new/delete
-    delete p;
+    static int* volatile sink = nullptr;   // keeps the optimiser from eliding new/delete
+    sink = new int (3);
+    delete sink;
     REQUIRE (allocations.count() == 1);
 }

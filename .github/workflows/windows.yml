@@ -1,5 +1,6 @@
-# Builds BeatForge for Windows and runs every test on a real Windows machine.
-# The built app is attached to the run as an artifact (BeatForge-windows).
+# Builds BeatForge for Windows, runs every test on a real Windows machine, and
+# packages it: BeatForge-<version>-Setup.exe (Inno Setup) and a portable zip,
+# attached to the run as the artifact "BeatForge-windows".
 name: Windows
 
 on:
@@ -35,10 +36,35 @@ jobs:
       - name: Test
         run: ctest --preset windows-release --timeout 300
 
-      - name: Upload the app
-        if: always()
+      - name: Stage the MCP server (runtime packages only)
+        shell: pwsh
+        run: |
+          $stage = "build/windows/mcp-stage"
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          Copy-Item mcp/package.json, mcp/package-lock.json, mcp/README.md $stage
+          Copy-Item -Recurse mcp/dist "$stage/dist"
+          Push-Location $stage
+          npm ci --omit=dev --ignore-scripts
+          Pop-Location
+
+      - name: Installer and portable zip
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path CMakeLists.txt -Pattern 'project\(BeatForge VERSION ([0-9.]+)').Matches[0].Groups[1].Value
+          $exe = "$PWD\build\windows\app\BeatForge_artefacts\Release\BeatForge.exe"
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" "/DAppExe=$exe" "/DMcpDir=$PWD\build\windows\mcp-stage" packaging\windows\BeatForge.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $portable = "build/windows/portable/BeatForge"
+          New-Item -ItemType Directory -Force "$portable/licences" | Out-Null
+          Copy-Item $exe, USER_GUIDE.md $portable
+          Copy-Item app/Resources/fonts/*-OFL.txt "$portable/licences"
+          Compress-Archive -Path $portable -DestinationPath "build/windows/installer/BeatForge-$version-portable.zip" -Force
+          Get-ChildItem build/windows/installer
+
+      - name: Upload the installer and portable zip
         uses: actions/upload-artifact@v4
         with:
           name: BeatForge-windows
-          path: build/windows/app/BeatForge_artefacts/Release/BeatForge.exe
-          if-no-files-found: warn
+          path: build/windows/installer/*
+          if-no-files-found: error

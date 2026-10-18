@@ -9,6 +9,10 @@
 #include <fstream>
 #include "TestSupport.h"
 
+#ifndef _WIN32
+ #include <unistd.h>
+#endif
+
 using namespace beatforge::project;
 using Catch::Matchers::ContainsSubstring;
 namespace fs = std::filesystem;
@@ -145,7 +149,12 @@ TEST_CASE ("A failed save leaves the existing file untouched", "[project][file]"
     const auto result = saveFile (changed, file, "0.7.0");
     fs::permissions (dir.path, fs::perms::owner_all);
 
-    if (::geteuid() != 0)
+   #ifdef _WIN32
+    const bool permissionsApply = false;   // Windows ignores a read-only flag on folders
+   #else
+    const bool permissionsApply = ::geteuid() != 0;   // root ignores permissions
+   #endif
+    if (permissionsApply)
     {
         REQUIRE_FALSE (result.ok());
         REQUIRE_THAT (result.error, ContainsSubstring ("Permission denied"));

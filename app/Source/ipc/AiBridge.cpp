@@ -5,6 +5,12 @@
 
 namespace beatforge
 {
+    namespace
+    {
+        // Who wins for one MCP call: the task starting, or the waiter giving up.
+        enum CallState : int { pending, running, abandoned };
+    }
+
     AiBridge::AiBridge (project::Session& session, audio::AudioEngine& engine, api::CommandApi::Environment env)
         : api (std::make_shared<api::CommandApi> (session, engine, std::move (env))),
           server (std::make_unique<ipc::IpcServer> ([this] (const std::string& line) { return handle (line); }))
@@ -39,9 +45,7 @@ namespace beatforge
     {
         return ipc::handleRequestLine (line, [this] (const std::string& op, const api::Json& args) -> api::Json
         {
-            // Run on the message thread. `state` decides who wins: the task
-            // starting, or the waiter giving up.
-            enum : int { pending, running, abandoned };
+            // Run on the message thread; `state` (a CallState) decides who wins.
             struct Call
             {
                 std::atomic<int> state { pending };
