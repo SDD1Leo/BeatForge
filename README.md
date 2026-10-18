@@ -1,5 +1,7 @@
 # BeatForge
 
+![BeatForge: arrangement, step sequencer and master meter while playing](docs/screenshot.png)
+
 A native desktop DAW for electronic music, built in C++ with JUCE.
 Small feature set, reliable audio, pleasant workflow.
 
