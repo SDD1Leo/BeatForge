@@ -17,7 +17,8 @@ as versioned `.beatforge` project files.
 |---|---|
 | Play from a MIDI keyboard | Plug it in (it is enabled automatically; see Audio Settings → Active MIDI inputs) and select a synth track. The status bar shows the inputs and flashes on MIDI |
 | Record | Select a synth track, press **Record** or **R**: playback starts and what you play goes into the track (into the clip under the playhead, or a new clip). **R** again stops recording, **Stop**/Space ends it. **Ctrl+Z** removes the whole take |
-| Record without a keyboard | Click the piano roll's keyboard while recording |
+| Computer keyboard as a MIDI keyboard | Press **K** (or the keyboard button in the transport). **Q W E R T Y U I O P [ ]** are the white keys from C4, **2 3 5 6 7 9 0 =** the black keys; **Z / X** octave down / up, **C / V** velocity down / up. The status bar shows the range and velocity. While it is on, R and Q play notes: record with **Ctrl+R** or the Record button, quantize with its button. **K** again turns it off |
+| Record without a keyboard | Turn on the computer keyboard (**K**), or click the piano roll's keyboard while recording |
 | Export MIDI | Project menu → **Export MIDI...** or **Ctrl+E** (a .mid file next to your project) |
 | Add a track | **+ Drums** / **+ Synth** above the track headers (up to 16) |
 | Rename / delete a track | Double-click its name / right-click its header → Delete track |

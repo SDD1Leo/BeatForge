@@ -18,6 +18,11 @@
   heard the beat (output latency compensated). Measured: a MIDI file played in
   came back within 2 ticks (~1 ms) of its timing.
 - The piano roll keyboard is a live input too: click keys while recording.
+- Computer keyboard as a MIDI keyboard (**K** or the transport's keyboard
+  button, remembered): QWERTY row = white keys from C4, number row = black keys
+  (C4-G5); Z/X octave, C/V velocity; notes last as long as the key is held and
+  are recorded like MIDI. While it is on, note keys win over single-key
+  shortcuts (R, Q); **Ctrl+R** records in any mode.
 - Export MIDI... (project menu, **Ctrl+E**): Standard MIDI File, format 1, 960
   PPQ, with tempo, time signature, track names, GM programs, drums on channel 10;
   `--export-midi=<file>` from the command line.

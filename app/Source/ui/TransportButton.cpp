@@ -87,6 +87,18 @@ namespace beatforge
                 break;
             }
 
+            case Icon::keyboard:
+            {
+                // A computer keyboard: outline with two rows of keys and a space bar.
+                auto r = iconArea.withSizeKeepingCentre (18.0f, 12.0f);
+                g.drawRoundedRectangle (r, 2.0f, 1.5f);
+                for (int row = 0; row < 2; ++row)
+                    for (int k = 0; k < 4; ++k)
+                        g.fillRect (r.getX() + 3.0f + (float) k * 3.4f, r.getY() + 2.5f + (float) row * 2.8f, 1.8f, 1.6f);
+                g.fillRect (r.getX() + 5.0f, r.getBottom() - 3.2f, 8.0f, 1.4f);
+                break;
+            }
+
             case Icon::settings:
             {
                 // Gear: ring, hub and eight teeth.

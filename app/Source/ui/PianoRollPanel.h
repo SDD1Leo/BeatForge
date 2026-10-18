@@ -36,6 +36,9 @@ namespace beatforge
         // Brings the shown clip's notes into view (done when another clip opens).
         void scrollToNotes();
 
+        // Keys claimed before the editor's own shortcuts (computer keyboard notes).
+        std::function<bool (const juce::KeyPress&)> keyFilter;
+
         static constexpr int lowestPitch = 24, highestPitch = 108;   // C1..C8
         static constexpr int rowHeight = 13, keyboardWidth = 58;
 

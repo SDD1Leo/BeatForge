@@ -28,6 +28,7 @@ namespace beatforge
           recordButton ("Record", TransportButton::Icon::record, theme::record),
           loopButton ("Loop", TransportButton::Icon::loop, theme::accent),
           metronomeButton ("Metronome", TransportButton::Icon::metronome, theme::accent),
+          keysButton ("Computer keyboard", TransportButton::Icon::keyboard, theme::accent),
           settingsButton ("Audio Settings", TransportButton::Icon::settings, theme::accent)
     {
         playButton.setTooltip ("Play (Space)");
@@ -40,6 +41,7 @@ namespace beatforge
         playButton.onClick = [this] { engine.play(); refreshPosition(); };
         stopButton.onClick = [this] { engine.setRecording (false); engine.stop(); refreshPosition(); };
         recordButton.onClick = [this] { if (onRecord) onRecord(); };
+        keysButton.onClick = [this] { if (onComputerKeys) onComputerKeys(); };
         loopButton.onClick = [this] { toggleLoop(); };
         metronomeButton.onClick = [this] { toggleMetronome(); };
         settingsButton.onClick = [this] { if (onOpenAudioSettings) onOpenAudioSettings(); };
@@ -49,7 +51,7 @@ namespace beatforge
         signatureField.onChange = [this] (time::TimeSignature sig) { session.setTimeSignature (sig); };
 
         for (auto* c : std::initializer_list<juce::Component*> { &projectButton, &playButton, &stopButton, &recordButton, &loopButton,
-                                                                  &tempoField, &signatureField, &metronomeButton,
+                                                                  &tempoField, &signatureField, &metronomeButton, &keysButton,
                                                                   &settingsButton })
             addAndMakeVisible (c);
 
@@ -98,6 +100,12 @@ namespace beatforge
     void TransportBar::setRecording (bool isRecording)
     {
         recordButton.setLit (isRecording);
+    }
+
+    void TransportBar::setComputerKeysLit (bool lit, const juce::String& tooltip)
+    {
+        keysButton.setLit (lit);
+        keysButton.setTooltip (tooltip);
     }
 
     void TransportBar::togglePlayStop()
@@ -233,6 +241,8 @@ namespace beatforge
         beatArea = area.removeFromLeft (84);
         area.removeFromLeft (12);
         metronomeButton.setBounds (area.removeFromLeft (40).reduced (0, 3));
+        area.removeFromLeft (8);
+        keysButton.setBounds (area.removeFromLeft (40).reduced (0, 3));
 
         settingsButton.setBounds (area.removeFromRight (40).reduced (0, 3));
     }

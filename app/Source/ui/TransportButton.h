@@ -9,7 +9,7 @@ namespace beatforge
     class TransportButton final : public juce::Button
     {
     public:
-        enum class Icon { play, stop, record, loop, metronome, settings };
+        enum class Icon { play, stop, record, loop, metronome, keyboard, settings };
 
         TransportButton (const juce::String& name, Icon, juce::Colour litColour);
 

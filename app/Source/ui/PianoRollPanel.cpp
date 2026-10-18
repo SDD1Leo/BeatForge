@@ -396,6 +396,9 @@ namespace beatforge
         // --- keys -----------------------------------------------------------------
         bool keyPressed (const juce::KeyPress& key) override
         {
+            if (owner.keyFilter && owner.keyFilter (key))
+                return true;
+
             auto& session = owner.session;
             const auto* clip = owner.clipPtr();
             if (! clip)

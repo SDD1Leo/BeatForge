@@ -36,6 +36,10 @@ namespace beatforge
         void setRecordAvailable (bool available, const juce::String& tooltip);
         void setRecording (bool isRecording);
 
+        // Computer keyboard as a MIDI keyboard (the owner keeps the state).
+        std::function<void()> onComputerKeys;
+        void setComputerKeysLit (bool lit, const juce::String& tooltip);
+
         std::function<void()> onOpenAudioSettings;
         std::function<void (juce::Component& anchor)> onProjectMenu;
         std::function<void()> onTextEditFinished;
@@ -55,7 +59,7 @@ namespace beatforge
         int listenerId = 0;
 
         ProjectButton projectButton;
-        TransportButton playButton, stopButton, recordButton, loopButton, metronomeButton, settingsButton;
+        TransportButton playButton, stopButton, recordButton, loopButton, metronomeButton, keysButton, settingsButton;
         TempoField tempoField;
         SignatureField signatureField;
 

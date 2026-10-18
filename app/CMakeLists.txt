@@ -9,6 +9,7 @@ target_sources(BeatForge
         Source/Main.cpp
         Source/MainComponent.cpp
         Source/audio/AudioDeviceController.cpp
+        Source/input/ComputerKeyboard.cpp
         Source/project/ProjectActions.cpp
         Source/ui/ArrangementView.cpp
         Source/ui/BeatForgeLookAndFeel.cpp

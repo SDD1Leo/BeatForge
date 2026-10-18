@@ -63,6 +63,12 @@ namespace beatforge
             return getMainComponent().handleShortcut (key) || DocumentWindow::keyPressed (key);
         }
 
+        bool keyStateChanged (bool isKeyDown) override
+        {
+            getMainComponent().getComputerKeys().keyStateChanged();   // no component focused
+            return DocumentWindow::keyStateChanged (isKeyDown);
+        }
+
     private:
         project::Session& session;
         int listenerId = 0;

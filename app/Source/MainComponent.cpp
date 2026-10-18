@@ -15,7 +15,7 @@ namespace beatforge
 
     MainComponent::MainComponent (audio::AudioEngine& e, AudioDeviceController& d,
                                   project::Session& s, juce::PropertiesFile& settings)
-        : devices (d), engine (e), session (s), actions (s, settings, *this),
+        : devices (d), engine (e), session (s), appSettings (settings), actions (s, settings, *this),
           transportBar (e, s), selection (s), arrangement (e, s, selection), drumPanel (e, s, selection),
           pianoRoll (e, s, selection), instrumentPanel (s, selection), outputMeter (e.getOutputMeter())
     {
@@ -38,6 +38,11 @@ namespace beatforge
                 updateLiveInput();
         });
         transportBar.onRecord = [this] { toggleRecord(); };
+        transportBar.onComputerKeys = [this] { toggleComputerKeys(); };
+        pianoRoll.keyFilter = [this] (const juce::KeyPress& key) { return computerKeys.keyPressed (key); };
+        computerKeys.onChange = [this] { refreshComputerKeys(); };
+        computerKeys.setEnabled (appSettings.getBoolValue ("computerKeyboard", false));
+        refreshComputerKeys();
 
         addAndMakeVisible (transportBar);
         addAndMakeVisible (arrangement);
@@ -74,6 +79,7 @@ namespace beatforge
     void MainComponent::timerCallback()
     {
         pollRecording();
+        computerKeys.keyStateChanged();   // a key released while another window had focus
 
         // MIDI light: on for ~150 ms after any message.
         if (const auto count = devices.getMidiEventCount(); count != lastMidiCount)
@@ -85,7 +91,7 @@ namespace beatforge
         {
             --midiLightTicks;
         }
-        statusBar.setMidi (midiInputsText, midiLightTicks > 0);
+        statusBar.setMidi (midiInputsText + computerKeysText, midiLightTicks > 0);
 
         if (++slowTicks >= 15)
         {
@@ -113,6 +119,25 @@ namespace beatforge
                                                        + " (R): play your MIDI keyboard or the piano roll keys");
         else
             transportBar.setRecordAvailable (false, "Select a synth track to record into it");
+    }
+
+    void MainComponent::toggleComputerKeys()
+    {
+        computerKeys.setEnabled (! computerKeys.isEnabled());
+        appSettings.setValue ("computerKeyboard", computerKeys.isEnabled());
+        appSettings.saveIfNeeded();
+    }
+
+    void MainComponent::refreshComputerKeys()
+    {
+        auto name = [] (int pitch) { return juce::MidiMessage::getMidiNoteName (pitch, true, true, 4); };
+        const auto on = computerKeys.isEnabled();
+        computerKeysText = on ? dot + "Keys " + name (computerKeys.getLowestNote()) + "-" + name (computerKeys.getHighestNote())
+                                    + ", velocity " + juce::String (computerKeys.getVelocity())
+                              : juce::String();
+        transportBar.setComputerKeysLit (on, on ? "Computer keyboard ON (K): Q-] play notes, 2-= sharps, Z/X octave, C/V velocity. "
+                                                  "Record with Ctrl+R or the Record button"
+                                                : "Play notes with the computer keyboard (K)");
     }
 
     void MainComponent::toggleRecord()
@@ -229,9 +254,21 @@ namespace beatforge
         return handleShortcut (key);
     }
 
+    bool MainComponent::keyStateChanged (bool)
+    {
+        computerKeys.keyStateChanged();
+        return false;
+    }
+
     bool MainComponent::handleShortcut (const juce::KeyPress& key)
     {
         const auto ctrl = juce::ModifierKeys::commandModifier;
+
+        // Computer keyboard notes win over single-key shortcuts while it is on.
+        if (computerKeys.keyPressed (key))
+            return true;
+        if (key == juce::KeyPress ('k') || key == juce::KeyPress ('K')) { toggleComputerKeys(); return true; }
+        if (key == juce::KeyPress ('r', ctrl, 0))  { toggleRecord(); return true; }
         if (key == juce::KeyPress ('n', ctrl, 0))  { actions.newProject();      return true; }
         if (key == juce::KeyPress ('o', ctrl, 0))  { actions.openWithChooser(); return true; }
         if (key == juce::KeyPress ('s', ctrl, 0))  { actions.save();            return true; }

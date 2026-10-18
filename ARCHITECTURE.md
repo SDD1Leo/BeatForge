@@ -22,7 +22,8 @@ BeatForge/
 │   └── Source/
 │       ├── Main.cpp        application, main window, smoke-test mode
 │       ├── MainComponent.* root content: header, transport, master meter, status
-│       ├── audio/          AudioDeviceController (JUCE AudioDeviceManager <-> engine)
+│       ├── audio/          AudioDeviceController (JUCE AudioDeviceManager <-> engine, MIDI inputs)
+│       ├── input/          ComputerKeyboard (QWERTY/number rows as a MIDI keyboard)
 │       ├── project/        ProjectActions (file commands, dialogs, recent files, Export MIDI)
 │       └── ui/             theme, LookAndFeel, TransportBar, ProjectButton, SignatureField, TempoField,
 │                           ArrangementView, Selection, DrumMachinePanel, PianoRollPanel, InstrumentPanel, Knob, TabBar,
@@ -84,7 +85,8 @@ Rules that hold from day one:
 
 ```
  MIDI device ─(MIDI thread)─► AudioEngine::deviceNote ─┐  SPSC queues, each event
- piano roll keys ─(message)─► AudioEngine::screenNote ─┘  stamped with now()
+ piano roll keys,             AudioEngine::screenNote ─┘  stamped with now()
+ computer keyboard ─(message)─►
                                      │
                      audio thread: place on the audio clock, play on the live
                      target slot (the selected synth track); while recording and
