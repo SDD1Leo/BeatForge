@@ -3,7 +3,7 @@
 A native desktop DAW for electronic music, built in C++ with JUCE.
 Small feature set, reliable audio, pleasant workflow.
 
-**Status:** Phase 7 (arrangement view) built — awaiting hands-on test.
+**Status:** Phase 7 (arrangement view) approved; Phase 8 (MIDI input, recording, MIDI export) next.
 Arrange drum and synth tracks (Nebula Poly or Nebula Bass) as clips on a
 timeline, with per-track volume, pan, mute and solo, a loop region, seek and
 undo/redo. The selected clip opens in the step sequencer or piano roll. Runs on a

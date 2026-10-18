@@ -14,7 +14,7 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 | 4 | Project save/load (versioned format) | ✅ |
 | 5 | MIDI engine & piano roll | ✅ |
 | 6 | Built-in synth & mono bass | ✅ |
-| 7 | Arrangement view (tracks, clips, volume/pan, loop, undo) | 🧪 |
+| 7 | Arrangement view (tracks, clips, volume/pan, loop, undo) | ✅ |
 | 8 | MIDI device input, recording, MIDI file export | ⏳ |
 | 9 | Offline render & WAV export | ⏳ |
 | 10 | MCP server (TypeScript, local IPC) | ⏳ |

@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.7.0] — Phase 7: arrangement view (awaiting user test)
+## [0.7.0] — Phase 7: arrangement view (approved 2026-10-18)
 
 ### Added
 - Arrangement as the main screen: ruler, track headers, lanes with clips.
