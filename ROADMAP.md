@@ -19,6 +19,7 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 | 9 | Offline render & WAV export | ✅ |
 | 10 | MCP server (TypeScript, local IPC) | ✅ |
 | 11 | Polish & creative workflow | ⏳ |
+| 11b | UI work and polishing pass (your list, after Phase 11) | ⏳ |
 | 12 | Advanced features (one at a time) | ⏳ |
 
 **First major goal:** a complete four-bar electronic composition, exported.
