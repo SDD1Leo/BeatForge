@@ -30,22 +30,22 @@ namespace beatforge
     {
         if (isMouseOver() || dragging)
         {
-            g.setColour (theme::control.withAlpha (0.6f));
-            g.fillRect (getLocalBounds().reduced (1));
+            g.setColour (theme::bgRaised.withAlpha (0.7f));
+            g.fillRoundedRectangle (getLocalBounds().reduced (2, 1).toFloat(), 6.0f);
         }
 
         if (editor != nullptr && editor->isVisible())
             return;
 
-        auto area = getLocalBounds().reduced (4, 4);
+        auto area = getLocalBounds().reduced (2, 4);
         auto caption = area.removeFromBottom (12);
 
         g.setColour (theme::textPrimary);
-        g.setFont (theme::numericFont (20.0f));
+        g.setFont (theme::numericFont (20.0f, juce::Font::bold));
         g.drawText (juce::String (tempo, 2), area, juce::Justification::centred);
 
-        g.setColour (dragging ? theme::violet : theme::textSecondary);
-        g.setFont (theme::captionFont (9.5f));
+        g.setColour (dragging ? theme::purple : theme::textMuted);
+        g.setFont (theme::captionFont (9.0f));
         g.drawText ("BPM", caption, juce::Justification::centred);
     }
 

@@ -65,7 +65,7 @@ namespace beatforge
         rateBox.setTooltip ("Sample rate of the file");
         bitsBox.setTooltip ("16-bit: CDs and sharing. 24-bit: mastering, most DAWs. 32-bit float: never clips");
         exportButton.setTooltip ("Choose where to save, then render");
-        exportButton.setColour (juce::TextButton::buttonColourId, theme::violet);
+        exportButton.setColour (juce::TextButton::buttonColourId, theme::purple);
         exportButton.onClick = [this]
         {
             if (state == State::done) { if (onClose) onClose(); return; }
@@ -234,7 +234,7 @@ namespace beatforge
             auto bar = progressArea.toFloat();
             g.setColour (theme::control);
             g.fillRoundedRectangle (bar, 4.0f);
-            g.setGradientFill (juce::ColourGradient (theme::violet, bar.getX(), 0.0f, theme::magenta, bar.getRight(), 0.0f, false));
+            g.setGradientFill (juce::ColourGradient (theme::purple, bar.getX(), 0.0f, theme::pink, bar.getRight(), 0.0f, false));
             g.fillRoundedRectangle (bar.withWidth (juce::jmax (8.0f, bar.getWidth() * f)), 4.0f);
             g.setColour (theme::textSecondary);
             g.setFont (theme::font (12.5f));

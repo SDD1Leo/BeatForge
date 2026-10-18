@@ -103,7 +103,8 @@ namespace beatforge
         StatusBar statusBar;
         juce::TooltipWindow tooltips { this, 600 };
 
-        juce::Rectangle<int> headerArea, outputCard, workspaceArea;
+        juce::Rectangle<int> outputCard, workspaceArea, editorCard;
+        static constexpr int editorHeaderHeight = 52;
         juce::Component::SafePointer<juce::DialogWindow> settingsWindow;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)

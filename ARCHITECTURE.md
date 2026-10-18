@@ -21,6 +21,7 @@ BeatForge/
 │       ├── ipc/            IpcServer (Unix socket, line-delimited JSON)
 │       └── time/           MusicalTime (PPQ 960, bar/beat/tick), TempoMap, Transport
 ├── app/                  BeatForge GUI executable (JUCE)
+│   ├── Resources/fonts/  Inter + JetBrains Mono (OFL), embedded with BinaryData
 │   └── Source/
 │       ├── Main.cpp        application, main window, smoke-test mode
 │       ├── MainComponent.* root content: header, transport, master meter, status
@@ -28,9 +29,10 @@ BeatForge/
 │       ├── input/          ComputerKeyboard (QWERTY/number rows as a MIDI keyboard)
 │       ├── ipc/            AiBridge (socket thread → message thread, timeouts)
 │       ├── project/        ProjectActions (file commands, dialogs, recent files, Export MIDI)
-│       └── ui/             theme, LookAndFeel, TransportBar, ProjectButton, SignatureField, TempoField,
+│       └── ui/             Theme (tokens, embedded fonts), LookAndFeel, TransportBar (the header), ProjectNameField, SignatureField, TempoField,
 │                           ArrangementView, Selection, DrumMachinePanel, PianoRollPanel, InstrumentPanel, Knob, TabBar,
 │                           LevelMeterComponent, StatusBar
+├── docs/ui-spec/         Figma export: SPEC.md, colour tokens, screen PNGs (the visual reference)
 ├── tools/                analyze_onsets.py (timing analysis of captured audio)
 ├── tests/                Catch2 unit tests + app launch test (CTest)
 └── mcp/                  TypeScript MCP server (stdio) → BeatForge over a Unix socket

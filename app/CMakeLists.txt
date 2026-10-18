@@ -45,8 +45,15 @@ target_compile_definitions(BeatForge
         JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:BeatForge,JUCE_PRODUCT_NAME>"
         JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:BeatForge,JUCE_VERSION>")
 
-# The user guide is built into the app, so Help always shows the matching version.
-juce_add_binary_data(BeatForgeDocs SOURCES "${PROJECT_SOURCE_DIR}/USER_GUIDE.md")
+# The user guide and the UI fonts are built into the app, so Help always shows the
+# matching version and every machine draws the same typefaces.
+juce_add_binary_data(BeatForgeDocs SOURCES
+    "${PROJECT_SOURCE_DIR}/USER_GUIDE.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Resources/fonts/Inter-Regular.ttf"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Resources/fonts/Inter-SemiBold.ttf"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Resources/fonts/Inter-Bold.ttf"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Resources/fonts/JetBrainsMono-Regular.ttf"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Resources/fonts/JetBrainsMono-Medium.ttf")
 
 target_link_libraries(BeatForge
     PRIVATE

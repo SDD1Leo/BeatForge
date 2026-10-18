@@ -8,7 +8,7 @@ namespace beatforge
     Knob::Knob (const juce::String& c, juce::Colour signal) : caption (c)
     {
         slider.setSliderStyle (juce::Slider::RotaryVerticalDrag);
-        slider.setTextBoxStyle (juce::Slider::TextBoxBelow, true, 72, 16);
+        slider.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
         slider.setRotaryParameters (juce::MathConstants<float>::pi * 1.25f, juce::MathConstants<float>::pi * 2.75f, true);
         slider.setMouseDragSensitivity (180);
         slider.setVelocityBasedMode (false);
@@ -18,7 +18,7 @@ namespace beatforge
         slider.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
         slider.setColour (juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
         slider.textFromValueFunction = [this] (double v) { return format (v, unit); };
-        slider.onValueChange = [this] { if (onChange) onChange (slider.getValue()); };
+        slider.onValueChange = [this] { repaint(); if (onChange) onChange (slider.getValue()); };
         addAndMakeVisible (slider);
     }
 
@@ -37,7 +37,7 @@ namespace beatforge
         slider.updateText();
     }
 
-    void Knob::setValue (double v, juce::NotificationType n) { slider.setValue (v, n); }
+    void Knob::setValue (double v, juce::NotificationType n) { slider.setValue (v, n); repaint(); }
     void Knob::setTooltip (const juce::String& t)             { slider.setTooltip (t); }
 
     juce::String Knob::format (double v, Unit u)
@@ -53,15 +53,22 @@ namespace beatforge
         return juce::String (v, 2);
     }
 
+    // Spec 12.2: knob, then the label (Semi Bold 10 caps, muted), then the value
+    // (Mono 11, secondary), centred in a 72 px column.
     void Knob::paint (juce::Graphics& g)
     {
+        auto area = getLocalBounds().withTrimmedTop (knobSize + 6);
+        g.setColour (theme::textMuted);
+        g.setFont (theme::captionFont (10.0f).withKerningFactor (0.08f));
+        g.drawText (caption.toUpperCase(), area.removeFromTop (13), juce::Justification::centred, false);
+        area.removeFromTop (4);
         g.setColour (theme::textSecondary);
-        g.setFont (theme::captionFont (9.5f));
-        g.drawText (caption.toUpperCase(), getLocalBounds().removeFromTop (14), juce::Justification::centred);
+        g.setFont (theme::numericFont (11.0f));
+        g.drawText (format (slider.getValue(), unit), area.removeFromTop (14), juce::Justification::centred, false);
     }
 
     void Knob::resized()
     {
-        slider.setBounds (getLocalBounds().withTrimmedTop (14));
+        slider.setBounds (getLocalBounds().removeFromTop (knobSize).withSizeKeepingCentre (knobSize, knobSize));
     }
 }

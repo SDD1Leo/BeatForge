@@ -9,7 +9,7 @@
 namespace beatforge
 {
     // Stereo peak meter with decay, peak-hold and a latching clip light.
-    // Polls the engine's LevelMeter at UI frame rate; click to reset clip.
+    // Polls the engine's LevelMeter at UI frame rate; click to reset clip and peak.
     class LevelMeterComponent final : public juce::Component,
                                       public juce::SettableTooltipClient,
                                       private juce::Timer
@@ -41,5 +41,7 @@ namespace beatforge
         std::array<Channel, 2> channels;
         double lastTickMs = 0.0;
         bool showScale = true;
+        float maxPeakDb = minDb;   // highest peak since the last reset (master readout)
+        juce::Rectangle<float> readoutArea;
     };
 }

@@ -14,9 +14,10 @@
 
 namespace beatforge
 {
-    // NEBULA transport row: project + saved state, transport buttons, the
-    // readout strip (BPM | SIG | BAR.BEAT.TICK | TIME), beat lights, metronome,
-    // loop on/off (the region is set on the arrangement ruler) and audio settings. Settings go through the Session; the
+    // The app header: logo, project menu + name + saved state, undo/redo, the
+    // transport group, the readout strip (BPM | SIG | BAR.BEAT.TICK | TIME), beat
+    // lights, metronome, computer keys, help, version and audio settings. Loop on/off
+    // here; the region is set on the arrangement ruler. Settings go through the Session; the
     // playing position is read from the engine for display only.
     class TransportBar final : public juce::Component,
                                public juce::TooltipClient,
@@ -52,7 +53,7 @@ namespace beatforge
         void paint (juce::Graphics&) override;
         void resized() override;
 
-        static constexpr int minimumWidthForTime = 1270;
+        static constexpr int height = 68;
 
     private:
         void timerCallback() override;
@@ -71,8 +72,8 @@ namespace beatforge
         TempoField tempoField;
         SignatureField signatureField;
 
-        juce::Rectangle<int> savedArea, stripArea, positionArea, timeArea, beatArea;
-        bool showTime = true;
+        juce::Rectangle<int> brandArea, projectArea, savedArea, groupArea, stripArea, positionArea, timeArea, beatArea, versionArea;
+        bool showTime = true, showWordmark = true, showVersion = true;
 
         juce::String barBeatText { "1.1.000" }, timeText { "00:00.000" };
         int currentBeat = 0;   // 1-based beat lit in the indicator, 0 = none

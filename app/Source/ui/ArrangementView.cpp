@@ -48,46 +48,53 @@ namespace beatforge
             const auto tl = timeline();
             const auto perBar = p.timeSignature.ticksPerBar(), perBeat = p.timeSignature.ticksPerBeat();
 
-            g.setColour (theme::panelRaised);
+            // Spec 5.2: bg/panel ruler, loop bar across the top, bar numbers in
+            // Mono (brighter inside the loop), bar and beat ticks at the bottom.
+            g.setColour (theme::bgPanel);
             g.fillRect (getLocalBounds());
+            const auto h = (float) getHeight();
 
-            // Loop band.
-            const auto loopArea = juce::Rectangle<float> (tl.x ((double) p.loopStart), 2.0f,
+            const auto loopArea = juce::Rectangle<float> (tl.x ((double) p.loopStart), 5.0f,
                                                           tl.x ((double) p.loopEnd) - tl.x ((double) p.loopStart), 8.0f);
-            g.setColour (p.loopEnabled ? theme::violet : theme::textMuted.withAlpha (0.5f));
-            g.fillRoundedRectangle (loopArea, 2.0f);
+            g.setColour (theme::purple.withAlpha (p.loopEnabled ? 0.3f : 0.12f));
+            g.fillRoundedRectangle (loopArea, 3.0f);
+            g.setColour (theme::purple.withAlpha (p.loopEnabled ? 0.9f : 0.35f));
+            g.drawRoundedRectangle (loopArea.reduced (0.5f), 3.0f, 1.0f);
 
+            g.setFont (theme::numericFont (10.0f, juce::Font::bold));
             for (int bar = (int) (tl.start / perBar); bar <= (int) (tl.end() / perBar); ++bar)
             {
-                const auto x = tl.x ((double) bar * perBar);
-                g.setColour (theme::border);
-                g.drawVerticalLine ((int) x, 12.0f, (float) getHeight());
-                g.setColour (theme::textSecondary);
-                g.setFont (theme::font (11.0f));
-                g.drawText (juce::String (bar + 1), juce::Rectangle<float> (x + 4.0f, 12.0f, 36.0f, 16.0f), juce::Justification::centredLeft);
+                const auto barTick = (time::Tick) bar * perBar;
+                const auto x = tl.x ((double) barTick);
+                g.setColour (theme::borderStrong);
+                g.fillRect (juce::Rectangle<float> (std::round (x), h - 16.0f, 1.0f, 16.0f));
+                const bool inLoop = barTick >= p.loopStart && barTick < p.loopEnd;
+                g.setColour (inLoop ? theme::textSecondary : theme::textMuted);
+                g.drawText (juce::String (bar + 1), juce::Rectangle<float> (x + 5.0f, h - 26.0f, 36.0f, 12.0f), juce::Justification::centredLeft);
 
+                g.setColour (theme::border);
                 for (int beat = 1; beat < p.timeSignature.numerator; ++beat)
                 {
-                    g.setColour (theme::border.withAlpha (0.6f));
                     const auto bx = tl.x ((double) (bar * perBar + beat * perBeat));
-                    g.drawVerticalLine ((int) bx, (float) getHeight() - 6.0f, (float) getHeight());
+                    g.fillRect (juce::Rectangle<float> (std::round (bx), h - 6.0f, 1.0f, 6.0f));
                 }
             }
 
-            g.setColour (theme::border);
-            g.drawHorizontalLine (getHeight() - 1, 0.0f, (float) getWidth());
+            g.setColour (theme::borderSubtle);
+            g.fillRect (0.0f, h - 1.0f, (float) getWidth(), 1.0f);
 
-            // Playhead marker.
+            // Playhead head: a rounded down-pointing triangle, 14 x 12.
             const auto x = tl.x (owner.engine.getPositionTicks());
             juce::Path head;
-            head.addTriangle (x - 6.0f, 12.0f, x + 6.0f, 12.0f, x, 21.0f);
+            head.addTriangle (x - 7.0f, h - 18.0f, x + 7.0f, h - 18.0f, x, h - 6.0f);
+            head = head.createPathWithRoundedCorners (2.0f);
             g.setColour (theme::playhead);
             g.fillPath (head);
         }
 
         void mouseDown (const juce::MouseEvent& e) override
         {
-            loopDrag = e.position.y < 12.0f;
+            loopDrag = e.position.y < 16.0f;
             if (loopDrag)
             {
                 owner.session.beginGesture();
@@ -160,7 +167,9 @@ namespace beatforge
             {
                 b->setClickingTogglesState (true);
                 b->setWantsKeyboardFocus (false);
-                b->setColour (juce::TextButton::textColourOnId, theme::background);
+                b->setColour (juce::TextButton::buttonColourId, theme::bgControl);
+                b->setColour (juce::TextButton::textColourOffId, theme::textSecondary);
+                b->setColour (juce::TextButton::textColourOnId, theme::bgApp);
                 addAndMakeVisible (*b);
             }
             mute.setColour (juce::TextButton::buttonOnColourId, theme::muteOn);
@@ -226,46 +235,58 @@ namespace beatforge
             repaint();
         }
 
+        // Spec 12.6: a 248 x 64 card with a colour strip, name + type tag, M/S and
+        // volume, and the pan knob on the right.
         void paint (juce::Graphics& g) override
         {
             const bool selected = owner.selection.getTrack() == trackId;
-            auto area = getLocalBounds().toFloat().reduced (4.0f, 3.0f);
+            const auto* t = owner.session.findTrack (trackId);
+            const auto card = cardBounds().toFloat();
 
-            g.setColour (selected ? theme::panelRaised.brighter (0.06f) : theme::panelRaised);
-            g.fillRoundedRectangle (area, theme::controlRadius);
-            g.setColour (selected ? colour.withAlpha (0.8f) : theme::border);
-            g.drawRoundedRectangle (area, theme::controlRadius, theme::borderWidth);
-            g.setColour (colour);
-            g.fillRoundedRectangle (area.withWidth (5.0f), 2.0f);
-
-            if (editor == nullptr)
             {
-                const auto* t = owner.session.findTrack (trackId);
-                g.setColour (theme::textPrimary);
-                g.setFont (theme::font (13.5f, juce::Font::bold));
-                g.drawText (name, nameArea, juce::Justification::centredLeft, true);
+                juce::Graphics::ScopedSaveState clip (g);
+                juce::Path shape;
+                shape.addRoundedRectangle (card, theme::cardRadius);
+                g.reduceClipRegion (shape);
+                g.setColour (selected ? theme::bgRaised : theme::bgSurface);
+                g.fillRect (card);
+                g.setColour (colour);
+                g.fillRect (card.withWidth (4.0f));
+            }
+            g.setColour (selected ? colour : theme::borderSubtle);
+            g.drawRoundedRectangle (card.reduced (0.5f), theme::cardRadius, theme::borderWidth);
+
+            if (editor == nullptr && t != nullptr)
+            {
+                g.setColour (t->muted ? theme::textMuted : theme::textPrimary);
+                g.setFont (theme::font (13.0f, juce::Font::bold));
+                const auto nameWidth = juce::jmin ((float) nameArea.getWidth() - 50.0f,
+                                                   juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), name) + 1.0f);
+                g.drawText (name, nameArea.toFloat().withWidth (nameWidth), juce::Justification::centredLeft, true);
                 g.setColour (theme::textMuted);
                 g.setFont (theme::captionFont (9.0f));
-                g.drawText (t != nullptr && t->type == TrackType::drums ? "DRUMS" : "SYNTH", nameArea.translated (0, 15),
-                            juce::Justification::centredLeft);
+                g.drawText (t->type == TrackType::drums ? "DRUMS" : "SYNTH",
+                            nameArea.toFloat().withTrimmedLeft (nameWidth + 8.0f), juce::Justification::centredLeft, false);
             }
         }
 
         void resized() override
         {
-            auto area = getLocalBounds().reduced (14, 7);
-            auto top = area.removeFromTop (22);
-            pan.setBounds (top.removeFromRight (26).withSizeKeepingCentre (26, 26));
-            top.removeFromRight (6);
-            solo.setBounds (top.removeFromRight (24).reduced (0, 1));
-            top.removeFromRight (4);
-            mute.setBounds (top.removeFromRight (24).reduced (0, 1));
-            nameArea = top.withTrimmedRight (6);
-            area.removeFromTop (6);
-            volume.setBounds (area.withTrimmedLeft (90).withHeight (18));
+            auto area = cardBounds().withTrimmedLeft (4 + 12).withTrimmedRight (12).reduced (0, 9);
+            pan.setBounds (area.removeFromRight (28).withSizeKeepingCentre (28, 28));
+            area.removeFromRight (10);
+            nameArea = area.removeFromTop (20);
+            auto controls = area.withSizeKeepingCentre (area.getWidth(), 22).withY (nameArea.getBottom() + 4);
+            mute.setBounds (controls.removeFromLeft (24));
+            controls.removeFromLeft (6);
+            solo.setBounds (controls.removeFromLeft (24));
+            controls.removeFromLeft (8);
+            volume.setBounds (controls.removeFromLeft (juce::jmin (104, controls.getWidth())));
             if (editor != nullptr)
                 editor->setBounds (nameArea.expanded (2, 2));
         }
+
+        juce::Rectangle<int> cardBounds() const { return getLocalBounds().reduced (8, 3); }
 
         void mouseDown (const juce::MouseEvent& e) override
         {
@@ -425,7 +446,7 @@ namespace beatforge
             const auto tl = timeline();
             const auto row = rowOf (t.id);
             const auto x0 = tl.x ((double) c.start), x1 = tl.x ((double) c.end());
-            return { x0, (float) (row * rowHeight) + 5.0f, juce::jmax (6.0f, x1 - x0), (float) rowHeight - 10.0f };
+            return { x0 + 1.0f, (float) (row * rowHeight) + 5.0f, juce::jmax (6.0f, x1 - x0 - 2.0f), (float) rowHeight - 10.0f };
         }
 
         std::pair<const Track*, const Clip*> clipAt (juce::Point<float> p) const
@@ -441,9 +462,9 @@ namespace beatforge
         void setPlayhead (double tick)
         {
             const auto tl = timeline();
-            // Covers the whole 6 px glow (x - 3 .. x + 3) and its anti-aliased edges;
+            // Covers the whole glow (x - 8 .. x + 8) and its anti-aliased edges;
             // anything narrower leaves a trail of glow behind the moving playhead.
-            auto strip = [&] (double t) { return juce::Rectangle<int> ((int) std::floor (tl.x (t)) - 6, 0, 13, getHeight()); };
+            auto strip = [&] (double t) { return juce::Rectangle<int> ((int) std::floor (tl.x (t)) - 10, 0, 21, getHeight()); };
             repaint (strip (playhead));
             playhead = tick;
             repaint (strip (playhead));
@@ -455,29 +476,32 @@ namespace beatforge
             const auto tl = timeline();
             const auto perBar = p.timeSignature.ticksPerBar(), perBeat = p.timeSignature.ticksPerBeat();
 
-            g.fillAll (theme::background);
+            g.fillAll (theme::bgInset);
+            g.setColour (theme::bgPanel);
+            g.fillRect (getLocalBounds().withWidth (headerWidth));
             g.saveState();
             g.reduceClipRegion (getLocalBounds().withTrimmedLeft (headerWidth));   // scrolled content stays right of the headers
 
-            // Rows.
+            // Lanes: 64 tall with a 6 px gap, aligned with the track headers.
             for (size_t i = 0; i < p.tracks.size(); ++i)
             {
-                const auto row = juce::Rectangle<float> (tl.left, (float) i * rowHeight, tl.width, (float) rowHeight);
-                g.setColour (p.tracks[i].id == owner.selection.getTrack() ? theme::panel.brighter (0.04f) : theme::panel);
-                g.fillRect (row.reduced (0.0f, 1.0f));
+                const auto lane = juce::Rectangle<float> (tl.left, (float) i * rowHeight + 3.0f, tl.width, (float) rowHeight - 6.0f);
+                const bool selected = p.tracks[i].id == owner.selection.getTrack();
+                g.setColour (selected ? owner.selection.colourOf (p.tracks[i].id).withAlpha (0.08f) : theme::bgSurface.withAlpha (0.5f));
+                g.fillRect (lane);
             }
 
             // Loop shading and grid.
             if (p.loopEnabled)
             {
-                g.setColour (theme::violet.withAlpha (0.06f));
+                g.setColour (theme::purple.withAlpha (0.04f));
                 g.fillRect (juce::Rectangle<float> (tl.x ((double) p.loopStart), 0.0f,
                                                     tl.x ((double) p.loopEnd) - tl.x ((double) p.loopStart), (float) getHeight()));
             }
             for (auto t = (time::Tick) (tl.start / (double) perBeat) * perBeat; (double) t <= tl.end(); t += perBeat)
             {
-                g.setColour (t % perBar == 0 ? theme::border : theme::border.withAlpha (0.35f));
-                g.drawVerticalLine ((int) tl.x ((double) t), 0.0f, (float) getHeight());
+                g.setColour (t % perBar == 0 ? theme::border.withAlpha (0.9f) : theme::borderSubtle.withAlpha (0.7f));
+                g.fillRect (juce::Rectangle<float> (std::round (tl.x ((double) t)), 0.0f, 1.0f, (float) getHeight()));
             }
 
             // Clips.
@@ -485,19 +509,25 @@ namespace beatforge
             {
                 const auto colour = owner.selection.colourOf (t.id);
                 for (auto& c : t.clips)
+                {
+                    if (t.muted) g.beginTransparencyLayer (0.45f);
                     paintClip (g, t, c, colour);
+                    if (t.muted) g.endTransparencyLayer();
+                }
             }
 
-            // Playhead.
+            // Playhead: a 2 px accent line with a soft glow.
             const auto x = tl.x (playhead);
-            g.setColour (theme::playhead.withAlpha (0.25f));
-            g.fillRect (x - 3.0f, 0.0f, 6.0f, (float) getHeight());
+            juce::ColourGradient glow (theme::playhead.withAlpha (0.0f), x - 8.0f, 0.0f, theme::playhead.withAlpha (0.0f), x + 8.0f, 0.0f, false);
+            glow.addColour (0.5, theme::playhead.withAlpha (0.35f));
+            g.setGradientFill (glow);
+            g.fillRect (x - 8.0f, 0.0f, 16.0f, (float) getHeight());
             g.setColour (theme::playhead);
             g.fillRect (x - 1.0f, 0.0f, 2.0f, (float) getHeight());
             g.restoreState();
 
-            g.setColour (theme::border);
-            g.drawVerticalLine (headerWidth - 1, 0.0f, (float) getHeight());
+            g.setColour (theme::borderSubtle);
+            g.fillRect (headerWidth - 1, 0, 1, getHeight());
 
             // Where a dragged track header will land.
             if (dropRow >= 0)
@@ -507,44 +537,57 @@ namespace beatforge
             }
         }
 
+        // Spec 5.2: translucent body, solid header strip with the name, and a
+        // preview of the content (drum hits in three rows, or notes).
         void paintClip (juce::Graphics& g, const Track& t, const Clip& c, juce::Colour colour)
         {
             const auto r = clipBounds (t, c);
             const bool selected = owner.selection.getClip() == c.id;
+            constexpr float radius = 6.0f;
 
-            g.setColour (colour.withAlpha (0.28f));
-            g.fillRoundedRectangle (r, theme::controlRadius);
-            g.setColour (colour.withAlpha (0.85f));
-            g.fillRoundedRectangle (r.withHeight (14.0f), theme::controlRadius);
+            {
+                juce::Graphics::ScopedSaveState state (g);
+                juce::Path shape;
+                shape.addRoundedRectangle (r, radius);
+                g.reduceClipRegion (shape);
+                g.setColour (colour.withAlpha (0.16f));
+                g.fillRect (r);
+                g.setColour (colour.withAlpha (0.9f));
+                g.fillRect (r.withHeight (16.0f));
+            }
 
-            g.setColour (theme::background);
-            g.setFont (theme::font (10.5f, juce::Font::bold));
+            g.setColour (theme::bgApp);
+            g.setFont (theme::font (10.0f, juce::Font::bold));
             const auto perBar = owner.session.getProject().timeSignature.ticksPerBar();
             const bool wholeBars = c.length % perBar == 0;
             const auto bars = (double) c.length / (double) perBar;
             // The label stays readable when the clip starts left of the view.
-            auto label = r.withHeight (14.0f);
+            auto label = r.withHeight (16.0f);
             label.setLeft (juce::jmax (label.getX(), (float) headerWidth));
-            g.drawText ((t.type == TrackType::drums ? "Pattern  " : "Clip  ") + juce::String (bars, wholeBars ? 0 : 2)
-                            + (c.length == perBar ? " bar" : " bars"),
-                        label.reduced (6.0f, 0.0f), juce::Justification::centredLeft, true);
+            g.drawText ((t.type == TrackType::drums ? "Pattern" : "Clip") + juce::String::fromUTF8 (" \xc2\xb7 ")
+                            + juce::String (bars, wholeBars ? 0 : 2) + (c.length == perBar ? " bar" : " bars"),
+                        label.withTrimmedLeft (7.0f).withTrimmedRight (4.0f), juce::Justification::centredLeft, true);
 
             // Content preview.
-            auto body = r.withTrimmedTop (16.0f).reduced (4.0f, 3.0f);
             g.saveState();
-            g.reduceClipRegion (body.toNearestInt());
+            g.reduceClipRegion (r.reduced (1.0f).withTrimmedTop (16.0f).toNearestInt());
             const auto tl = timeline();
             g.setColour (colour);
             if (t.type == TrackType::drums)
             {
-                const float laneH = body.getHeight() / (float) audio::DrumMachine::numLanes;
+                // Rows: kick, snare + clap, hats (closed + open, dimmer).
+                constexpr int rowOfLane[] { 0, 1, 2, 2, 1 };
+                const float rowY[] { 22.0f, 34.0f, 46.0f };
                 const auto stepTicks = project::patternTicks / project::stepsPerPattern;
+                const auto cellW = juce::jmax (1.5f, tl.w ((double) stepTicks) - 2.0f);
                 for (time::Tick at = 0, step = 0; at < c.length; at += stepTicks, ++step)
                     for (int lane = 0; lane < audio::DrumMachine::numLanes; ++lane)
                         if (c.pattern[(size_t) lane][(size_t) (step % project::stepsPerPattern)])
                         {
-                            const auto x0 = tl.x ((double) (c.start + at));
-                            g.fillRect (x0, body.getY() + (float) lane * laneH, juce::jmax (1.5f, tl.w ((double) stepTicks) - 1.0f), laneH - 1.0f);
+                            const auto row = rowOfLane[lane];
+                            g.setColour (colour.withAlpha (row == 2 ? 0.55f : 1.0f));
+                            g.fillRoundedRectangle (tl.x ((double) (c.start + at)) + 1.0f, r.getY() + rowY[row] - 2.0f,
+                                                    cellW, 7.0f, 1.5f);
                         }
             }
             else if (! c.notes.empty())
@@ -552,18 +595,28 @@ namespace beatforge
                 int lo = 127, hi = 0;
                 for (auto& n : c.notes) { lo = std::min (lo, n.pitch); hi = std::max (hi, n.pitch); }
                 const float range = (float) std::max (12, hi - lo + 1);
+                const float bandTop = r.getY() + 22.0f, bandHeight = juce::jmax (4.0f, r.getHeight() - 26.0f);
                 for (auto& n : c.notes)
                 {
                     if (n.start >= c.length) continue;
-                    const auto y = body.getBottom() - ((float) (n.pitch - lo) + 0.5f) / range * body.getHeight();
-                    g.fillRect (tl.x ((double) (c.start + n.start)), y - 1.0f,
-                                juce::jmax (2.0f, tl.x ((double) (c.start + std::min (n.end(), c.length))) - tl.x ((double) (c.start + n.start))), 2.5f);
+                    const auto y = bandTop + bandHeight - ((float) (n.pitch - lo) + 0.5f) / range * bandHeight;
+                    g.fillRoundedRectangle (tl.x ((double) (c.start + n.start)), y - 2.0f,
+                                            juce::jmax (3.0f, tl.x ((double) (c.start + std::min (n.end(), c.length))) - tl.x ((double) (c.start + n.start)) - 1.0f),
+                                            4.0f, 2.0f);
                 }
             }
             g.restoreState();
 
-            g.setColour (selected ? theme::textPrimary : colour);
-            g.drawRoundedRectangle (r, theme::controlRadius, selected ? 2.0f : 1.0f);
+            if (selected)
+            {
+                g.setColour (theme::textPrimary);
+                g.drawRoundedRectangle (r.reduced (0.75f), radius, 1.5f);
+            }
+            else
+            {
+                g.setColour (colour.withAlpha (0.7f));
+                g.drawRoundedRectangle (r.reduced (0.5f), radius, 1.0f);
+            }
         }
 
         // --- mouse ------------------------------------------------------------------
@@ -746,6 +799,8 @@ namespace beatforge
         zoomInButton.onClick = [this] { zoomIn(); };
         fitButton.onClick = [this] { zoomToFit(); };
         for (auto* b : { &zoomOutButton, &zoomInButton, &fitButton })
+            b->setColour (juce::TextButton::buttonColourId, juce::Colours::transparentBlack);   // ghost buttons
+        for (auto* b : { &zoomOutButton, &zoomInButton, &fitButton })
         {
             b->setWantsKeyboardFocus (false);
             addAndMakeVisible (*b);
@@ -890,6 +945,7 @@ namespace beatforge
                 lanes->addAndMakeVisible (*lanes->headers.back());
             }
             resized();
+            repaint();   // the track count
         }
         refresh();
     }
@@ -977,11 +1033,54 @@ namespace beatforge
 
     void ArrangementView::paint (juce::Graphics& g)
     {
-        g.setColour (theme::panelRaised);
-        g.fillRect (getLocalBounds().removeFromTop (rulerHeight).withWidth (headerWidth));
-        g.setColour (theme::border);
-        g.drawHorizontalLine (rulerHeight - 1, 0.0f, (float) headerWidth);
-        g.drawRect (getLocalBounds().toFloat(), 1.0f);
+        // The panel: bg/panel, rounded, border/subtle (children are clipped to it
+        // by being inset; the timeline well is bg/inset).
+        const auto panel = getLocalBounds().toFloat();
+        g.setColour (theme::bgPanel);
+        g.fillRoundedRectangle (panel, theme::panelRadius);
+
+        // Track-list toolbar: TRACKS + count chip.
+        auto corner = getLocalBounds().removeFromTop (rulerHeight).withWidth (headerWidth).reduced (16, 0);
+        g.setColour (theme::textMuted);
+        g.setFont (theme::captionFont (10.0f));
+        const juce::String caption ("TRACKS");
+        const auto captionWidth = juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), caption) + 2;
+        g.drawText (caption, corner.removeFromLeft (captionWidth), juce::Justification::centredLeft, false);
+        corner.removeFromLeft (8);
+        const auto count = juce::String ((int) session.getProject().tracks.size());
+        g.setFont (theme::numericFont (10.0f, juce::Font::bold));
+        const auto chipWidth = juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), count) + 12;
+        const auto chipArea = corner.removeFromLeft (chipWidth).withSizeKeepingCentre (chipWidth, 16);
+        g.setColour (theme::bgControl);
+        g.fillRoundedRectangle (chipArea.toFloat(), 8.0f);
+        g.setColour (theme::textSecondary);
+        g.drawText (count, chipArea, juce::Justification::centred, false);
+
+        // ZOOM caption in the footer.
+        g.setColour (theme::textMuted);
+        g.setFont (theme::captionFont (9.0f));
+        g.drawText ("ZOOM", getLocalBounds().removeFromBottom (footerHeight).withWidth (headerWidth).reduced (16, 0),
+                    juce::Justification::centredLeft, false);
+
+        // Footer under the timeline, and the column divider.
+        g.setColour (theme::bgInset);
+        g.fillRect (getLocalBounds().removeFromBottom (footerHeight).withTrimmedLeft (headerWidth).withTrimmedRight (1).withTrimmedBottom (1));
+        g.setColour (theme::borderSubtle);
+        g.fillRect (headerWidth - 1, 0, 1, getHeight());
+    }
+
+    void ArrangementView::paintOverChildren (juce::Graphics& g)
+    {
+        // Round the panel's corners over the scrolled content, then outline it.
+        const auto panel = getLocalBounds().toFloat();
+        juce::Path outside;
+        outside.addRectangle (panel);
+        outside.addRoundedRectangle (panel, theme::panelRadius);
+        outside.setUsingNonZeroWinding (false);
+        g.setColour (theme::bgApp);
+        g.fillPath (outside);
+        g.setColour (theme::borderSubtle);
+        g.drawRoundedRectangle (panel.reduced (0.5f), theme::panelRadius, theme::borderWidth);
     }
 
     void ArrangementView::resized()
@@ -990,17 +1089,17 @@ namespace beatforge
         auto top = area.removeFromTop (rulerHeight);
 
         auto footer = area.removeFromBottom (footerHeight);
-        auto zoom = footer.removeFromLeft (headerWidth).reduced (8, 3);
-        fitButton.setBounds (zoom.removeFromRight (44));
-        zoom.removeFromRight (4);
-        zoomInButton.setBounds (zoom.removeFromRight (28));
-        zoom.removeFromRight (4);
-        zoomOutButton.setBounds (zoom.removeFromRight (28));
-        hScroll.setBounds (footer.withTrimmedRight (viewport.getScrollBarThickness()).reduced (0, 6));
-        auto corner = top.removeFromLeft (headerWidth).reduced (8, 4);
-        addSynthButton.setBounds (corner.removeFromRight (80));
+        auto zoom = footer.removeFromLeft (headerWidth).reduced (8, 7).withTrimmedLeft (48);
+        zoomOutButton.setBounds (zoom.removeFromLeft (28));
+        zoom.removeFromLeft (6);
+        zoomInButton.setBounds (zoom.removeFromLeft (28));
+        zoom.removeFromLeft (6);
+        fitButton.setBounds (zoom.removeFromLeft (40));
+        hScroll.setBounds (footer.withTrimmedRight (viewport.getScrollBarThickness()).reduced (12, (footerHeight - 6) / 2));
+        auto corner = top.removeFromLeft (headerWidth).reduced (8, 7);
+        addSynthButton.setBounds (corner.removeFromRight (74));
         corner.removeFromRight (6);
-        addDrumsButton.setBounds (corner.removeFromRight (80));
+        addDrumsButton.setBounds (corner.removeFromRight (74));
         ruler->setBounds (top.withTrimmedRight (viewport.getScrollBarThickness()));
         viewport.setBounds (area);
 

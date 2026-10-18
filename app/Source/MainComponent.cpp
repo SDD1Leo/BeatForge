@@ -11,7 +11,6 @@ namespace beatforge
 {
     namespace
     {
-        juce::String toJuce (std::string_view s) { return juce::String (s.data(), s.size()); }
         const juce::String dot = juce::String::fromUTF8 ("  \xc2\xb7  ");
     }
 
@@ -481,67 +480,58 @@ namespace beatforge
 
     void MainComponent::paint (juce::Graphics& g)
     {
-        g.fillAll (theme::background);
+        g.fillAll (theme::bgApp);
 
-        // Header: wordmark + version.
-        g.setColour (theme::panel);
-        g.fillRect (headerArea);
-        g.setColour (theme::border);
-        g.drawHorizontalLine (headerArea.getBottom() - 1, 0.0f, (float) getWidth());
-
-        // Wordmark: a small waveform glyph in the violet-to-magenta signal colours.
-        auto header = headerArea.reduced (16, 0);
-        auto glyph = header.removeFromLeft (22).toFloat().withSizeKeepingCentre (22.0f, 22.0f);
-        const float bars[] { 0.35f, 0.7f, 1.0f, 0.55f, 0.85f, 0.4f };
-        juce::ColourGradient signal (theme::violet, glyph.getX(), 0.0f, theme::magenta, glyph.getRight(), 0.0f, false);
-        g.setGradientFill (signal);
-        for (int i = 0; i < 6; ++i)
+        // Editor and master panels (the arrangement draws its own).
+        for (auto card : { editorCard, outputCard })
         {
-            const float h = glyph.getHeight() * bars[i];
-            g.fillRoundedRectangle (glyph.getX() + (float) i * 3.8f, glyph.getCentreY() - h / 2.0f, 2.2f, h, 1.1f);
+            g.setColour (theme::bgPanel);
+            g.fillRoundedRectangle (card.toFloat(), theme::panelRadius);
+            g.setColour (theme::borderSubtle);
+            g.drawRoundedRectangle (card.toFloat().reduced (0.5f), theme::panelRadius, theme::borderWidth);
         }
-        header.removeFromLeft (10);
-        g.setColour (theme::textPrimary);
-        g.setFont (theme::font (20.0f, juce::Font::bold));
-        g.drawText ("BeatForge", header, juce::Justification::centredLeft);
-        g.setColour (theme::textSecondary);
-        g.setFont (theme::font (13.0f));
-        g.drawText ("v" + toJuce (versionString()), header, juce::Justification::centredRight);
 
-        // Master output panel.
-        g.setColour (theme::panel);
-        g.fillRoundedRectangle (outputCard.toFloat(), theme::cornerRadius);
-        g.setColour (theme::border);
-        g.drawRoundedRectangle (outputCard.toFloat().reduced (0.5f), theme::cornerRadius, 1.0f);
-        g.setColour (theme::textSecondary);
-        g.setFont (theme::captionFont());
-        g.drawText ("MASTER", outputCard.withHeight (34), juce::Justification::centred);
+        // Editor header divider, under the tabs.
+        g.setColour (theme::borderSubtle);
+        g.fillRect (editorCard.getX() + 1, editorCard.getY() + editorHeaderHeight - 1, editorCard.getWidth() - 2, 1);
+
+        g.setColour (theme::textMuted);
+        g.setFont (theme::captionFont (10.0f).withKerningFactor (0.14f));
+        g.drawText ("MASTER", outputCard.withHeight (40).withTrimmedTop (14), juce::Justification::centred);
     }
 
     void MainComponent::resized()
     {
+        // Spec section 2: header 68, body (padding 12, gap 12) with the arrangement
+        // (440 tall) over the editor and the 132-wide master panel on the right,
+        // then a 30 px status bar.
         auto area = getLocalBounds();
-        headerArea = area.removeFromTop (48);
-        transportBar.setBounds (area.removeFromTop (64));
-        statusBar.setBounds (area.removeFromBottom (26));
+        transportBar.setBounds (area.removeFromTop (TransportBar::height));
+        statusBar.setBounds (area.removeFromBottom (30));
 
-        // Master output card, docked right like a mixer's master strip.
-        auto body = area.reduced (16);
-        outputCard = body.removeFromRight (120);
-        body.removeFromRight (16);
+        auto body = area.reduced (12);
+        outputCard = body.removeFromRight (132);
+        body.removeFromRight (12);
         workspaceArea = body;
 
-        // Editor below: at least the step sequencer's height, up to half the body.
-        auto editor = body.removeFromBottom (juce::jmax (DrumMachinePanel::preferredHeight + 42, body.getHeight() / 2));
-        body.removeFromBottom (10);
-        arrangement.setBounds (body);
+        // The arrangement keeps 440 px unless the editor would drop below the
+        // step sequencer's height.
+        const int editorMin = editorHeaderHeight + DrumMachinePanel::preferredHeight + 16;
+        const int arrangementHeight = juce::jlimit (160, 440, body.getHeight() - 12 - editorMin);
+        arrangement.setBounds (body.removeFromTop (arrangementHeight));
+        body.removeFromTop (12);
+        editorCard = body;
 
-        workspaceTabs.setBounds (editor.removeFromTop (34).withWidth (workspaceTabs.getPreferredWidth()));
-        editor.removeFromTop (8);
+        auto editor = editorCard;
+        auto header = editor.removeFromTop (editorHeaderHeight).withTrimmedLeft (6);
+        workspaceTabs.setBounds (header.withWidth (workspaceTabs.getPreferredWidth()).withTrimmedBottom (1).withTrimmedTop (10));
+        editor = editor.reduced (1);
         pianoRoll.setBounds (editor);
-        instrumentPanel.setBounds (editor);
+        instrumentPanel.setBounds (editorCard.reduced (1));
+        instrumentPanel.setHeaderStart (workspaceTabs.getRight() - instrumentPanel.getX() + 10);
+        workspaceTabs.toFront (false);
         mixer.setBounds (editor);
         drumPanel.setBounds (editor.removeFromTop (DrumMachinePanel::preferredHeight));
-        outputMeter.setBounds (outputCard.reduced (16, 0).withTrimmedTop (36).withTrimmedBottom (16));
+        outputMeter.setBounds (outputCard.reduced (12, 0).withTrimmedTop (40).withTrimmedBottom (14));
     }
 }

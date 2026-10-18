@@ -91,10 +91,10 @@ namespace beatforge
         if (of == nullptr)
             return theme::textMuted;
 
-        int index = 0;   // same-type tracks created earlier (ids only grow)
+        int index = 0;   // tracks created earlier (ids only grow)
         for (auto& t : session.getProject().tracks)
-            if (t.type == of->type && t.id < id)
+            if (t.id < id)
                 ++index;
-        return theme::track::forTrack (of->type == project::TrackType::drums, index);
+        return theme::track::forIndex (index);
     }
 }

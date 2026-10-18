@@ -5,8 +5,8 @@ namespace beatforge
 {
     namespace
     {
-        constexpr int tabPadding = 16;
-        juce::Font tabFont() { return juce::Font (theme::font (13.5f, juce::Font::bold)); }
+        constexpr int tabPadding = 10;   // 20 px between labels
+        juce::Font tabFont() { return juce::Font (theme::font (13.0f, juce::Font::bold)); }
     }
 
     TabBar::TabBar (juce::StringArray tabNames) : names (std::move (tabNames))
@@ -57,22 +57,21 @@ namespace beatforge
 
     void TabBar::paint (juce::Graphics& g)
     {
-        g.setColour (theme::border);
-        g.drawHorizontalLine (getHeight() - 1, 0.0f, (float) getWidth());
-
+        // Spec 12.5: label over a 2 px underline spanning the label; the active
+        // tab is bright with a purple underline, the others muted.
         for (int i = 0; i < names.size(); ++i)
         {
-            const auto r = tabBounds (i);
+            const auto r = tabBounds (i).reduced (tabPadding, 0);
             const bool active = i == current;
 
-            g.setColour (active ? theme::textPrimary : (i == hovered ? theme::textPrimary.withAlpha (0.8f) : theme::textSecondary));
+            g.setColour (active ? theme::textPrimary : (i == hovered ? theme::textSecondary : theme::textMuted));
             g.setFont (tabFont());
-            g.drawText (names[i], r.withTrimmedBottom (3), juce::Justification::centred);
+            g.drawText (names[i], r.withTrimmedBottom (10), juce::Justification::centredBottom);
 
             if (active)
             {
-                g.setColour (theme::violet);
-                g.fillRoundedRectangle (r.withTop (getHeight() - 3).reduced (8, 0).toFloat(), 1.5f);
+                g.setColour (theme::purple);
+                g.fillRect (r.withTop (getHeight() - 2));
             }
         }
     }

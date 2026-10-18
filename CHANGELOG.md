@@ -1,5 +1,29 @@
 # Changelog
 
+## [Unreleased] — Phase 11b: UI revamp from the Figma spec (in progress)
+
+### Changed
+- New visual design from the Figma file "BeatForge UI Revamp"
+  (`docs/ui-spec/`): new colour tokens, rounded panels, quieter borders.
+- Fonts: Inter and JetBrains Mono are built into the app (no longer depends on
+  Ubuntu Sans being installed).
+- Header: one 68 px bar with the logo, menu button, project name, save-state
+  pill, undo/redo, a transport group (Stop, Play with glow, Record, Loop), the
+  readout strip, beat dots, metronome / computer keys / help toggles, the
+  version and audio settings.
+- Arrangement: TRACKS count, track cards (colour strip, name + type, M/S,
+  volume, pan), a taller ruler with bar numbers in mono, translucent clips with
+  a solid name strip and pattern/note previews; muted tracks' clips are dimmed.
+- Track colours follow creation order: pink, blue, violet, orange, cyan, teal.
+- Master panel: wider meter wells with clip lights, L/R labels and a
+  **dB PEAK** readout (click the meter to reset it and the clip lights).
+- Status bar: segmented, with the MCP state highlighted.
+- Instrument tab: the tabs, track context, instrument buttons, preset menu and
+  Reset share one header; three module cards (Oscillator, Filter, Envelope)
+  with glowing curves, a cutoff handle with its value, an ADSR with node handles
+  and A/D/S/R letters, a wave selector with icons, and knobs with label and value
+  below.
+
 ## [0.11.0] — Phase 11: polish and creative workflow (approved 2026-10-18)
 
 ### Added

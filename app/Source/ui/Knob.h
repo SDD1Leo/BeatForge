@@ -6,7 +6,7 @@
 
 namespace beatforge
 {
-    // NEBULA rotary knob: caption above, value (with unit) below. Drag up/down
+    // Knob control: the knob, its caption and its value (with unit) below. Drag up/down
     // or scroll to change, Shift for fine control, double-click to reset.
     // Drawing lives in BeatForgeLookAndFeel::drawRotarySlider.
     class Knob final : public juce::Component
@@ -28,6 +28,8 @@ namespace beatforge
         void paint (juce::Graphics&) override;
 
         static juce::String format (double value, Unit);
+
+        static constexpr int knobSize = 48, preferredWidth = 72, preferredHeight = 48 + 6 + 13 + 4 + 14;
 
     private:
         juce::String caption;

@@ -21,24 +21,56 @@ namespace beatforge
 
     void TransportButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
     {
-        auto bounds = getLocalBounds().toFloat().reduced (1.0f);
+        auto bounds = getLocalBounds().toFloat().reduced (0.5f);
         const bool enabled = isEnabled();
+        const bool hot = enabled && (highlighted || down);
+        const float radius = 8.0f;
 
-        // Lit = filled with the signal colour (e.g. violet Play while running).
-        auto fill = lit ? litColour : theme::control;
-        if (enabled && highlighted) fill = fill.brighter (0.1f);
-        if (enabled && down)        fill = fill.darker (0.2f);
+        if (style == Style::primary)
+        {
+            // Play: always the accent, with a glow (stronger while playing).
+            juce::Path shape;
+            shape.addRoundedRectangle (bounds.reduced (2.0f), radius);
+            if (enabled)
+                juce::DropShadow (theme::purple.withAlpha (lit ? 0.75f : 0.55f), 16, {}).drawForPath (g, shape);
+            auto fill = theme::purple;
+            if (down)       fill = fill.darker (0.15f);
+            else if (hot)   fill = fill.brighter (0.15f);
+            g.setColour (enabled ? fill : fill.withMultipliedAlpha (0.4f));
+            g.fillPath (shape);
+        }
+        else
+        {
+            // Surface: a card button. Ghost: transparent inside the transport group.
+            // Lit: the accent's dim fill and outline (record: red @ 0.15).
+            const bool red = litColour == theme::record;
+            juce::Colour fill = style == Style::surface ? theme::bgSurface : juce::Colours::transparentBlack;
+            juce::Colour outline = style == Style::surface ? theme::borderSubtle : juce::Colours::transparentBlack;
+            if (lit)
+            {
+                fill = red ? theme::record.withAlpha (0.15f) : theme::purpleDim;
+                outline = red ? theme::record.withAlpha (0.6f) : theme::purple;
+            }
+            else if (hot)
+            {
+                fill = down ? theme::bgRaised.darker (0.15f) : theme::bgRaised;
+                outline = theme::border;
+            }
+            g.setColour (fill);
+            g.fillRoundedRectangle (bounds, radius);
+            g.setColour (outline);
+            g.drawRoundedRectangle (bounds, radius, theme::borderWidth);
+        }
 
-        g.setColour (fill);
-        g.fillRoundedRectangle (bounds, theme::controlRadius);
-        g.setColour (lit ? litColour.brighter (0.3f) : (enabled && highlighted ? theme::borderStrong : theme::border));
-        g.drawRoundedRectangle (bounds, theme::controlRadius, theme::borderWidth);
-
-        auto iconColour = theme::textPrimary;
-        if (! enabled) iconColour = theme::textSecondary.withAlpha (0.4f);
+        auto iconColour = style == Style::primary ? theme::textPrimary
+                        : fixedIconColour.has_value() ? *fixedIconColour
+                        : lit ? litColour
+                        : hot ? theme::textPrimary : theme::textSecondary;
+        if (! enabled)
+            iconColour = style == Style::primary ? iconColour.withAlpha (0.5f) : theme::textMuted;
         g.setColour (iconColour);
 
-        auto iconArea = bounds.withSizeKeepingCentre (14.0f, 14.0f);
+        auto iconArea = bounds.withSizeKeepingCentre (16.0f, 16.0f);
         juce::Path path;
 
         switch (icon)

@@ -135,9 +135,9 @@ namespace beatforge
             // Marquee.
             if (mode == Mode::marquee)
             {
-                g.setColour (theme::violet.withAlpha (0.15f));
+                g.setColour (theme::purple.withAlpha (0.15f));
                 g.fillRect (marquee);
-                g.setColour (theme::violet);
+                g.setColour (theme::purple);
                 g.drawRect (marquee, 1.0f);
             }
 
@@ -635,7 +635,7 @@ namespace beatforge
         quantizeButton.onClick = [this] { quantizeSelectionOrAll(); };
 
         createButton.setTooltip ("Create a 4-bar clip on this track, after its last clip");
-        createButton.setColour (juce::TextButton::buttonColourId, theme::violet);
+        createButton.setColour (juce::TextButton::buttonColourId, theme::purple);
         createButton.onClick = [this]
         {
             const auto* t = session.findTrack (trackId());

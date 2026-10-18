@@ -29,19 +29,19 @@ namespace beatforge
     {
         if (isMouseOver() || menuOpen)
         {
-            g.setColour (theme::control.withAlpha (0.6f));
-            g.fillRect (getLocalBounds().reduced (1));
+            g.setColour (theme::bgRaised.withAlpha (0.7f));
+            g.fillRoundedRectangle (getLocalBounds().reduced (2, 1).toFloat(), 6.0f);
         }
 
-        auto area = getLocalBounds().reduced (4, 4);
+        auto area = getLocalBounds().reduced (2, 4);
         auto caption = area.removeFromBottom (12);
 
         g.setColour (theme::textPrimary);
-        g.setFont (theme::numericFont (20.0f));
+        g.setFont (theme::numericFont (20.0f, juce::Font::bold));
         g.drawText (text (signature), area, juce::Justification::centred);
 
-        g.setColour (menuOpen ? theme::violet : theme::textSecondary);
-        g.setFont (theme::captionFont (9.5f));
+        g.setColour (menuOpen ? theme::purple : theme::textMuted);
+        g.setFont (theme::captionFont (9.0f));
         g.drawText ("SIG", caption, juce::Justification::centred);
     }
 

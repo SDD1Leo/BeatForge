@@ -78,7 +78,7 @@ namespace beatforge
         list.setColour (juce::ListBox::backgroundColourId, theme::background);
         addAndMakeVisible (list);
 
-        openButton.setColour (juce::TextButton::buttonColourId, theme::violet);
+        openButton.setColour (juce::TextButton::buttonColourId, theme::purple);
         openButton.onClick = [this] { openSelected(); };
         browseButton.setTooltip ("Open a project from another folder");
         browseButton.onClick = [this] { if (onBrowse) onBrowse(); };

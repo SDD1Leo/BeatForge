@@ -12,19 +12,17 @@ namespace beatforge
               theme::textPrimary,   // defaultText
               theme::control,       // defaultFill
               theme::textPrimary,   // highlightedText
-              theme::violet,        // highlightedFill
+              theme::purple,        // highlightedFill
               theme::textPrimary    // menuText
           })
     {
-        setDefaultSansSerifTypefaceName (theme::sansTypeface);
-
         using namespace juce;
         const std::pair<int, Colour> palette[] {
             { ResizableWindow::backgroundColourId,          theme::background },
             { DocumentWindow::textColourId,                 theme::textPrimary },
 
-            { TextButton::buttonColourId,                   theme::control },
-            { TextButton::buttonOnColourId,                 theme::violet },
+            { TextButton::buttonColourId,                   theme::bgRaised },
+            { TextButton::buttonOnColourId,                 theme::purple },
             { TextButton::textColourOffId,                  theme::textPrimary },
             { TextButton::textColourOnId,                   theme::textPrimary },
 
@@ -32,11 +30,11 @@ namespace beatforge
             { ComboBox::outlineColourId,                    theme::border },
             { ComboBox::textColourId,                       theme::textPrimary },
             { ComboBox::arrowColourId,                      theme::textSecondary },
-            { ComboBox::focusedOutlineColourId,             theme::violet },
+            { ComboBox::focusedOutlineColourId,             theme::purple },
 
-            { PopupMenu::backgroundColourId,                theme::panelRaised },
+            { PopupMenu::backgroundColourId,                theme::bgSurface },
             { PopupMenu::textColourId,                      theme::textPrimary },
-            { PopupMenu::highlightedBackgroundColourId,     theme::violet.withAlpha (0.35f) },
+            { PopupMenu::highlightedBackgroundColourId,     theme::purpleDim },
             { PopupMenu::highlightedTextColourId,           theme::textPrimary },
             { PopupMenu::headerTextColourId,                theme::textSecondary },
 
@@ -44,26 +42,27 @@ namespace beatforge
             { TextEditor::backgroundColourId,               theme::control },
             { TextEditor::textColourId,                     theme::textPrimary },
             { TextEditor::outlineColourId,                  theme::border },
-            { TextEditor::focusedOutlineColourId,           theme::violet },
-            { TextEditor::highlightColourId,                theme::violet.withAlpha (0.45f) },
+            { TextEditor::focusedOutlineColourId,           theme::purple },
+            { TextEditor::highlightColourId,                theme::purple.withAlpha (0.45f) },
             { CaretComponent::caretColourId,                theme::cyan },
 
             { ListBox::backgroundColourId,                  theme::panel },
             { ListBox::outlineColourId,                     theme::border },
             { ScrollBar::thumbColourId,                     theme::borderStrong },
+            { ScrollBar::trackColourId,                     theme::bgSurface },
 
-            { Slider::backgroundColourId,                   theme::control },
-            { Slider::trackColourId,                        theme::violet },
+            { Slider::backgroundColourId,                   theme::bgControl },
+            { Slider::trackColourId,                        theme::purple },
             { Slider::thumbColourId,                        theme::textPrimary },
             { Slider::textBoxTextColourId,                  theme::textPrimary },
             { Slider::textBoxBackgroundColourId,            theme::control },
             { Slider::textBoxOutlineColourId,               theme::border },
 
             { ToggleButton::textColourId,                   theme::textPrimary },
-            { ToggleButton::tickColourId,                   theme::violet },
+            { ToggleButton::tickColourId,                   theme::purple },
             { ToggleButton::tickDisabledColourId,           theme::textSecondary },
 
-            { TooltipWindow::backgroundColourId,            theme::panelRaised },
+            { TooltipWindow::backgroundColourId,            theme::bgRaised },
             { TooltipWindow::textColourId,                  theme::textPrimary },
             { TooltipWindow::outlineColourId,               theme::border },
 
@@ -77,9 +76,20 @@ namespace beatforge
     }
 
     //==============================================================================
+    // Stock widgets that ask for the default sans-serif get the embedded Inter.
+    juce::Typeface::Ptr BeatForgeLookAndFeel::getTypefaceForFont (const juce::Font& font)
+    {
+        if (font.getTypefaceName() == juce::Font::getDefaultSansSerifFontName())
+            return font.isBold() ? theme::typefaces::interSemiBold() : theme::typefaces::interRegular();
+        if (font.getTypefaceName() == juce::Font::getDefaultMonospacedFontName())
+            return font.isBold() ? theme::typefaces::monoMedium() : theme::typefaces::monoRegular();
+        return LookAndFeel_V4::getTypefaceForFont (font);
+    }
+
+    //==============================================================================
     juce::Font BeatForgeLookAndFeel::getTextButtonFont (juce::TextButton&, int buttonHeight)
     {
-        return juce::Font (theme::font (juce::jmin (14.0f, (float) buttonHeight * 0.52f), juce::Font::bold));
+        return juce::Font (theme::font (juce::jmin (13.0f, (float) buttonHeight * 0.5f), juce::Font::bold));
     }
 
     void BeatForgeLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& button,
@@ -90,29 +100,36 @@ namespace beatforge
         const bool on = button.getToggleState();
         const auto onColour = button.findColour (juce::TextButton::buttonOnColourId);
 
-        // Off: quiet control surface. On: the button's signal colour, filled.
+        // Off: the button's surface with a quiet outline (Secondary, or Ghost when
+        // transparent). On: its signal colour, filled, no outline (Primary).
         auto fill = on ? onColour : backgroundColour;
         if (button.isEnabled())
         {
-            if (down)             fill = fill.darker (0.2f);
-            else if (highlighted) fill = fill.brighter (on ? 0.1f : 0.12f);
+            if (down)
+                fill = fill.isTransparent() ? theme::bgRaised : fill.darker (0.15f);
+            else if (highlighted)
+                fill = fill.isTransparent() ? theme::bgSurface
+                     : (on || fill != theme::bgRaised) ? fill.brighter (0.15f) : theme::bgControl;
         }
         else
         {
-            fill = fill.withMultipliedAlpha (0.5f);
+            fill = fill.withMultipliedAlpha (0.4f);
         }
 
         g.setColour (fill);
         g.fillRoundedRectangle (bounds, theme::controlRadius);
 
-        g.setColour (on ? onColour.brighter (0.25f) : (highlighted ? theme::borderStrong : theme::border));
-        g.drawRoundedRectangle (bounds, theme::controlRadius, theme::borderWidth);
+        if (! on)
+        {
+            g.setColour (highlighted ? theme::borderStrong : (backgroundColour.isTransparent() ? theme::borderSubtle : theme::border));
+            g.drawRoundedRectangle (bounds, theme::controlRadius, theme::borderWidth);
+        }
     }
 
     //==============================================================================
     juce::Font BeatForgeLookAndFeel::getComboBoxFont (juce::ComboBox& box)
     {
-        return juce::Font (theme::font (juce::jmin (14.0f, (float) box.getHeight() * 0.5f)));
+        return juce::Font (theme::font (juce::jmin (13.0f, (float) box.getHeight() * 0.5f), juce::Font::bold));
     }
 
     void BeatForgeLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height, bool isButtonDown,
@@ -121,9 +138,9 @@ namespace beatforge
         const auto bounds = juce::Rectangle<float> (0.0f, 0.0f, (float) width, (float) height).reduced (0.5f);
         const bool hot = box.isMouseOver (true) || isButtonDown || box.isPopupActive();
 
-        g.setColour (isButtonDown ? theme::control.darker (0.2f) : theme::control);
+        g.setColour (isButtonDown ? theme::bgRaised.darker (0.15f) : (hot ? theme::bgControl : theme::bgRaised));
         g.fillRoundedRectangle (bounds, theme::controlRadius);
-        g.setColour (box.isPopupActive() ? theme::violet : (hot ? theme::borderStrong : theme::border));
+        g.setColour (box.isPopupActive() ? theme::purple : (hot ? theme::borderStrong : theme::border));
         g.drawRoundedRectangle (bounds, theme::controlRadius, theme::borderWidth);
 
         // Chevron.
@@ -139,7 +156,7 @@ namespace beatforge
 
     juce::Font BeatForgeLookAndFeel::getPopupMenuFont()
     {
-        return juce::Font (theme::font (14.0f));
+        return juce::Font (theme::font (13.0f));
     }
 
     //==============================================================================
@@ -183,17 +200,21 @@ namespace beatforge
         fill.startNewSubPath (start);
         fill.lineTo (thumb);
 
+        // 4 px bar in the slider's colour up to the value, bg/control after it,
+        // and a white thumb ringed in the slider's colour.
         const juce::PathStrokeType stroke (thickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
-        g.setColour (theme::control.brighter (0.15f));
+        const auto signal = slider.isEnabled() ? colour : theme::textMuted;
+        g.setColour (theme::bgControl);
         g.strokePath (groove, stroke);
-        g.setColour (slider.isEnabled() ? colour : theme::textSecondary);
+        g.setColour (signal);
         g.strokePath (fill, stroke);
 
-        const float radius = (float) getSliderThumbRadius (slider) + (slider.isMouseButtonDown() ? 1.5f : (hot ? 1.0f : 0.0f));
-        g.setColour (slider.isEnabled() ? colour : theme::textSecondary);
-        g.fillEllipse (juce::Rectangle<float> (radius * 2.0f, radius * 2.0f).withCentre (thumb));
-        g.setColour (theme::background);
-        g.fillEllipse (juce::Rectangle<float> (radius * 0.8f, radius * 0.8f).withCentre (thumb));
+        const float radius = (float) getSliderThumbRadius (slider) + (slider.isMouseButtonDown() ? 1.0f : (hot ? 0.5f : 0.0f));
+        const auto knob = juce::Rectangle<float> (radius * 2.0f, radius * 2.0f).withCentre (thumb);
+        g.setColour (theme::textPrimary);
+        g.fillEllipse (knob);
+        g.setColour (signal);
+        g.drawEllipse (knob.reduced (1.0f), 2.0f);
     }
 
     //==============================================================================
@@ -231,9 +252,9 @@ namespace beatforge
     void BeatForgeLookAndFeel::drawTooltip (juce::Graphics& g, const juce::String& text, int width, int height)
     {
         const auto bounds = juce::Rectangle<float> ((float) width, (float) height);
-        g.setColour (theme::panelRaised);
+        g.setColour (theme::bgRaised);
         g.fillRoundedRectangle (bounds, theme::controlRadius);
-        g.setColour (theme::borderStrong);
+        g.setColour (theme::border);
         g.drawRoundedRectangle (bounds.reduced (0.5f), theme::controlRadius, theme::borderWidth);
         tooltipLayout (text).draw (g, bounds.reduced (11.0f, 6.0f));
     }
@@ -260,7 +281,7 @@ namespace beatforge
         if (type != juce::MessageBoxIconType::NoIcon)
         {
             const auto colour = type == juce::MessageBoxIconType::WarningIcon  ? theme::amber
-                              : type == juce::MessageBoxIconType::QuestionIcon ? theme::violet
+                              : type == juce::MessageBoxIconType::QuestionIcon ? theme::purple
                                                                                 : theme::cyan;
             const auto glyph = type == juce::MessageBoxIconType::WarningIcon  ? "!"
                              : type == juce::MessageBoxIconType::QuestionIcon ? "?"
@@ -283,39 +304,56 @@ namespace beatforge
     void BeatForgeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
                                                  float startAngle, float endAngle, juce::Slider& slider)
     {
-        const auto bounds = juce::Rectangle<int> (x, y, width, height).toFloat().reduced (3.0f);
+        // Spec 12.1: a 270-degree ring (bg/control) with the value arc in the
+        // knob's colour, a raised cap at 64 % of the size and a white wedge pointer.
+        // Ranges that straddle zero (pan) draw their arc from 12 o'clock.
+        const auto bounds = juce::Rectangle<int> (x, y, width, height).toFloat();
         const auto size = juce::jmin (bounds.getWidth(), bounds.getHeight());
         const auto centre = bounds.getCentre();
-        const float arcRadius = size * 0.5f - 2.0f;
-        const float lineWidth = 3.5f;
+        const float ringWidth = juce::jmax (2.5f, size * 0.5f * 0.16f);
+        const float arcRadius = size * 0.5f - ringWidth * 0.5f - 0.5f;
         const auto signal = slider.findColour (juce::Slider::rotarySliderFillColourId);
         const bool hot = slider.isMouseOverOrDragging() && slider.isEnabled();
         const auto angle = startAngle + sliderPos * (endAngle - startAngle);
+        const bool bipolar = slider.getMinimum() < 0.0 && slider.getMaximum() > 0.0;
+        const auto from = bipolar ? juce::MathConstants<float>::twoPi : startAngle;
 
-        // Track and value arcs.
         juce::Path track, value;
         track.addCentredArc (centre.x, centre.y, arcRadius, arcRadius, 0.0f, startAngle, endAngle, true);
-        value.addCentredArc (centre.x, centre.y, arcRadius, arcRadius, 0.0f, startAngle, angle, true);
-        const juce::PathStrokeType stroke (lineWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
-        g.setColour (theme::control.brighter (0.1f));
+        value.addCentredArc (centre.x, centre.y, arcRadius, arcRadius, 0.0f, juce::jmin (from, angle), juce::jmax (from, angle), true);
+        const juce::PathStrokeType stroke (ringWidth, juce::PathStrokeType::curved, juce::PathStrokeType::butt);
+        g.setColour (theme::bgControl);
         g.strokePath (track, stroke);
-        g.setColour (slider.isEnabled() ? (slider.isMouseButtonDown() ? signal.brighter (0.25f) : signal) : theme::textMuted);
+        g.setColour (slider.isEnabled() ? (slider.isMouseButtonDown() || hot ? signal.brighter (0.15f) : signal) : theme::textMuted);
         g.strokePath (value, stroke);
 
-        // Knob body with a pointer.
-        const float bodyRadius = arcRadius - lineWidth - 3.0f;
-        const auto body = juce::Rectangle<float> (bodyRadius * 2.0f, bodyRadius * 2.0f).withCentre (centre);
-        g.setColour (theme::panelRaised.brighter (hot ? 0.08f : 0.0f));
-        g.fillEllipse (body);
-        g.setColour (hot ? theme::borderStrong : theme::border);
-        g.drawEllipse (body, 1.0f);
+        // Cap with a soft shadow (black @ 0.5, y 2, blur 4).
+        const float capRadius = size * 0.32f;
+        const auto cap = juce::Rectangle<float> (capRadius * 2.0f, capRadius * 2.0f).withCentre (centre);
+        juce::Path capPath;
+        capPath.addEllipse (cap);
+        juce::DropShadow (theme::shadow.withAlpha (0.5f), 4, { 0, 2 }).drawForPath (g, capPath);
+        g.setColour (hot ? theme::bgControl : theme::bgRaised);
+        g.fillPath (capPath);
+        g.setColour (theme::borderStrong);
+        g.drawEllipse (cap.reduced (0.5f), 1.0f);
 
-        const juce::Point<float> tip (centre.x + std::sin (angle) * (bodyRadius - 3.0f),
-                                      centre.y - std::cos (angle) * (bodyRadius - 3.0f));
-        const juce::Point<float> base (centre.x + std::sin (angle) * bodyRadius * 0.35f,
-                                       centre.y - std::cos (angle) * bodyRadius * 0.35f);
-        g.setColour (theme::textPrimary);
-        g.drawLine ({ base, tip }, 2.0f);
+        // Wedge pointer from 45 % of the cap radius to its edge.
+        const auto along = [&] (float r, float a) {
+            return juce::Point<float> (centre.x + std::sin (a) * r, centre.y - std::cos (a) * r);
+        };
+        const float halfWidth = juce::jmax (1.0f, capRadius * 0.09f);
+        const auto side = juce::MathConstants<float>::halfPi;
+        juce::Path wedge;
+        const auto inner = along (capRadius * 0.45f, angle);
+        const auto outer = along (capRadius - 2.0f, angle);
+        wedge.startNewSubPath (inner + along (halfWidth * 0.6f, angle + side) - centre);
+        wedge.lineTo (outer + along (halfWidth, angle + side) - centre);
+        wedge.lineTo (outer + along (halfWidth, angle - side) - centre);
+        wedge.lineTo (inner + along (halfWidth * 0.6f, angle - side) - centre);
+        wedge.closeSubPath();
+        g.setColour (slider.isEnabled() ? theme::textPrimary : theme::textMuted);
+        g.fillPath (wedge);
     }
 
     juce::Label* BeatForgeLookAndFeel::createSliderTextBox (juce::Slider& slider)

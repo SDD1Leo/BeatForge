@@ -53,8 +53,9 @@ namespace beatforge
 
         void paint (juce::Graphics&) override;
         void resized() override;
+        void paintOverChildren (juce::Graphics&) override;
 
-        static constexpr int headerWidth = 236, rowHeight = 60, rulerHeight = 32, footerHeight = 26;
+        static constexpr int headerWidth = 264, rowHeight = 70, rulerHeight = 40, footerHeight = 40;
         static constexpr double minBarsVisible = 1.0, maxBarsVisible = 256.0;
 
     private:
@@ -89,7 +90,7 @@ namespace beatforge
         juce::Viewport viewport;
         juce::TextButton addDrumsButton { "+ Drums" }, addSynthButton { "+ Synth" };
         juce::ScrollBar hScroll { false };
-        juce::TextButton zoomOutButton { "-" }, zoomInButton { "+" }, fitButton { "Fit" };
+        juce::TextButton zoomOutButton { juce::String::fromUTF8 ("\xe2\x88\x92") }, zoomInButton { "+" }, fitButton { "Fit" };
         double viewStart = 0.0, viewBars = 16.0;
         double lastPosition = 0.0;
         std::optional<project::Clip> clipboard;

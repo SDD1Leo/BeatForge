@@ -45,8 +45,8 @@ namespace beatforge
             if (p == Param::cutoff || p == Param::resonance || p == Param::envAmount)
                 return theme::cyan;
             if (p == Param::attack || p == Param::decay || p == Param::sustain || p == Param::release)
-                return theme::magenta;
-            return theme::violet;
+                return theme::pink;
+            return theme::purple;
         }
 
         juce::String tooltipFor (Param p, audio::InstrumentType t)
@@ -81,27 +81,45 @@ namespace beatforge
             setTooltip (juce::String (waveNames[(int) w]) + " wave");
         }
 
+        // Spec 7: a segment with a 34 x 14 waveform icon and the wave's name.
         void paintButton (juce::Graphics& g, bool highlighted, bool down) override
         {
             auto r = getLocalBounds().toFloat().reduced (0.5f);
             const bool on = getToggleState();
-            g.setColour (on ? theme::violet.withAlpha (0.25f) : (highlighted ? theme::control.brighter (0.1f) : theme::control));
-            if (down) g.setColour (theme::control.darker (0.2f));
-            g.fillRoundedRectangle (r, theme::controlRadius);
-            g.setColour (on ? theme::violet : (highlighted ? theme::borderStrong : theme::border));
-            g.drawRoundedRectangle (r, theme::controlRadius, theme::borderWidth);
+            auto fill = on ? theme::purpleDim : theme::bgRaised;
+            if (! on && highlighted) fill = theme::bgControl;
+            if (down) fill = fill.darker (0.15f);
+            g.setColour (fill);
+            g.fillRoundedRectangle (r, 7.0f);
+            g.setColour (on ? theme::purple : (highlighted ? theme::border : theme::borderSubtle));
+            g.drawRoundedRectangle (r, 7.0f, theme::borderWidth);
 
-            auto icon = r.reduced (8.0f, 9.0f);
-            juce::Path p;
-            for (int i = 0; i <= 40; ++i)
+            g.setFont (theme::font (11.0f, juce::Font::bold));
+            const auto label = getName();
+            const float labelWidth = juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), label);
+            const bool showIcon = r.getWidth() >= labelWidth + 34.0f + 30.0f;
+            const float contentWidth = labelWidth + (showIcon ? 34.0f + 8.0f : 0.0f);
+            auto content = r.withSizeKeepingCentre (contentWidth, r.getHeight());
+
+            if (showIcon)
             {
-                const float phase = (float) i / 40.0f;
-                const juce::Point<float> pt (icon.getX() + phase * icon.getWidth(),
-                                             icon.getCentreY() - waveShape (wave, phase) * icon.getHeight() * 0.5f);
-                if (i == 0) p.startNewSubPath (pt); else p.lineTo (pt);
+                auto icon = content.removeFromLeft (34.0f).withSizeKeepingCentre (34.0f, 14.0f);
+                content.removeFromLeft (8.0f);
+                juce::Path p;
+                for (int i = 0; i <= 60; ++i)
+                {
+                    const float t = (float) i / 60.0f;
+                    const float phase = std::fmod (t * 1.5f + 0.0001f, 1.0f);
+                    const juce::Point<float> pt (icon.getX() + t * icon.getWidth(),
+                                                 icon.getCentreY() - waveShape (wave, phase) * icon.getHeight() * 0.5f);
+                    if (i == 0) p.startNewSubPath (pt); else p.lineTo (pt);
+                }
+                g.setColour (on ? theme::purple : theme::textSecondary);
+                g.strokePath (p, juce::PathStrokeType (1.5f, juce::PathStrokeType::mitered, juce::PathStrokeType::rounded));
             }
+
             g.setColour (on ? theme::textPrimary : theme::textSecondary);
-            g.strokePath (p, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.drawText (label, content, juce::Justification::centredLeft, false);
         }
 
     private:
@@ -133,6 +151,7 @@ namespace beatforge
         };
         addAndMakeVisible (presetBox);
 
+        resetButton.setColour (juce::TextButton::buttonColourId, juce::Colours::transparentBlack);   // ghost
         resetButton.setTooltip ("Reset this instrument's controls to their defaults");
         resetButton.setWantsKeyboardFocus (false);
         resetButton.onClick = [this] { session.resetInstrumentParams (trackId(), type()); };
@@ -239,124 +258,226 @@ namespace beatforge
     }
 
     //==============================================================================
+    namespace
+    {
+        // A 3 px curve with a soft glow in the module's colour.
+        void strokeWithGlow (juce::Graphics& g, const juce::Path& curve, juce::Colour colour)
+        {
+            juce::Path stroked;
+            juce::PathStrokeType (3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded).createStrokedPath (stroked, curve);
+            juce::DropShadow (colour.withAlpha (0.55f), 10, {}).drawForPath (g, stroked);
+            g.setColour (colour);
+            g.fillPath (stroked);
+        }
+
+        void fillUnder (juce::Graphics& g, juce::Path curve, juce::Rectangle<float> r, juce::Colour colour, float alpha)
+        {
+            const auto bounds = curve.getBounds();
+            curve.lineTo (bounds.getRight(), r.getBottom());
+            curve.lineTo (bounds.getX(), r.getBottom());
+            curve.closeSubPath();
+            g.setColour (colour.withAlpha (alpha));
+            g.fillPath (curve);
+        }
+
+        void handle (juce::Graphics& g, juce::Point<float> at, float size, juce::Colour colour)
+        {
+            const auto r = juce::Rectangle<float> (size, size).withCentre (at);
+            g.setColour (theme::bgInset);
+            g.fillEllipse (r);
+            g.setColour (colour);
+            g.drawEllipse (r.reduced (1.0f), 2.0f);
+        }
+
+        void dashedVertical (juce::Graphics& g, float x, float y0, float y1, juce::Colour colour, float dash, float gap)
+        {
+            const float pattern[] { dash, gap };
+            g.setColour (colour);
+            g.drawDashedLine (juce::Line<float> (x, y0, x, y1), pattern, 2, 1.0f);
+        }
+
+        void chip (juce::Graphics& g, juce::Rectangle<float> r, const juce::String& text)
+        {
+            g.setColour (theme::bgControl);
+            g.fillRoundedRectangle (r, 5.0f);
+            g.setColour (theme::textSecondary);
+            g.setFont (theme::numericFont (9.0f));
+            g.drawText (text, r, juce::Justification::centred, false);
+        }
+
+        float chipWidth (const juce::String& text)
+        {
+            return juce::GlyphArrangement::getStringWidth (juce::Font (theme::numericFont (9.0f)), text) + 16.0f;
+        }
+    }
+
+    juce::String InstrumentPanel::chipText (int module) const
+    {
+        if (module == 0) return juce::String (waveNames[(int) value (Param::wave)]).toUpperCase();
+        if (module == 1) return "LOW-PASS";
+        return type() == audio::InstrumentType::monoBass ? "FILTER PLUCK" : "AMP + FILTER";
+    }
+
     void InstrumentPanel::paintWaveDisplay (juce::Graphics& g, juce::Rectangle<float> r)
     {
         const auto wave = (dsp::Waveform) (int) value (Param::wave);
+        r = r.reduced (16.0f, 0.0f);
+        const float amplitude = r.getHeight() * 0.36f;
+
+        g.setColour (theme::borderStrong.withAlpha (0.8f));
+        g.fillRect (r.getX(), r.getCentreY() - 0.5f, r.getWidth(), 1.0f);
+
         juce::Path p;
-        for (int i = 0; i <= 200; ++i)
+        for (int i = 0; i <= 400; ++i)
         {
-            const float t = (float) i / 200.0f;
+            const float t = (float) i / 400.0f;
             const float phase = std::fmod (t * 2.0f, 1.0f);   // two cycles
-            const juce::Point<float> pt (r.getX() + t * r.getWidth(), r.getCentreY() - waveShape (wave, phase) * r.getHeight() * 0.38f);
+            const juce::Point<float> pt (r.getX() + t * r.getWidth(), r.getCentreY() - waveShape (wave, phase) * amplitude);
             if (i == 0) p.startNewSubPath (pt); else p.lineTo (pt);
         }
-        g.setColour (theme::violet.withAlpha (0.25f));
-        g.strokePath (p, juce::PathStrokeType (6.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-        g.setColour (theme::violet);
-        g.strokePath (p, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        fillUnder (g, p, r.withBottom (r.getCentreY() + amplitude), theme::purple, 0.12f);
+        strokeWithGlow (g, p, theme::purple);
     }
 
     void InstrumentPanel::paintFilterDisplay (juce::Graphics& g, juce::Rectangle<float> r)
     {
         const double cutoff = value (Param::cutoff), res = value (Param::resonance);
-        const double minF = 20.0, maxF = 20000.0, minDb = -36.0, maxDb = 24.0;
+        const double minF = 20.0, maxF = 20000.0, minDb = -36.0, maxDb = 18.0;
+        const auto plot = r.withTrimmedBottom (18.0f);
 
-        auto dbToY = [&] (double db) { return r.getBottom() - (float) ((juce::jlimit (minDb, maxDb, db) - minDb) / (maxDb - minDb)) * r.getHeight(); };
+        auto dbToY = [&] (double db) { return plot.getBottom() - (float) ((juce::jlimit (minDb, maxDb, db) - minDb) / (maxDb - minDb)) * plot.getHeight(); };
         auto fToX = [&] (double f) { return r.getX() + (float) (std::log (f / minF) / std::log (maxF / minF)) * r.getWidth(); };
+        auto dbAt = [&] (double f) { return 20.0 * std::log10 (std::max (1e-6, dsp::StateVariableLowPass::magnitude (f, cutoff, res, 48000.0))); };
 
-        // 0 dB reference line and the cutoff marker.
-        g.setColour (theme::border.withAlpha (0.7f));
-        g.drawHorizontalLine ((int) dbToY (0.0), r.getX(), r.getRight());
-        g.setColour (theme::cyan.withAlpha (0.35f));
-        g.drawVerticalLine ((int) fToX (cutoff), r.getY(), r.getBottom());
-
-        juce::Path curve, fill;
-        for (int i = 0; i <= 120; ++i)
+        juce::Path curve;
+        for (int i = 0; i <= 200; ++i)
         {
-            const double f = minF * std::pow (maxF / minF, i / 120.0);
-            const double db = 20.0 * std::log10 (std::max (1e-6, dsp::StateVariableLowPass::magnitude (f, cutoff, res, 48000.0)));
-            const juce::Point<float> pt (fToX (f), dbToY (db));
-            if (i == 0) { curve.startNewSubPath (pt); fill.startNewSubPath (r.getX(), r.getBottom()); }
-            else curve.lineTo (pt);
-            fill.lineTo (pt);
+            const double f = minF * std::pow (maxF / minF, i / 200.0);
+            const juce::Point<float> pt (fToX (f), dbToY (dbAt (f)));
+            if (i == 0) curve.startNewSubPath (pt); else curve.lineTo (pt);
         }
-        fill.lineTo (r.getRight(), r.getBottom());
-        fill.closeSubPath();
+        fillUnder (g, curve, r, theme::cyan, 0.10f);
 
-        g.setGradientFill (juce::ColourGradient (theme::cyan.withAlpha (0.22f), r.getX(), r.getY(),
-                                                 theme::cyan.withAlpha (0.0f), r.getX(), r.getBottom(), false));
-        g.fillPath (fill);
-        g.setColour (theme::cyan);
-        g.strokePath (curve, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        const auto cx = fToX (cutoff);
+        dashedVertical (g, cx, r.getY(), r.getBottom(), theme::cyan.withAlpha (0.8f), 4.0f, 4.0f);
+        strokeWithGlow (g, curve, theme::cyan);
+
+        // Handle on the curve at the cutoff, with its value beside it.
+        const juce::Point<float> at (cx, dbToY (dbAt (cutoff)));
+        handle (g, at, 12.0f, theme::cyan);
+        const auto text = Knob::format (cutoff, Knob::Unit::hertz);
+        const auto w = chipWidth (text);
+        auto label = juce::Rectangle<float> (w, 18.0f).withPosition (cx + 10.0f, juce::jmax (r.getY() + 4.0f, at.y - 42.0f));
+        if (label.getRight() > r.getRight() - 4.0f)
+            label.setX (cx - 10.0f - w);
+        chip (g, label, text);
+
+        g.setColour (theme::textMuted);
+        g.setFont (theme::numericFont (9.0f));
+        for (auto [f, name] : { std::pair { 100.0, "100 Hz" }, std::pair { 1000.0, "1 kHz" }, std::pair { 10000.0, "10 kHz" } })
+            g.drawText (name, juce::Rectangle<float> (56.0f, 14.0f).withCentre ({ fToX (f), r.getBottom() - 8.0f }), juce::Justification::centred, false);
     }
 
     void InstrumentPanel::paintEnvelopeDisplay (juce::Graphics& g, juce::Rectangle<float> r)
     {
         const bool bass = type() == audio::InstrumentType::monoBass;
 
-        // Bass shows its filter pluck (instant attack, decay to zero); the synth its ADSR.
-        const float a = bass ? 0.001f : value (Param::attack);
+        // Bass shows its filter pluck (instant attack, decay to zero); the synth its
+        // ADSR. Attack, decay and release widths follow their times; the sustain
+        // plateau is a fixed 28 % of the width.
+        const float a = bass ? 0.0f : value (Param::attack);
         const float d = value (Param::decay);
         const float s = bass ? 0.0f : value (Param::sustain);
         const float rel = bass ? 0.0f : value (Param::release);
-        const float hold = 0.25f * (a + d + rel + 0.2f);
-        const float total = a + d + hold + rel;
 
-        auto x = [&] (float t) { return r.getX() + t / total * r.getWidth(); };
-        auto y = [&] (float level) { return r.getBottom() - level * r.getHeight() * 0.9f; };
+        r = r.reduced (16.0f, 0.0f);
+        const auto plot = r.withTrimmedTop (28.0f).withTrimmedBottom (24.0f);
+        const float plateau = bass ? 0.0f : 0.28f * plot.getWidth();
+        const float timed = juce::jmax (1.0e-4f, a + d + rel);
+        const float scale = (plot.getWidth() - plateau) / timed;
+        const float xa = plot.getX() + a * scale;
+        const float xd = xa + d * scale;
+        const float xs = xd + plateau;
+        const float xr = xs + rel * scale;
+        auto y = [&] (float level) { return plot.getBottom() - level * plot.getHeight(); };
 
+        // Linear attack; decay and release ease out like the real exponential curves.
         juce::Path p;
-        p.startNewSubPath (x (0.0f), y (0.0f));
-        p.lineTo (x (a), y (1.0f));
-        p.lineTo (x (a + d), y (s));
-        p.lineTo (x (a + d + hold), y (s));
-        p.lineTo (x (total), y (0.0f));
-
-        juce::Path fill (p);
-        fill.lineTo (x (0.0f), y (0.0f));
-        fill.closeSubPath();
-        g.setGradientFill (juce::ColourGradient (theme::magenta.withAlpha (0.22f), r.getX(), r.getY(),
-                                                 theme::magenta.withAlpha (0.0f), r.getX(), r.getBottom(), false));
-        g.fillPath (fill);
-        g.setColour (theme::magenta);
-        g.strokePath (p, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-
-        for (auto pt : { juce::Point<float> (x (a), y (1.0f)), juce::Point<float> (x (a + d), y (s)), juce::Point<float> (x (a + d + hold), y (s)) })
+        p.startNewSubPath (plot.getX(), y (0.0f));
+        p.lineTo (xa, y (1.0f));
+        for (int i = 1; i <= 40; ++i)
         {
-            g.setColour (theme::background);
-            g.fillEllipse (juce::Rectangle<float> (7.0f, 7.0f).withCentre (pt));
-            g.setColour (theme::magenta);
-            g.drawEllipse (juce::Rectangle<float> (7.0f, 7.0f).withCentre (pt), 1.5f);
+            const float u = (float) i / 40.0f;
+            p.lineTo (xa + u * (xd - xa), y (s + (1.0f - s) * std::pow (1.0f - u, 3.0f)));
+        }
+        if (! bass)
+        {
+            p.lineTo (xs, y (s));
+            for (int i = 1; i <= 40; ++i)
+            {
+                const float u = (float) i / 40.0f;
+                p.lineTo (xs + u * (xr - xs), y (s * std::pow (1.0f - u, 3.0f)));
+            }
         }
 
-        g.setColour (theme::textSecondary);
-        g.setFont (theme::captionFont (9.0f));
-        g.drawText (bass ? "FILTER PLUCK" : "AMP + FILTER", r.toNearestInt().removeFromTop (12).reduced (4, 0),
-                    juce::Justification::centredRight);
+        std::vector<juce::Point<float>> nodes { { plot.getX(), y (0.0f) }, { xa, y (1.0f) }, { xd, y (s) } };
+        if (! bass)
+        {
+            nodes.push_back ({ xs, y (s) });
+            nodes.push_back ({ xr, y (0.0f) });
+        }
+
+        for (size_t i = 1; i + 1 < nodes.size() + (bass ? 1 : 0); ++i)
+            dashedVertical (g, nodes[i].x, nodes[i].y, plot.getBottom(), theme::borderStrong, 3.0f, 4.0f);
+
+        fillUnder (g, p, plot, theme::pink, 0.12f);
+        strokeWithGlow (g, p, theme::pink);
+        for (auto n : nodes)
+            handle (g, n, 11.0f, theme::pink);
+
+        // Segment letters along the bottom.
+        g.setColour (theme::textMuted);
+        g.setFont (theme::numericFont (10.0f));
+        const auto row = r.getBottom() - 10.0f;
+        auto letter = [&] (const char* text, float x0, float x1)
+        {
+            g.drawText (text, juce::Rectangle<float> (20.0f, 14.0f).withCentre ({ (x0 + x1) / 2.0f, row }), juce::Justification::centred, false);
+        };
+        letter ("A", plot.getX(), xa);
+        letter ("D", xa, xd);
+        if (! bass)
+        {
+            letter ("S", xd, xs);
+            letter ("R", xs, xr);
+        }
     }
 
     //==============================================================================
     void InstrumentPanel::paint (juce::Graphics& g)
     {
-        const auto bounds = getLocalBounds().toFloat();
-        g.setColour (theme::panel);
-        g.fillRoundedRectangle (bounds, theme::cornerRadius);
-        g.setColour (theme::border);
-        g.drawRoundedRectangle (bounds.reduced (0.5f), theme::cornerRadius, theme::borderWidth);
-
-        // Header: track-colour stripe, caption, track name.
+        // The card and its header divider belong to the editor shell; this paints the
+        // context (track) and the three modules.
         const auto* track = session.findTrack (trackId());
-        auto header = headerArea;
-        g.setColour (track != nullptr ? target.colourOf (track->id) : theme::textMuted);
-        g.fillRoundedRectangle (header.removeFromLeft (4).toFloat().reduced (0.0f, 6.0f), 2.0f);
-        header.removeFromLeft (10);
-        g.setColour (theme::textSecondary);
-        g.setFont (theme::captionFont());
-        g.drawText ("INSTRUMENT", header.removeFromLeft (92), juce::Justification::centredLeft);
-        g.setColour (theme::textPrimary);
-        g.setFont (theme::font (13.5f, juce::Font::bold));
-        g.drawText (track != nullptr ? juce::String::fromUTF8 (track->name.c_str()) : juce::String(), header.removeFromLeft (110),
-                    juce::Justification::centredLeft);
+        if (const auto* selected = session.findTrack (target.getTrack()))
+        {
+            auto context = headerArea.withLeft (headerStart);
+            g.setColour (theme::border);
+            g.fillRect (context.removeFromLeft (1).withSizeKeepingCentre (1, 18));
+            context.removeFromLeft (16);
+            g.setColour (target.colourOf (selected->id));
+            g.fillRoundedRectangle (context.removeFromLeft (4).withSizeKeepingCentre (4, 16).toFloat(), 2.0f);
+            context.removeFromLeft (10);
+            g.setColour (theme::textPrimary);
+            g.setFont (theme::font (13.0f, juce::Font::bold));
+            const auto name = juce::String::fromUTF8 (selected->name.c_str());
+            const auto nameWidth = juce::jmin (220, juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), name) + 2);
+            g.drawText (name, context.removeFromLeft (nameWidth), juce::Justification::centredLeft, true);
+            context.removeFromLeft (8);
+            g.setColour (theme::textMuted);
+            g.setFont (theme::captionFont (9.0f));
+            g.drawText (selected->type == project::TrackType::drums ? "DRUMS" : "SYNTH", context.removeFromLeft (60),
+                        juce::Justification::centredLeft, false);
+        }
 
         if (track == nullptr)
         {
@@ -367,52 +488,92 @@ namespace beatforge
             return;
         }
 
-        // Sections.
-        auto section = [&] (juce::Rectangle<int> area, const char* title)
-        {
-            g.setColour (theme::panelRaised);
-            g.fillRoundedRectangle (area.toFloat(), theme::cornerRadius);
-            g.setColour (theme::border);
-            g.drawRoundedRectangle (area.toFloat().reduced (0.5f), theme::cornerRadius, theme::borderWidth);
-            g.setColour (theme::textSecondary);
-            g.setFont (theme::captionFont());
-            g.drawText (title, area.reduced (12, 0).removeFromTop (30), juce::Justification::centredLeft);
-        };
-        section (oscArea, "OSCILLATOR");
-        section (filterArea, "FILTER");
-        section (envArea, type() == audio::InstrumentType::monoBass ? "FILTER ENVELOPE" : "ENVELOPE");
+        // Header captions beside the instrument buttons and the preset menu.
+        g.setColour (theme::textMuted);
+        g.setFont (theme::captionFont (9.0f));
+        g.drawText ("INSTRUMENT", instrumentCaption, juce::Justification::centredRight, false);
+        g.drawText ("PRESET", presetCaption, juce::Justification::centredRight, false);
+        g.setColour (theme::border);
+        g.fillRect (headerDivider);
 
-        for (auto [area, painter] : { std::pair { waveDisplay, &InstrumentPanel::paintWaveDisplay },
-                                      std::pair { filterDisplay, &InstrumentPanel::paintFilterDisplay },
-                                      std::pair { envDisplay, &InstrumentPanel::paintEnvelopeDisplay } })
+        // Modules: card, title row with a dot and a chip, then the display well.
+        const juce::Colour accents[] { theme::purple, theme::cyan, theme::pink };
+        const char* titles[] { "OSCILLATOR", "FILTER", type() == audio::InstrumentType::monoBass ? "FILTER ENVELOPE" : "ENVELOPE" };
+        const juce::Rectangle<int> modules[] { oscArea, filterArea, envArea };
+        const juce::Rectangle<int> displays[] { waveDisplay, filterDisplay, envDisplay };
+        using Painter = void (InstrumentPanel::*) (juce::Graphics&, juce::Rectangle<float>);
+        const Painter painters[] { &InstrumentPanel::paintWaveDisplay, &InstrumentPanel::paintFilterDisplay, &InstrumentPanel::paintEnvelopeDisplay };
+
+        for (int m = 0; m < 3; ++m)
         {
-            g.setColour (theme::background);
-            g.fillRoundedRectangle (area.toFloat(), theme::controlRadius);
-            g.setColour (theme::border);
-            g.drawRoundedRectangle (area.toFloat().reduced (0.5f), theme::controlRadius, theme::borderWidth);
-            g.saveState();
-            g.reduceClipRegion (area.reduced (1));
-            (this->*painter) (g, area.toFloat().reduced (8.0f, 10.0f));
-            g.restoreState();
+            const auto card = modules[m].toFloat();
+            g.setColour (theme::bgSurface);
+            g.fillRoundedRectangle (card, 10.0f);
+            g.setColour (theme::borderSubtle);
+            g.drawRoundedRectangle (card.reduced (0.5f), 10.0f, theme::borderWidth);
+
+            auto title = modules[m].reduced (16, 0).withTrimmedTop (16).withHeight (titleHeight);
+            g.setColour (accents[m]);
+            g.fillEllipse (title.removeFromLeft (6).withSizeKeepingCentre (6, 6).toFloat());
+            title.removeFromLeft (10);
+            const auto text = chipText (m);
+            const auto w = chipWidth (text);
+            chip (g, title.removeFromRight ((int) std::ceil (w)).toFloat().withSizeKeepingCentre (w, 18.0f), text);
+            g.setColour (theme::textSecondary);
+            g.setFont (theme::captionFont (11.0f));
+            g.drawText (titles[m], title, juce::Justification::centredLeft, true);
+
+            const auto well = displays[m].toFloat();
+            g.setColour (theme::bgInset);
+            g.fillRoundedRectangle (well, 8.0f);
+            {
+                juce::Graphics::ScopedSaveState state (g);
+                juce::Path shape;
+                shape.addRoundedRectangle (well, 8.0f);
+                g.reduceClipRegion (shape);
+
+                for (int i = 1; i <= 3; ++i)
+                {
+                    g.setColour (theme::borderSubtle.withAlpha (0.8f));
+                    g.fillRect (well.getX(), std::round (well.getY() + well.getHeight() * (float) i / 4.0f), well.getWidth(), 1.0f);
+                }
+                for (int i = 1; i <= 7; ++i)
+                {
+                    g.setColour (theme::borderSubtle.withAlpha (0.5f));
+                    g.fillRect (std::round (well.getX() + well.getWidth() * (float) i / 8.0f), well.getY(), 1.0f, well.getHeight());
+                }
+                (this->*painters[m]) (g, well.reduced (0.0f, 10.0f));
+            }
+            g.setColour (theme::borderSubtle);
+            g.drawRoundedRectangle (well.reduced (0.5f), 8.0f, theme::borderWidth);
         }
     }
 
     void InstrumentPanel::resized()
     {
-        auto area = getLocalBounds().reduced (10, 6);
-        headerArea = area.removeFromTop (36);
+        // Header (spec 6/7): the editor's tabs sit on the left (drawn by the shell);
+        // context after them; instrument buttons, preset menu and Reset on the right.
+        auto area = getLocalBounds();
+        headerArea = area.removeFromTop (headerHeight).withTrimmedBottom (1);
 
-        auto controls = headerArea;
-        resetButton.setBounds (controls.removeFromRight (70).reduced (0, 5));
-        controls.removeFromRight (16);
-        presetBox.setBounds (controls.removeFromRight (150).reduced (0, 5));
-        controls.removeFromRight (16);
-        bassButton.setBounds (controls.removeFromRight (110).reduced (0, 5));
-        controls.removeFromRight (4);
-        polyButton.setBounds (controls.removeFromRight (110).reduced (0, 5));
+        auto controls = headerArea.withTrimmedRight (16).withSizeKeepingCentre (headerArea.getWidth() - 16, 30).withX (headerArea.getX());
+        resetButton.setBounds (controls.removeFromRight (64));
+        controls.removeFromRight (12);
+        headerDivider = controls.removeFromRight (1).withSizeKeepingCentre (1, 18);
+        controls.removeFromRight (12);
+        presetBox.setBounds (controls.removeFromRight (168));
+        controls.removeFromRight (8);
+        presetCaption = controls.removeFromRight (48);
+        controls.removeFromRight (20);
+        bassButton.setBounds (controls.removeFromRight (108));
+        controls.removeFromRight (8);
+        polyButton.setBounds (controls.removeFromRight (108));
+        controls.removeFromRight (8);
+        instrumentCaption = controls.removeFromRight (76);
 
-        area.removeFromTop (6);
-        const int gap = 10;
+        // Body: three equal modules, padding 16, gap 12.
+        area = area.reduced (16);
+        const int gap = 12;
         const int w = (area.getWidth() - 2 * gap) / 3;
         oscArea = area.removeFromLeft (w);
         area.removeFromLeft (gap);
@@ -420,42 +581,45 @@ namespace beatforge
         area.removeFromLeft (gap);
         envArea = area;
 
-        const int knobW = 76, knobH = 92;
-        auto layoutSection = [&] (juce::Rectangle<int> sectionArea, juce::Rectangle<int>& display,
-                                  std::initializer_list<Param> params, bool waveButtonsRow)
+        auto layoutModule = [&] (juce::Rectangle<int> module, juce::Rectangle<int>& display,
+                                 std::initializer_list<Param> params, bool waveRow, int knobGap)
         {
-            auto inner = sectionArea.reduced (12, 0).withTrimmedTop (30).withTrimmedBottom (12);
-            auto knobsRow = inner.removeFromBottom (knobH);
+            auto inner = module.reduced (16).withTrimmedTop (titleHeight + 14);
+            auto knobsRow = inner.removeFromBottom (juce::jmin (Knob::preferredHeight + 12, inner.getHeight() / 2));
+            inner.removeFromBottom (14);
 
-            if (waveButtonsRow)
+            if (waveRow)
             {
-                auto row = inner.removeFromBottom (40).withTrimmedBottom (8);
-                const int bw = (row.getWidth() - 3 * 6) / 4;
+                auto row = inner.removeFromBottom (34);
+                inner.removeFromBottom (14);
+                const int bw = (row.getWidth() - 3 * 8) / 4;
                 for (auto& b : waveButtons)
                 {
                     b->setBounds (row.removeFromLeft (bw));
-                    row.removeFromLeft (6);
+                    row.removeFromLeft (8);
                 }
             }
-
-            display = inner.withTrimmedBottom (8);
+            display = inner;
 
             std::vector<Knob*> visible;
             for (auto p : params)
                 if (audio::usesParam (type(), p))
                     visible.push_back (&knob (p));
 
-            const int totalW = (int) visible.size() * knobW;
+            const int count = (int) visible.size();
+            const int step = juce::jmin (Knob::preferredWidth + knobGap, count > 0 ? knobsRow.getWidth() / count : 0);
+            const int totalW = count * step - (step - juce::jmin (step, Knob::preferredWidth));
             auto x = knobsRow.getX() + (knobsRow.getWidth() - totalW) / 2;
+            const auto y = knobsRow.getCentreY() - Knob::preferredHeight / 2;
             for (auto* k : visible)
             {
-                k->setBounds (x, knobsRow.getY(), knobW, knobH);
-                x += knobW;
+                k->setBounds (x, y, juce::jmin (step, Knob::preferredWidth), Knob::preferredHeight);
+                x += step;
             }
         };
 
-        layoutSection (oscArea, waveDisplay, { Param::level, Param::glide }, true);
-        layoutSection (filterArea, filterDisplay, { Param::cutoff, Param::resonance, Param::envAmount }, false);
-        layoutSection (envArea, envDisplay, { Param::attack, Param::decay, Param::sustain, Param::release }, false);
+        layoutModule (oscArea, waveDisplay, { Param::level, Param::glide }, true, 28);
+        layoutModule (filterArea, filterDisplay, { Param::cutoff, Param::resonance, Param::envAmount }, false, 28);
+        layoutModule (envArea, envDisplay, { Param::attack, Param::decay, Param::sustain, Param::release }, false, 20);
     }
 }

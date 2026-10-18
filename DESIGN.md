@@ -1,105 +1,103 @@
-# BeatForge visual design: NEBULA
+# BeatForge visual design
 
-> Black is the canvas. Neon is the signal. Music is the hero.
+The visual reference is the Figma file **BeatForge UI Revamp**, exported to
+`docs/ui-spec/`:
 
-NEBULA is the approved, canonical visual direction. The reference images in
-`docs/design/` (`nebula-1…3`) are the visual source of truth; the codebase is
-the source of truth for what actually works. Never add a control that does
-nothing to match a picture; planned screens appear only when their feature
-exists.
+- `SPEC.md`: layout, sizes, typography, colour usage and components.
+- `BeatForgeColours.h`: the colour tokens.
+- `BeatForge UI Revamp/*.png`: the Instrument, Step Sequencer, Piano Roll and
+  Components boards.
+
+It replaces the earlier NEBULA direction (`docs/design/`, kept for history).
+The codebase is the source of truth for what actually works. Never add a
+control that does nothing to match a picture. Where the mockup shows something
+BeatForge doesn't have, the app keeps what it really does (see "Differences from
+the mockup").
 
 ## Where the design lives
 
 | What | File |
 |---|---|
-| Colour, geometry and typography tokens | `app/Source/ui/Theme.h` |
-| Stock JUCE widgets (buttons, combo boxes, sliders, menus, tooltips, dialogs) | `app/Source/ui/BeatForgeLookAndFeel.*` |
-| Custom components (transport buttons, step grid, meter, ruler…) | read tokens from `Theme.h`, never literal colours |
-
-Dialogs: alerts use a compact badge (amber `!` warning, violet `?` question,
-cyan `i` info); file dialogs use JUCE's browser so they inherit the theme.
+| Colour, geometry and typography tokens | `app/Source/ui/Theme.h` (values from `BeatForgeColours.h`) |
+| Fonts (Inter, JetBrains Mono; OFL) | `app/Resources/fonts/`, embedded with BinaryData |
+| Stock JUCE widgets (buttons, combo boxes, sliders, knobs, menus, tooltips, dialogs) | `app/Source/ui/BeatForgeLookAndFeel.*` |
+| Custom components (header, track headers, clips, meter, modules…) | read tokens from `Theme.h`, never literal colours |
 
 Rule: no `juce::Colour (0x…)` outside `Theme.h` (checked with
 `grep -rn "Colour (0x" app/Source | grep -v Theme.h`).
 
-## Tokens
+## Tokens (`theme::`)
 
-| Role | Token | Value |
-|---|---|---|
-| App canvas | `background` | `#070B18` |
-| Panels | `panel` / `panelRaised` | `#0D1426` / `#121C32` |
-| Controls, empty steps | `control` | `#18233A` |
-| Borders | `border` / `borderStrong` (hover, focus) | `#253451` / `#34476B` |
-| Text | `textPrimary` / `textSecondary` / `textMuted` | `#EDF2FF` / `#9BAAC7` / `#687997` |
-| Primary accent (on, selected, playing) | `violet` = `accent` | `#8B5CFF` |
-| Playhead | `brightViolet` = `playhead` | `#B14CFF` |
-| Signal accents | `magenta`, `cyan`, `electricBlue`, `teal`, `amber` | `#F044C8`, `#20D9F2`, `#3987FF`, `#12D6B0`, `#FFAD42` |
-| Status | `ok` (green) / `error` (red: errors, clip) / `record` (red: Record button, recording) | `#3DDC84` / `#FF5268` |
-| Mute on / Solo on | `muteOn` / `soloOn` | amber / cyan |
-| Meter | `meterLow` → `meterMid` → `meterHigh` → `error` at 0 dBFS | cyan → violet (−12) → magenta (−3) → red |
+| Group | Tokens |
+|---|---|
+| Backgrounds, darkest first | `bgApp` #060914, `bgInset` #080C1C, `bgPanel` #0B1022, `bgSurface` #111733, `bgRaised` #171E40, `bgControl` #1F2752 |
+| Borders | `borderSubtle` #1A2146, `border` #262F5E, `borderStrong` #3A4580 |
+| Text | `textPrimary` #ECEEFF, `textSecondary` #9BA2CC, `textMuted` #5D6492 |
+| Accents | `purple` #A855F7 (primary: play, playhead, active tab), `purpleDim` #2E1A5C (behind active toggles), `pink`, `cyan`, `blue`, `orange`, `teal`, `violet` |
+| Status | `green` (device OK, saved), `red` (record, errors, clip), `amber` (unsaved, mute) |
+| Roles | `accent` = `playhead` = purple; `muteOn` amber; `soloOn` cyan; `meterGradient` cyan → violet (65 %) → pink |
 
-Radii: panels 5 px, controls 4 px; borders 1 px.
+Older names (`background`, `panel`, `panelRaised`, `control`) still exist and
+point at the new values so every component reads the new palette.
 
-Typography: **Ubuntu Sans** for UI text (bundled with Ubuntu; JUCE falls back
-to its default elsewhere); **Ubuntu Sans Mono** (`theme::numericFont`) for
-tabular values: position, time, BPM. Captions (`DRUMS`, `MASTER`, `BPM`) use
-`theme::captionFont` (small, bold, tracked).
+Radii: panels 12, cards 8, module cards 10, buttons 6, M/S toggles and step
+cells 5; borders 1 px.
 
-Section colours inside instruments: oscillator **violet**, filter **cyan**,
-envelope **magenta** — knob arcs and displays use their section's colour.
+Typography: **Inter** for text (Regular; "bold" = Semi Bold; Bold only for the
+app name), **JetBrains Mono** (`theme::numericFont`) for every number that
+changes while playing (readouts, knob values, dB scale, ruler, chips) so
+digits don't jitter. Captions use `theme::captionFont` (Semi Bold, caps,
+tracked). Both fonts are built into the app; the Latin subsets have no `∞`, so
+the meters show `-inf`.
+
+Module colours in the instrument: oscillator **purple**, filter **cyan**,
+envelope **pink**; the knob arcs, displays and title dots use them.
 
 ## Track colours
 
-Fixed per musical role (`theme::track`), identical in every view:
+New tracks take the next colour in creation order:
+pink → blue → violet → orange → cyan → teal (`theme::track::forIndex`). A track
+keeps its colour when tracks are reordered. Step-sequencer rows: kick pink,
+snare orange, closed hat cyan, open hat teal, clap violet. Colour always comes
+with a text label; it is never the only signal.
 
-| Role | Colour |
-|---|---|
-| Kick | magenta |
-| Snare | amber |
-| Closed hat | cyan |
-| Open hat | teal |
-| Clap | violet |
-| Synth (lead MIDI track) | electric blue |
+## State conventions (SPEC.md section 13)
 
-Arrangement tracks take colours by kind and order (`theme::track::forTrack`):
-drum tracks magenta → amber → teal → bright violet; synth tracks electric
-blue → cyan → green → violet, then repeating. Order is creation order, so a
-track keeps its colour when tracks are reordered. The selected track/clip uses
-that colour in the editor headers.
-Colour always comes with a text label; it is never the only signal.
+- Button styles: **Primary** (purple fill: an active choice such as the current
+  instrument), **Secondary** (`bgRaised` + `border`), **Ghost** (transparent +
+  `borderSubtle`: Reset, zoom).
+- Header toggles (loop, metronome, computer keys) on = `purpleDim` fill, purple
+  outline and icon; Record armed = red at 15 %.
+- M / S: off `bgControl`; Mute on amber, Solo on cyan, with dark text. A muted
+  track's name turns `textMuted` and its clips draw at 45 % opacity.
+- Hover raises the fill one step (`bgSurface` → `bgRaised` → `bgControl`);
+  accent fills brighten; pressed darkens; disabled = 40 % opacity.
+- Glows only on the Play button, the playhead and the instrument curves.
 
-## State conventions
+## Differences from the mockup (kept on purpose)
 
-- Toggle **on** = filled with its signal colour (Play/Loop/Metronome violet,
-  Mute amber, Solo cyan). Off = `control` surface with `border`.
-- Hover = `borderStrong` outline / slight lift; pressed = darker fill;
-  disabled = half alpha.
-- Playing step = the whole column lifts; a lit step flares white.
-- Hit lights flash in the track colour and decay in ~150 ms.
-- Brightest colours are reserved for musical information and active state;
-  most of the UI stays dark and quiet. No bloom, heavy shadows or glass.
+- **Menu button and project name are separate** (your request): the menu
+  button opens the project menu; double-click the name to rename.
+- **Nebula Poly / Nebula Bass are instruments, not presets.** They sit under an
+  INSTRUMENT caption; the real preset menu sits beside them under PRESET.
+- **Mixer** stays as a third editor tab.
+- **Help (?)** stays beside the computer-keyboard button.
+- No pause icon: Play glows while playing (stop with Stop or Space).
+- Clips are unnamed: "Pattern · 1 bar" / "Clip · 2 bars".
+- The header shows the real version.
+- Narrow windows drop the version, the TIME cell, the wordmark and some
+  project-name width, in that order.
 
-## Redesign status and plan
+## Redesign status (Phase 11b)
 
 | # | Step | Status |
 |---|---|---|
-| 1 | Tokens + central LookAndFeel applied to every existing screen (no layout change) | done (0.3.x) |
-| 2 | Transport bar: project button + saved state, captioned readout strip (BPM / SIG / BAR.BEAT.TICK / TIME), icon buttons; Nebula alert dialogs and file browser | done (0.4.0) |
-| 3a | Rotary `Knob` (arc in section colour, pointer, hover/drag states, unit-aware value) | done (0.6.0) |
-| 3 | Remaining shared controls: `Panel` with header, compact M/S, meter strip; replace one-off painting | planned |
-| 4 | Step sequencer polish to the reference (velocity lane when velocity exists) | planned |
-| 5 | Arrangement-first layout: ruler with loop strip + playhead, track headers (name, M/S, volume, pan), clips with pattern/note previews; editors below follow the selection | done (0.7.0) |
-| 6a | Piano roll (keyboard, grid, notes in track colour, velocity lane, header controls) + workspace tabs | done (0.5.0) |
-| 6b | Instrument editor (sections, wave buttons, live waveform/filter/envelope displays) | done (0.6.0) |
-| 6c | Export Audio dialog (captioned options, violet→magenta progress bar, summary) | done (0.9.0) |
-| 6d | Mixer tab (channel strips: colour bar, name, pan, fader + slim meter, dB, M/S; master strip) | done (0.11.0) |
-| 6e | Project browser, shortcuts overview, restore prompt, named undo/redo buttons, multi-line tooltips | done (0.11.0) |
-| 6f | Transport row: separate menu button and project name (double-click renames), Help (?) button with User Guide window | done (0.11.0) |
+| 1 | Foundation: tokens, embedded fonts, LookAndFeel controls (knob 12.1, linear slider 12.7, button styles, combo box, menus, tooltips) | done |
+| 2 | Shared chrome: 68 px header, arrangement panel (track headers 12.6, ruler, lanes, clips, playhead), master meter with peak readout, status bar | done |
+| 3 | Instrument tab: editor shell header, three module cards, waveform / filter / envelope displays, wave selector, knob controls | done |
+| 4 | Step Sequencer tab | next |
+| 5 | Piano Roll tab | planned |
+| 6 | Mixer tab restyle | planned |
 
-Record (transport, red when recording) and the status-bar MIDI light arrived
-with Phase 8; the status bar's right side also shows the MCP bridge (MCP ready /
-connected / off) since Phase 10; the arrangement footer holds zoom (- / + / Fit) and the
-horizontal scroll bar.
-
-Not shown until implemented: menus (File/Edit…), browser, AI
-co-producer, mixer, synth, export.
+Earlier NEBULA steps (0.3–0.11) built the screens this pass restyles; see the
+CHANGELOG for their history.

@@ -4,13 +4,15 @@
 
 namespace beatforge
 {
-    // NEBULA styling for stock JUCE widgets (buttons, combo boxes, sliders,
+    // BeatForge styling for stock JUCE widgets (buttons, combo boxes, sliders,
     // menus, tooltips, dialogs). Custom BeatForge components read the same
     // tokens from Theme.h directly.
     class BeatForgeLookAndFeel final : public juce::LookAndFeel_V4
     {
     public:
         BeatForgeLookAndFeel();
+
+        juce::Typeface::Ptr getTypefaceForFont (const juce::Font&) override;
 
         juce::Font getTextButtonFont (juce::TextButton&, int buttonHeight) override;
         void drawButtonBackground (juce::Graphics&, juce::Button&, const juce::Colour& backgroundColour,

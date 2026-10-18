@@ -23,15 +23,8 @@ namespace beatforge
             return;
         auto area = getLocalBounds().reduced (4, 0);
 
-        // Project glyph: a small stack of three bars (a "song").
-        auto glyph = area.removeFromLeft (14).toFloat().withSizeKeepingCentre (12.0f, 11.0f);
-        g.setColour (theme::violet);
-        for (int i = 0; i < 3; ++i)
-            g.fillRoundedRectangle (glyph.getX(), glyph.getY() + (float) i * 4.0f, glyph.getWidth() - (float) i * 3.0f, 2.4f, 1.2f);
-        area.removeFromLeft (8);
-
         g.setColour (theme::textPrimary);
-        g.setFont (theme::font (14.5f, juce::Font::bold));
+        g.setFont (theme::font (13.0f, juce::Font::bold));
         g.drawText (projectName, area, juce::Justification::centredLeft, true);
     }
 

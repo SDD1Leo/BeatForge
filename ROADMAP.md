@@ -19,7 +19,7 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 | 9 | Offline render & WAV export | ✅ |
 | 10 | MCP server (TypeScript, local IPC) | ✅ |
 | 11 | Polish & creative workflow | ✅ |
-| 11b | UI work and polishing pass (your list, after Phase 11) | ⏳ |
+| 11b | UI revamp from the Figma spec (`docs/ui-spec`): foundation, shared chrome and Instrument tab done; Step Sequencer, Piano Roll, Mixer next | 🔄 |
 | 12 | Advanced features (one at a time) | ⏳ |
 
 **First major goal:** a complete four-bar electronic composition, exported.
@@ -61,7 +61,8 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 - In Debug builds, if the ALSA MIDI sequencer cannot be opened JUCE raises a
   debug assertion (`juce_Midi_linux.cpp`). Seen only with ALSA deliberately broken.
 
-## Next up: Phase 11b
+## Next up: Phase 11b (in progress)
 
-UI work and polishing driven by your list after using Phase 11; then Phase 12
-features one at a time.
+The Figma revamp, one screen at a time (status in DESIGN.md): the Step
+Sequencer tab next, then the Piano Roll and the Mixer; then Phase 12 features
+one at a time.
