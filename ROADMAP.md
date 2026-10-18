@@ -17,7 +17,7 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 | 7 | Arrangement view (tracks, clips, volume/pan, loop, undo) | ✅ |
 | 8 | MIDI device input, recording, MIDI file export (+ arrangement zoom/scroll/reorder) | ✅ |
 | 9 | Offline render & WAV export | ✅ |
-| 10 | MCP server (TypeScript, local IPC) | ⏳ |
+| 10 | MCP server (TypeScript, local IPC) | 🧪 |
 | 11 | Polish & creative workflow | ⏳ |
 | 12 | Advanced features (one at a time) | ⏳ |
 
@@ -47,13 +47,17 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 - Audio export: WAV only (no MP3/FLAC yet), stereo, 44.1/48/96 kHz; no
   normalising or limiting; the tail stops at -100 dBFS or after 4 s. The
   metronome is never exported.
+- MCP: Linux only (Unix socket); one BeatForge instance serves at a time;
+  files only in ~/Music/BeatForge; no pause and no effects (not in the app
+  yet); requests run one at a time on the app's main thread (10 s timeout).
 - MIDI export writes the whole song from bar 1 (what you hear: muted tracks and
   lanes are left out); drum notes are fixed 1/32 long at velocity 100.
 - In Debug builds, if the ALSA MIDI sequencer cannot be opened JUCE raises a
   debug assertion (`juce_Midi_linux.cpp`). Seen only with ALSA deliberately broken.
 
-## Next up: Phase 10
+## Next up: Phase 11
 
-The MCP server (TypeScript, local IPC): let an assistant read and edit the
-project through the same Session commands, with no network server and
-confirmation for destructive actions.
+Polish and creative workflow: interface consistency, shortcuts, project
+browser, instrument controls, mixer, error messages, save indicators,
+undo/redo, tooltips, performance, documentation — tested by making a four-bar
+track entirely in BeatForge and then changing it through MCP.

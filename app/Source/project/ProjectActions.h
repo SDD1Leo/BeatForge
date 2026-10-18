@@ -39,6 +39,7 @@ namespace beatforge
         void confirmDiscardChanges (std::function<void()> proceed);
 
         void showMenu (juce::Component& anchor);
+        void noteSaved (const juce::File& file) { rememberRecent (file); }   // saved elsewhere (MCP)
 
         juce::File defaultFolder() const;
         static juce::String appVersion();

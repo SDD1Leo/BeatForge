@@ -2,6 +2,7 @@
 
 #include "audio/AudioDeviceController.h"
 #include "input/ComputerKeyboard.h"
+#include "ipc/AiBridge.h"
 #include "project/ProjectActions.h"
 #include "ui/ArrangementView.h"
 #include "ui/DrumMachinePanel.h"
@@ -47,6 +48,8 @@ namespace beatforge
         // needed), or punches out while recording.
         void toggleRecord();
         void toggleComputerKeys();
+        // The MCP bridge (local socket). Returns false with a reason if it could not start.
+        bool startAiBridge (std::string& error);
         ComputerKeyboard& getComputerKeys() noexcept { return computerKeys; }
         ProjectActions& getProjectActions() noexcept { return actions; }
 
@@ -67,6 +70,7 @@ namespace beatforge
         juce::PropertiesFile& appSettings;
         ProjectActions actions;
         ComputerKeyboard computerKeys { engine };
+        std::unique_ptr<AiBridge> aiBridge;
         void refreshComputerKeys();
         int sessionListenerId = 0;
         TransportBar transportBar;

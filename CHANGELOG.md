@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.10.0] — Phase 10: MCP server (awaiting user test)
+
+### Added
+- Command API (core): 38 named operations with validated JSON arguments and
+  structured results/errors, used by MCP now and an embedded assistant later.
+  Every change goes through the Session (undo, engine, UI); each call that
+  edits is one undo step; MCP-created tracks and clips are selected in the UI.
+- Local IPC bridge: Unix domain socket in a private runtime folder (0700/0600,
+  peer user checked), one JSON request per line, 10 s timeout on the app's main
+  thread (a request that did not start in time is never applied); a second
+  instance never takes over a live socket. Status bar: MCP ready / connected.
+- `mcp/`: TypeScript MCP server (official SDK 1.32.0, zod 4.6.5) with 38 tools
+  (project, transport, tracks, clips and notes, drum patterns, instruments,
+  WAV/MIDI export with job tracking, connection status). Arguments validated
+  before reaching the app; clear errors when the app is not running or quits.
+- Safety: files only in ~/Music/BeatForge (no `..`, no symlinks out);
+  discarding unsaved work, deleting and overwriting need explicit confirmation.
+- Registered with Claude Code (`claude mcp add --scope user beatforge ...`).
+- Tests: 10 new unit cases (API scenario, validation, paths, confirmation,
+  undo, export jobs, socket protocol and permissions) + the MCP server's own
+  tests in ctest (168 in total); `mcp/scripts/e2e.mjs` for the real app.
+
 ## [0.9.0] — Phase 9: offline rendering and WAV export (approved 2026-10-18)
 
 ### Added

@@ -1,0 +1,21 @@
+{
+  "name": "beatforge-mcp",
+  "version": "0.10.0",
+  "description": "MCP server for BeatForge: lets an AI assistant inspect and edit the running DAW through its command API (local socket only).",
+  "private": true,
+  "type": "module",
+  "bin": { "beatforge-mcp": "dist/index.js" },
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "tsc -p .",
+    "test": "npm run build && node --test test/"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.43",
+    "typescript": "5.9.3"
+  }
+}

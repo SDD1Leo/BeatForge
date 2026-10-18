@@ -319,6 +319,16 @@ namespace beatforge
                 if (arg.startsWith ("--export-midi="))
                     actions.exportMidiTo (juce::File::getCurrentWorkingDirectory().getChildFile (arg.fromFirstOccurrenceOf ("=", false, false).unquoted()));
 
+            // The MCP bridge: always in normal use; in smoke tests only with --ipc.
+            if (! (args.contains ("--smoke-test") || smokePlay) || args.contains ("--ipc"))
+            {
+                std::string error;
+                if (mainWindow->getMainComponent().startAiBridge (error))
+                    std::cout << "MCP bridge listening on " << ipc::IpcServer::defaultPath().string() << std::endl;
+                else
+                    std::cout << "MCP bridge off: " << error << std::endl;
+            }
+
             if (args.contains ("--smoke-test") || smokePlay)
             {
                 juce::File screenshot;

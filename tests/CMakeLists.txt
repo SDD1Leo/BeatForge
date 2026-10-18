@@ -12,12 +12,14 @@ add_executable(beatforge_tests
     unit/AudioEngineTests.cpp
     unit/AudioExportTests.cpp
     unit/BuildInfoTests.cpp
+    unit/CommandApiTests.cpp
     unit/DrumKitTests.cpp
     unit/DrumMachineTests.cpp
     unit/LevelMeterTests.cpp
     unit/LiveInputTests.cpp
     unit/MidiFileTests.cpp
     unit/InstrumentTests.cpp
+    unit/IpcTests.cpp
     unit/MetronomeTests.cpp
     unit/MidiTests.cpp
     unit/MusicalTimeTests.cpp
@@ -93,3 +95,13 @@ set_tests_properties(app_export_wav PROPERTIES
     ENVIRONMENT "HOME=${APP_TEST_HOME}"
     PASS_REGULAR_EXPRESSION "SMOKE: Audio exported: house-demo.wav: [0-9]+:[0-9.]+ .*44.1 kHz 16-bit, peak -?[0-9.]+ dBFS"
     FAIL_REGULAR_EXPRESSION "JUCE Assertion failure|leaked objects|Could not export")
+
+# The MCP server's own tests (TypeScript, against a fake app socket), when
+# Node.js and its packages are installed (cd mcp && npm ci).
+find_program(NPM_EXECUTABLE npm)
+if(NPM_EXECUTABLE AND EXISTS "${PROJECT_SOURCE_DIR}/mcp/node_modules")
+    add_test(NAME mcp_server
+        COMMAND ${NPM_EXECUTABLE} test
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/mcp")
+    set_tests_properties(mcp_server PROPERTIES TIMEOUT 120 PASS_REGULAR_EXPRESSION "# fail 0")
+endif()

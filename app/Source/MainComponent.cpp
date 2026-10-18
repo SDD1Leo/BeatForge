@@ -67,6 +67,7 @@ namespace beatforge
 
     MainComponent::~MainComponent()
     {
+        aiBridge = nullptr;   // first: its requests use the session and the selection
         selection.removeListener (selectionListenerId);
         session.removeListener (sessionListenerId);
         devices.removeChangeListener (this);
@@ -94,7 +95,8 @@ namespace beatforge
         {
             --midiLightTicks;
         }
-        statusBar.setMidi (midiInputsText + computerKeysText, midiLightTicks > 0);
+        statusBar.setMidi (midiInputsText + computerKeysText + (aiBridge != nullptr ? dot + aiBridge->statusText() : juce::String()),
+                           midiLightTicks > 0);
 
         if (++slowTicks >= 15)
         {
@@ -122,6 +124,23 @@ namespace beatforge
                                                        + " (R): play your MIDI keyboard or the piano roll keys");
         else
             transportBar.setRecordAvailable (false, "Select a synth track to record into it");
+    }
+
+    bool MainComponent::startAiBridge (std::string& error)
+    {
+        api::CommandApi::Environment env;
+        env.allowedFolders = { actions.defaultFolder().getFullPathName().toStdString() };
+        env.appVersion = ProjectActions::appVersion().toStdString();
+        env.audioAvailable = [this] { return deviceOpen; };
+        env.reveal = [this] (project::TrackId track, project::ClipId clip)
+        {
+            if (clip != 0) selection.selectClip (clip);
+            else           selection.selectTrack (track);
+        };
+        env.fileSaved = [this] (const std::filesystem::path& file) { actions.noteSaved (juce::File (juce::String (file.string()))); };
+
+        aiBridge = std::make_unique<AiBridge> (session, engine, std::move (env));
+        return aiBridge->start (error);
     }
 
     void MainComponent::toggleComputerKeys()

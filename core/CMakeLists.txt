@@ -7,6 +7,7 @@ configure_file(src/BuildInfo.cpp.in "${CMAKE_CURRENT_BINARY_DIR}/BuildInfo.cpp" 
 # device or a window.
 add_library(beatforge_core STATIC
     "${CMAKE_CURRENT_BINARY_DIR}/BuildInfo.cpp"
+    src/api/CommandApi.cpp
     src/audio/AudioEngine.cpp
     src/audio/DrumKit.cpp
     src/audio/DrumMachine.cpp
@@ -15,6 +16,7 @@ add_library(beatforge_core STATIC
     src/audio/Instruments.cpp
     src/audio/WavFile.cpp
     src/dsp/Biquad.cpp
+    src/ipc/IpcServer.cpp
     src/midi/MidiFile.cpp
     src/midi/Note.cpp
     src/project/AudioExport.cpp
@@ -29,6 +31,7 @@ add_library(beatforge_core STATIC
     src/time/Transport.cpp)
 
 target_include_directories(beatforge_core PUBLIC include)
-target_link_libraries(beatforge_core PRIVATE nlohmann_json::nlohmann_json)
+# JSON is part of the command API (api/CommandApi.h), so users of core see it too.
+target_link_libraries(beatforge_core PUBLIC nlohmann_json::nlohmann_json)
 target_compile_features(beatforge_core PUBLIC cxx_std_20)
 target_compile_options(beatforge_core PRIVATE -Wall -Wextra -Wpedantic)

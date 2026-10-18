@@ -17,6 +17,8 @@ BeatForge/
 │       │                   TakeRecorder (recorded events → notes), MidiExport, AudioExport (offline render),
 │       │                   Session (single mutation path, undo/redo)
 │       ├── util/           LockFreeExchange (audio-thread hand-over), SpscQueue
+│       ├── api/            CommandApi (named operations, JSON in/out; MCP + future assistant)
+│       ├── ipc/            IpcServer (Unix socket, line-delimited JSON)
 │       └── time/           MusicalTime (PPQ 960, bar/beat/tick), TempoMap, Transport
 ├── app/                  BeatForge GUI executable (JUCE)
 │   └── Source/
@@ -24,13 +26,14 @@ BeatForge/
 │       ├── MainComponent.* root content: header, transport, master meter, status
 │       ├── audio/          AudioDeviceController (JUCE AudioDeviceManager <-> engine, MIDI inputs)
 │       ├── input/          ComputerKeyboard (QWERTY/number rows as a MIDI keyboard)
+│       ├── ipc/            AiBridge (socket thread → message thread, timeouts)
 │       ├── project/        ProjectActions (file commands, dialogs, recent files, Export MIDI)
 │       └── ui/             theme, LookAndFeel, TransportBar, ProjectButton, SignatureField, TempoField,
 │                           ArrangementView, Selection, DrumMachinePanel, PianoRollPanel, InstrumentPanel, Knob, TabBar,
 │                           LevelMeterComponent, StatusBar
 ├── tools/                analyze_onsets.py (timing analysis of captured audio)
 ├── tests/                Catch2 unit tests + app launch test (CTest)
-└── mcp/                  (Phase 10) TypeScript MCP server
+└── mcp/                  TypeScript MCP server (stdio) → BeatForge over a Unix socket
 ```
 
 ## Components (target design)
@@ -80,6 +83,31 @@ Rules that hold from day one:
   Switching releases the old instrument's notes, which ring out.
 - **Gain staging:** sources are calibrated so drums (−7.5 dBFS typical),
   four-note chords (−7.3) and bass sum below 0 dBFS at defaults (tested).
+
+## MCP integration (Phase 10)
+
+```
+ Claude Code ─stdio/MCP─► mcp/dist/index.js (zod validation, 15 s timeout, job polling)
+                               │ Unix socket, one JSON object per line
+                               ▼
+ BeatForge: IpcServer thread ─► AiBridge ─callAsync─► message thread: CommandApi ─► Session ─► engine + UI
+                                 (10 s; not started in time = never applied)
+```
+
+- **One command path.** `CommandApi` maps operations (`set_tempo`,
+  `add_midi_notes`, `export_wav`, ...) onto Session methods; it never edits the
+  Project or the engine directly. Multi-step calls are one Session gesture, so
+  one undo step. It is plain C++ in core, unit-tested without sockets, and
+  ready for an embedded assistant.
+- **IPC choice:** a Unix domain socket - local only, file-permission
+  protected, works for any local client. Limits: Linux only, one serving
+  instance, requests serialised on the main thread.
+- **Safety rules** (in the app, so no client can bypass them): file paths are
+  canonicalised and must stay inside `~/Music/BeatForge`; destructive steps
+  return `confirmation_required` unless `confirm`/`overwrite` is set; arguments
+  are range- and type-checked, and batch edits are all-or-nothing.
+- **Export jobs** run on their own threads from a project snapshot; the
+  client polls `get_export_status` (progress, then length/format/peak).
 
 ## Offline rendering and WAV export (Phase 9)
 

@@ -3,11 +3,13 @@
 A native desktop DAW for electronic music, built in C++ with JUCE.
 Small feature set, reliable audio, pleasant workflow.
 
-**Status:** Phase 9 (offline rendering, WAV export) approved; Phase 10 (MCP server) in progress.
+**Status:** Phase 10 (MCP server) built — awaiting hands-on test.
 Arrange drum and synth tracks (Nebula Poly or Nebula Bass) as clips on a
 timeline, with per-track volume, pan, mute and solo, a loop region, seek and
 undo/redo. Play synth tracks from a MIDI keyboard, record takes, and export
-the song as a Standard MIDI File or render it to a WAV file. The selected clip opens in the step sequencer or piano roll. Runs on a
+the song as a Standard MIDI File or render it to a WAV file. An AI assistant
+(Claude Code) can inspect and edit the running project through the MCP server
+in `mcp/` — see [mcp/README.md](mcp/README.md). The selected clip opens in the step sequencer or piano roll. Runs on a
 sample-accurate musical clock (40–240 BPM, time signatures, metronome) and saves
 as versioned `.beatforge` project files.
 
@@ -121,6 +123,19 @@ Open, Quit); the title shows `*` and the transport shows **Unsaved** until you
 save.
 
 JACK support is compiled out for now (see ROADMAP known limitations).
+
+## AI assistant (MCP)
+
+```bash
+cd mcp && npm ci && npm run build
+claude mcp add --scope user beatforge -- node ~/e_drive/BeatForge/mcp/dist/index.js
+```
+
+Start BeatForge (status bar: **MCP ready**), start a new Claude Code session and
+ask, e.g., "set the tempo to 128 and add a bass line in BeatForge". Edits show
+up in the app at once and can be undone with Ctrl+Z. Files are only read and
+written in `~/Music/BeatForge`; destructive steps need your confirmation.
+Details: [mcp/README.md](mcp/README.md).
 
 ## Documentation
 

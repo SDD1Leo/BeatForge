@@ -95,7 +95,8 @@ Colour always comes with a text label; it is never the only signal.
 | 6 | Mixer in the same language when it lands (Phase 11) | planned |
 
 Record (transport, red when recording) and the status-bar MIDI light arrived
-with Phase 8; the arrangement footer holds zoom (- / + / Fit) and the
+with Phase 8; the status bar's right side also shows the MCP bridge (MCP ready /
+connected / off) since Phase 10; the arrangement footer holds zoom (- / + / Fit) and the
 horizontal scroll bar.
 
 Not shown until implemented: menus (File/Edit…), browser, AI
