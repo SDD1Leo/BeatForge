@@ -296,6 +296,24 @@ namespace beatforge
                 if (! arg.startsWith ("--"))
                     actions.openFile (juce::File::getCurrentWorkingDirectory().getChildFile (arg.unquoted()));
 
+            // --export-wav=<file.wav> [--wav-rate=48000] [--wav-bits=16|24|32] [--wav-range=song|loop]
+            for (auto& arg : args)
+                if (arg.startsWith ("--export-wav="))
+                {
+                    project::AudioExportOptions o;
+                    for (auto& opt : args)
+                    {
+                        if (opt.startsWith ("--wav-rate="))  o.sampleRate = opt.fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
+                        if (opt.startsWith ("--wav-bits="))
+                        {
+                            const auto bits = opt.fromFirstOccurrenceOf ("=", false, false).getIntValue();
+                            o.format = bits == 16 ? audio::SampleFormat::int16 : bits == 32 ? audio::SampleFormat::float32 : audio::SampleFormat::int24;
+                        }
+                        if (opt == "--wav-range=loop") o.range = project::AudioExportOptions::Range::loop;
+                    }
+                    actions.exportAudioTo (juce::File::getCurrentWorkingDirectory().getChildFile (arg.fromFirstOccurrenceOf ("=", false, false).unquoted()), o);
+                }
+
             // --export-midi=<file.mid>: export the (opened) project's MIDI at launch.
             for (auto& arg : args)
                 if (arg.startsWith ("--export-midi="))

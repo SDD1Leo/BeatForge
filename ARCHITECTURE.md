@@ -9,12 +9,12 @@ BeatForge/
 ├── core/                 beatforge_core: GUI-free static library
 │   ├── include/beatforge/  public headers
 │   └── src/
-│       ├── audio/          AudioEngine (16 track slots + mixer), TrackSchedule, DrumMachine, DrumKit,
+│       ├── audio/          AudioEngine (16 track slots + mixer), TrackSchedule, DrumMachine, DrumKit, WavFile,
 │       │                   Instruments (Poly, Bass, rack, params), Metronome, LevelMeter, PreviewQueue
 │       ├── dsp/            Biquad, Noise, Oscillator (PolyBLEP), StateVariableLowPass, Envelope (ADSR)
 │       ├── midi/           Note model, quantize, MidiFile (Standard MIDI File read/write)
 │       ├── project/        Project model (tracks, clips), ProjectFile (JSON), ScheduleBuilder,
-│       │                   TakeRecorder (recorded events → notes), MidiExport,
+│       │                   TakeRecorder (recorded events → notes), MidiExport, AudioExport (offline render),
 │       │                   Session (single mutation path, undo/redo)
 │       ├── util/           LockFreeExchange (audio-thread hand-over), SpscQueue
 │       └── time/           MusicalTime (PPQ 960, bar/beat/tick), TempoMap, Transport
@@ -80,6 +80,33 @@ Rules that hold from day one:
   Switching releases the old instrument's notes, which ring out.
 - **Gain staging:** sources are calibrated so drums (−7.5 dBFS typical),
   four-note chords (−7.3) and bass sum below 0 dBFS at defaults (tested).
+
+## Offline rendering and WAV export (Phase 9)
+
+```
+ ExportAudioDialog ── snapshot of the Project ──► worker thread:
+     exportAudio ─► renderAudio: private AudioEngine + Session (loop, metronome off)
+                       │  seek(start), play, process 1024-frame blocks
+                       ▼
+                   WavWriter (".tmp", dither, convert) ─► commit = rename ─► WavReader check
+     progress / cancel: atomics polled by the dialog at 30 Hz
+```
+
+- **Same engine, same sound:** the render is the live engine code run faster
+  than real time, so it equals playback sample for sample (tested against a
+  live engine at another block size). Rendering at the chosen sample rate
+  means no resampling.
+- **Length:** the music ends on exactly the frame where the transport would
+  reach the end tick; then Stop releases notes and the tails are rendered until
+  a block falls below -100 dBFS (max 4 s). The loop range has no tail.
+- **WAV:** PCM 16/24-bit (TPDF dither, deterministic seed, clipped at full
+  scale and counted) or IEEE float (format 3 with a `fact` chunk, overs kept).
+  RIFF size limit (4 GB) is checked while writing.
+- **Validation:** after the rename, the file is read back: format tag,
+  channels, rate, bits and frame count must match, and its peak must equal the
+  rendered peak (within 3 LSB for integer formats).
+- **Isolation:** the private engine never touches the device; the live engine
+  keeps playing (tested: 0 dropouts while exporting during playback).
 
 ## MIDI input and recording (Phase 8)
 

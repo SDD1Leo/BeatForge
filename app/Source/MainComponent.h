@@ -5,6 +5,7 @@
 #include "project/ProjectActions.h"
 #include "ui/ArrangementView.h"
 #include "ui/DrumMachinePanel.h"
+#include "ui/ExportAudioDialog.h"
 #include "ui/InstrumentPanel.h"
 #include "ui/LevelMeterComponent.h"
 #include "ui/PianoRollPanel.h"
@@ -56,6 +57,8 @@ namespace beatforge
         void updateLiveInput();      // live MIDI plays the selected (or recording) synth track
         void pollRecording();
         void openAudioSettings();
+        void openExportAudio();
+        juce::Component::SafePointer<juce::DialogWindow> exportWindow;
 
 
         AudioDeviceController& devices;

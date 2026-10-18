@@ -1,4 +1,5 @@
 #include "project/ProjectActions.h"
+#include "ui/ExportAudioDialog.h"
 
 #include <beatforge/BuildInfo.h>
 #include <beatforge/project/MidiExport.h>
@@ -202,6 +203,18 @@ namespace beatforge
         return true;
     }
 
+    bool ProjectActions::exportAudioTo (const juce::File& file, const project::AudioExportOptions& options)
+    {
+        const auto result = project::exportAudio (session.getProject(), file.getFullPathName().toStdString(), options);
+        if (! result.ok())
+        {
+            showError ("Could not export audio", toJuce (result.error));
+            return false;
+        }
+        showInfo ("Audio exported", ExportAudioDialog::describe (result, options, file));
+        return true;
+    }
+
     void ProjectActions::saveTo (const juce::File& file, std::function<void (bool)> done)
     {
         // An untitled project takes its name from the file it is first saved as.
@@ -283,6 +296,7 @@ namespace beatforge
         menu.addItem (item (4, "Save As...", "Ctrl+Shift+S"));
         menu.addSeparator();
         menu.addItem (item (5, "Rename...", {}));
+        menu.addItem (item (9, "Export Audio...", "Ctrl+Shift+E"));
         menu.addItem (item (8, "Export MIDI...", "Ctrl+E"));
         menu.addSeparator();
         auto undoItem = item (6, "Undo", "Ctrl+Z");
@@ -306,6 +320,7 @@ namespace beatforge
                 case 6: session.undo(); break;
                 case 7: session.redo(); break;
                 case 8: exportMidiWithChooser(); break;
+                case 9: if (onExportAudio) onExportAudio(); break;
                 default:
                     if (id >= recentBase)
                         openFile (recent.getFile (id - recentBase));

@@ -16,7 +16,7 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 | 6 | Built-in synth & mono bass | ✅ |
 | 7 | Arrangement view (tracks, clips, volume/pan, loop, undo) | ✅ |
 | 8 | MIDI device input, recording, MIDI file export (+ arrangement zoom/scroll/reorder) | ✅ |
-| 9 | Offline render & WAV export | ⏳ |
+| 9 | Offline render & WAV export | 🧪 |
 | 10 | MCP server (TypeScript, local IPC) | ⏳ |
 | 11 | Polish & creative workflow | ⏳ |
 | 12 | Advanced features (one at a time) | ⏳ |
@@ -44,12 +44,16 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
   modulation and aftertouch are ignored; live input plays synth tracks only (not
   drums). No count-in, input quantize or MIDI import yet. A take is recorded
   only into the selected synth track.
+- Audio export: WAV only (no MP3/FLAC yet), stereo, 44.1/48/96 kHz; no
+  normalising or limiting; the tail stops at -100 dBFS or after 4 s. The
+  metronome is never exported.
 - MIDI export writes the whole song from bar 1 (what you hear: muted tracks and
   lanes are left out); drum notes are fixed 1/32 long at velocity 100.
 - In Debug builds, if the ALSA MIDI sequencer cannot be opened JUCE raises a
   debug assertion (`juce_Midi_linux.cpp`). Seen only with ALSA deliberately broken.
 
-## Next up: Phase 9
+## Next up: Phase 10
 
-Offline rendering and WAV export (bit depth, sample rate, progress, cancel,
-validation) — the first major goal: a complete composition exported as audio.
+The MCP server (TypeScript, local IPC): let an assistant read and edit the
+project through the same Session commands, with no network server and
+confirmation for destructive actions.

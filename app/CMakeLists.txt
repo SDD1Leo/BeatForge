@@ -14,6 +14,7 @@ target_sources(BeatForge
         Source/ui/ArrangementView.cpp
         Source/ui/BeatForgeLookAndFeel.cpp
         Source/ui/DrumMachinePanel.cpp
+        Source/ui/ExportAudioDialog.cpp
         Source/ui/InstrumentPanel.cpp
         Source/ui/Knob.cpp
         Source/ui/LevelMeterComponent.cpp

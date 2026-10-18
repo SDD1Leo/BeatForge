@@ -10,6 +10,7 @@ add_executable(beatforge_tests
     unit/AllocationGuard.cpp
     unit/ArrangementTests.cpp
     unit/AudioEngineTests.cpp
+    unit/AudioExportTests.cpp
     unit/BuildInfoTests.cpp
     unit/DrumKitTests.cpp
     unit/DrumMachineTests.cpp
@@ -81,4 +82,14 @@ set_tests_properties(app_export_midi PROPERTIES
     TIMEOUT 30
     ENVIRONMENT "HOME=${APP_TEST_HOME}"
     PASS_REGULAR_EXPRESSION "SMOKE: MIDI exported: house-demo.mid [0-9]+ tracks?, [1-9][0-9]* notes"
+    FAIL_REGULAR_EXPRESSION "JUCE Assertion failure|leaked objects|Could not export")
+
+# The real app renders a project to a 16-bit / 44.1 kHz WAV from the command line.
+add_test(NAME app_export_wav
+    COMMAND ${SMOKE_LAUNCHER} $<TARGET_FILE:BeatForge> --smoke-test "${FIXTURES}/house-demo.beatforge"
+            "--export-wav=${CMAKE_CURRENT_BINARY_DIR}/house-demo.wav" --wav-rate=44100 --wav-bits=16)
+set_tests_properties(app_export_wav PROPERTIES
+    TIMEOUT 60
+    ENVIRONMENT "HOME=${APP_TEST_HOME}"
+    PASS_REGULAR_EXPRESSION "SMOKE: Audio exported: house-demo.wav: [0-9]+:[0-9.]+ .*44.1 kHz 16-bit, peak -?[0-9.]+ dBFS"
     FAIL_REGULAR_EXPRESSION "JUCE Assertion failure|leaked objects|Could not export")

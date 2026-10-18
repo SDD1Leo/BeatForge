@@ -3,11 +3,11 @@
 A native desktop DAW for electronic music, built in C++ with JUCE.
 Small feature set, reliable audio, pleasant workflow.
 
-**Status:** Phase 8 (MIDI input, recording, MIDI export) approved; Phase 9 (WAV export) next.
+**Status:** Phase 9 (offline rendering, WAV export) built — awaiting hands-on test.
 Arrange drum and synth tracks (Nebula Poly or Nebula Bass) as clips on a
 timeline, with per-track volume, pan, mute and solo, a loop region, seek and
 undo/redo. Play synth tracks from a MIDI keyboard, record takes, and export
-the song as a Standard MIDI File. The selected clip opens in the step sequencer or piano roll. Runs on a
+the song as a Standard MIDI File or render it to a WAV file. The selected clip opens in the step sequencer or piano roll. Runs on a
 sample-accurate musical clock (40–240 BPM, time signatures, metronome) and saves
 as versioned `.beatforge` project files.
 
@@ -19,6 +19,7 @@ as versioned `.beatforge` project files.
 | Record | Select a synth track, press **Record** or **R**: playback starts and what you play goes into the track (into the clip under the playhead, or a new clip). **R** again stops recording, **Stop**/Space ends it. **Ctrl+Z** removes the whole take |
 | Computer keyboard as a MIDI keyboard | Press **K** (or the keyboard button in the transport). **Q W E R T Y U I O P [ ]** are the white keys from C4, **2 3 5 6 7 9 0 =** the black keys; **Z / X** octave down / up, **C / V** velocity down / up. The status bar shows the range and velocity. While it is on, R and Q play notes: record with **Ctrl+R** or the Record button, quantize with its button. **K** again turns it off |
 | Record without a keyboard | Turn on the computer keyboard (**K**), or click the piano roll's keyboard while recording |
+| Export audio | Project menu → **Export Audio...** or **Ctrl+Shift+E**: choose whole song or loop region, sample rate and bit depth, **Export...**, pick the file; progress and **Cancel** while it renders, then a summary (length, peak, clipping) |
 | Export MIDI | Project menu → **Export MIDI...** or **Ctrl+E** (a .mid file next to your project) |
 | Add a track | **+ Drums** / **+ Synth** above the track headers (up to 16) |
 | Rename / delete a track | Double-click its name / right-click its header → Delete track |
@@ -39,7 +40,7 @@ as versioned `.beatforge` project files.
 | Drum level / mute / solo | Row slider (double-click = 0 dB), **M**, **S** buttons |
 | Clear the pattern | **Clear** |
 | Rename a drum | Double-click its name |
-| Project menu | Click the project name (top left): New, Open, Open Recent, Save, Save As, Rename, Undo, Redo, Export MIDI |
+| Project menu | Click the project name (top left): New, Open, Open Recent, Save, Save As, Rename, Undo, Redo, Export Audio, Export MIDI |
 | New / Open / Save / Save As | **Ctrl+N** / **Ctrl+O** / **Ctrl+S** / **Ctrl+Shift+S** |
 | Choose a synth track's instrument | Select the track → Instrument tab → **Nebula Poly** (chords, leads) or **Nebula Bass** (mono, glide) |
 | Shape the sound | Instrument tab: wave buttons; knobs (drag up/down or scroll, Shift = fine, double-click = default); **Reset** restores defaults |
@@ -100,6 +101,7 @@ Use the `release` preset for an optimised build
 | `--screenshot=<file.png>` | Save the window content as PNG (mid-playback with `--smoke-play`) |
 | `<project>.beatforge` | Open that project at launch |
 | `--export-midi=<file.mid>` | Export the (opened) project as a MIDI file at launch |
+| `--export-wav=<file.wav>` | Render the (opened) project to WAV at launch; options `--wav-rate=44100\|48000\|96000`, `--wav-bits=16\|24\|32`, `--wav-range=loop` |
 
 ## Audio on Linux
 

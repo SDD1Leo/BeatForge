@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.9.0] — Phase 9: offline rendering and WAV export (awaiting user test)
+
+### Added
+- Export Audio... (project menu, **Ctrl+Shift+E**): whole song (bar 1 to the
+  end of the last clip, plus release tails until silent, at most 4 s) or the
+  loop region (exact length, loops seamlessly); 44.1 / 48 / 96 kHz; 16-bit,
+  24-bit (TPDF dither) or 32-bit float WAV. Choices are remembered.
+- Rendering runs on a background thread from a snapshot of the project, with a
+  progress bar and Cancel; you can keep playing and editing meanwhile.
+- Every export is validated: the file is read back and its format, length and
+  peak must match the render. The summary shows length, format, peak, and
+  warns about clipped samples.
+- Files are written atomically: a cancelled or failed export leaves no file
+  and never damages an existing one.
+- `--export-wav=<file>` (+ `--wav-rate`, `--wav-bits`, `--wav-range=loop`)
+  from the command line.
+- 7 new test cases (157 ctest in total), incl. **export = live playback,
+  sample for sample**.
+
+### Fixed
+- The export dialog's percentage did not update (only the bar was repainted).
+
 ## [0.8.0] — Phase 8: MIDI input, recording, MIDI export (approved 2026-10-18)
 
 ### Added

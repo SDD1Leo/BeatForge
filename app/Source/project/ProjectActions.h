@@ -1,5 +1,6 @@
 #pragma once
 
+#include <beatforge/project/AudioExport.h>
 #include <beatforge/project/Session.h>
 
 #include <juce_gui_extra/juce_gui_extra.h>
@@ -29,6 +30,9 @@ namespace beatforge
         void renameProject();
         void exportMidiWithChooser();
         bool exportMidiTo (const juce::File&);
+        // Renders in the calling thread (command line); the dialog lives in MainComponent.
+        bool exportAudioTo (const juce::File&, const project::AudioExportOptions&);
+        std::function<void()> onExportAudio;   // menu: open the Export Audio dialog
 
         // Runs `proceed` once unsaved changes are saved or discarded; never if
         // the user cancels.

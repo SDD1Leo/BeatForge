@@ -38,6 +38,7 @@ namespace beatforge
                 updateLiveInput();
         });
         transportBar.onRecord = [this] { toggleRecord(); };
+        actions.onExportAudio = [this] { openExportAudio(); };
         transportBar.onComputerKeys = [this] { toggleComputerKeys(); };
         pianoRoll.keyFilter = [this] (const juce::KeyPress& key) { return computerKeys.keyPressed (key); };
         computerKeys.onChange = [this] { refreshComputerKeys(); };
@@ -73,6 +74,8 @@ namespace beatforge
 
         if (settingsWindow != nullptr)
             delete settingsWindow.getComponent();
+        if (exportWindow != nullptr)
+            delete exportWindow.getComponent();   // cancels a running export
     }
 
     void MainComponent::changeListenerCallback (juce::ChangeBroadcaster*) { refreshDeviceStatus(); }
@@ -249,6 +252,40 @@ namespace beatforge
         settingsWindow = options.launchAsync();
     }
 
+    void MainComponent::openExportAudio()
+    {
+        if (exportWindow != nullptr)
+        {
+            exportWindow->toFront (true);
+            return;
+        }
+
+        auto folder = juce::File (appSettings.getValue ("exportFolder"));
+        if (session.getFile())
+            folder = juce::File (juce::String (session.getFile()->parent_path().string()));
+        else if (! folder.isDirectory())
+            folder = actions.defaultFolder();
+
+        const auto status = devices.getStatus();
+        auto dialog = std::make_unique<ExportAudioDialog> (session, appSettings, folder, status.sampleRate);
+        dialog->onClose = [this]
+        {
+            // Not from inside the button's own click handler.
+            juce::MessageManager::callAsync ([safe = exportWindow] { if (safe != nullptr) delete safe.getComponent(); });
+            grabKeyboardFocus();
+        };
+
+        juce::DialogWindow::LaunchOptions options;
+        options.dialogTitle = "Export Audio";
+        options.dialogBackgroundColour = theme::panel;
+        options.content.setOwned (dialog.release());
+        options.componentToCentreAround = this;
+        options.useNativeTitleBar = true;
+        options.resizable = false;
+        options.escapeKeyTriggersCloseButton = true;
+        exportWindow = options.launchAsync();
+    }
+
     bool MainComponent::keyPressed (const juce::KeyPress& key)
     {
         return handleShortcut (key);
@@ -281,6 +318,8 @@ namespace beatforge
             || key == juce::KeyPress ('Z', ctrl | juce::ModifierKeys::shiftModifier, 0)) { session.redo(); return true; }
         if (key == juce::KeyPress ('d', ctrl, 0))  { arrangement.duplicateSelectedClip(); return true; }
         if (key == juce::KeyPress ('e', ctrl, 0))  { actions.exportMidiWithChooser(); return true; }
+        if (key == juce::KeyPress ('e', ctrl | juce::ModifierKeys::shiftModifier, 0)
+            || key == juce::KeyPress ('E', ctrl | juce::ModifierKeys::shiftModifier, 0)) { openExportAudio(); return true; }
         if (key == juce::KeyPress ('=', ctrl, 0) || key == juce::KeyPress ('+', ctrl, 0)
             || key == juce::KeyPress ('+', ctrl | juce::ModifierKeys::shiftModifier, 0)) { arrangement.zoomIn(); return true; }
         if (key == juce::KeyPress ('-', ctrl, 0))  { arrangement.zoomOut(); return true; }

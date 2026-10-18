@@ -13,9 +13,11 @@ add_library(beatforge_core STATIC
     src/audio/LevelMeter.cpp
     src/audio/Metronome.cpp
     src/audio/Instruments.cpp
+    src/audio/WavFile.cpp
     src/dsp/Biquad.cpp
     src/midi/MidiFile.cpp
     src/midi/Note.cpp
+    src/project/AudioExport.cpp
     src/project/MidiExport.cpp
     src/project/ScheduleBuilder.cpp
     src/project/Project.cpp

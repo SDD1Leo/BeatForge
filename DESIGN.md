@@ -91,7 +91,8 @@ Colour always comes with a text label; it is never the only signal.
 | 5 | Arrangement-first layout: ruler with loop strip + playhead, track headers (name, M/S, volume, pan), clips with pattern/note previews; editors below follow the selection | done (0.7.0) |
 | 6a | Piano roll (keyboard, grid, notes in track colour, velocity lane, header controls) + workspace tabs | done (0.5.0) |
 | 6b | Instrument editor (sections, wave buttons, live waveform/filter/envelope displays) | done (0.6.0) |
-| 6 | Mixer, export dialog in the same language as each feature lands (Phases 7, 9, 11) | planned |
+| 6c | Export Audio dialog (captioned options, violet→magenta progress bar, summary) | done (0.9.0) |
+| 6 | Mixer in the same language when it lands (Phase 11) | planned |
 
 Record (transport, red when recording) and the status-bar MIDI light arrived
 with Phase 8; the arrangement footer holds zoom (- / + / Fit) and the
