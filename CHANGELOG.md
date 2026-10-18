@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.9.0] — Phase 9: offline rendering and WAV export (awaiting user test)
+## [0.9.0] — Phase 9: offline rendering and WAV export (approved 2026-10-18)
 
 ### Added
 - Export Audio... (project menu, **Ctrl+Shift+E**): whole song (bar 1 to the
