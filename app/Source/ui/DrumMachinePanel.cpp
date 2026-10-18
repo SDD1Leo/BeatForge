@@ -25,7 +25,7 @@ namespace beatforge
                                                public juce::SettableTooltipClient
     {
     public:
-        LaneHeader (project::Session& s, audio::DrumMachine& d, int laneIndex) : session (s), drums (d), lane (laneIndex)
+        LaneHeader (DrumMachinePanel& o, int laneIndex) : owner (o), session (o.session), lane (laneIndex)
         {
             const auto colour = laneColour (lane);
 
@@ -39,8 +39,8 @@ namespace beatforge
 
             mute.setColour (juce::TextButton::buttonOnColourId, theme::muteOn);
             solo.setColour (juce::TextButton::buttonOnColourId, theme::soloOn);
-            mute.onClick = [this] { session.setLaneMuted (lane, mute.getToggleState()); };
-            solo.onClick = [this] { session.setLaneSoloed (lane, solo.getToggleState()); };
+            mute.onClick = [this] { session.setLaneMuted (owner.trackId(), lane, mute.getToggleState()); };
+            solo.onClick = [this] { session.setLaneSoloed (owner.trackId(), lane, solo.getToggleState()); };
 
             volume.setSliderStyle (juce::Slider::LinearHorizontal);
             volume.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
@@ -52,7 +52,9 @@ namespace beatforge
             volume.setNumDecimalPlacesToDisplay (1);
             volume.setWantsKeyboardFocus (false);
             volume.setColour (juce::Slider::trackColourId, colour);
-            volume.onValueChange = [this] { session.setLaneGainDb (lane, (float) volume.getValue()); };
+            volume.onDragStart = [this] { session.beginGesture(); };
+            volume.onDragEnd = [this] { session.endGesture(); };
+            volume.onValueChange = [this] { session.setLaneGainDb (owner.trackId(), lane, (float) volume.getValue()); };
             addAndMakeVisible (volume);
 
             refresh();
@@ -62,7 +64,10 @@ namespace beatforge
 
         void refresh()
         {
-            const auto& l = session.getProject().lanes[(size_t) lane];
+            const auto* t = owner.track();
+            if (t == nullptr)
+                return;
+            const auto& l = t->lanes[(size_t) lane];
             name = juce::String::fromUTF8 (l.name.c_str());
             mute.setToggleState (l.muted, juce::dontSendNotification);
             solo.setToggleState (l.soloed, juce::dontSendNotification);
@@ -86,7 +91,7 @@ namespace beatforge
         void mouseDown (const juce::MouseEvent& e) override
         {
             if (nameArea.contains (e.getPosition()) && e.getNumberOfClicks() == 1)
-                drums.preview (lane);
+                if (owner.slot() >= 0) owner.engine.drums (owner.slot()).preview (lane);
         }
 
         void mouseDoubleClick (const juce::MouseEvent& e) override
@@ -162,7 +167,7 @@ namespace beatforge
             editor->setVisible (false);
 
             if (commit && text.isNotEmpty())
-                session.renameLane (lane, text.toStdString());   // invalid names are refused
+                session.renameLane (owner.trackId(), lane, text.toStdString());   // invalid names are refused
 
             // The editor is still inside its own callback; delete it afterwards.
             juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<LaneHeader> (this)]
@@ -176,8 +181,8 @@ namespace beatforge
             });
         }
 
+        DrumMachinePanel& owner;
         project::Session& session;
-        audio::DrumMachine& drums;
         int lane;
         juce::String name;
         juce::TextButton mute { "M" }, solo { "S" };
@@ -192,7 +197,7 @@ namespace beatforge
                                              public juce::SettableTooltipClient
     {
     public:
-        StepGrid (audio::AudioEngine& e, project::Session& s) : engine (e), session (s)
+        explicit StepGrid (DrumMachinePanel& o) : owner (o), engine (o.engine), session (o.session)
         {
             setTooltip ("Click or drag to set steps");
         }
@@ -208,7 +213,10 @@ namespace beatforge
 
         void paint (juce::Graphics& g) override
         {
-            const auto& lanes = session.getProject().lanes;
+            const auto* clip = owner.clip();
+            if (clip == nullptr)
+                return;
+            const auto& pattern = clip->pattern;
 
             for (int step = 0; step < numSteps; ++step)
             {
@@ -219,7 +227,7 @@ namespace beatforge
                 for (int lane = 0; lane < numLanes; ++lane)
                 {
                     const auto cell = cellBounds (lane, step).toFloat().reduced (3.0f, 6.0f);
-                    const bool on = lanes[(size_t) lane].steps[(size_t) step];
+                    const bool on = pattern[(size_t) lane][(size_t) step];
                     const auto colour = laneColour (lane);
 
                     g.setColour (on ? colour : offColour);
@@ -245,7 +253,11 @@ namespace beatforge
                 return;
 
             // The first cell decides whether this drag paints steps on or off.
-            paintValue = ! session.getProject().lanes[(size_t) lane].steps[(size_t) step];
+            if (owner.clip() == nullptr)
+                return;
+            session.beginGesture();
+            painting = true;
+            paintValue = ! owner.clip()->pattern[(size_t) lane][(size_t) step];
             paintLane = lane;
             apply (lane, step);
         }
@@ -253,21 +265,29 @@ namespace beatforge
         void mouseDrag (const juce::MouseEvent& e) override
         {
             const auto [lane, step] = cellAt (e.getPosition());
-            if (lane == paintLane && step >= 0)
+            if (painting && lane == paintLane && step >= 0)
                 apply (lane, step);
+        }
+
+        void mouseUp (const juce::MouseEvent&) override
+        {
+            if (painting)
+                session.endGesture();
+            painting = false;
         }
 
     private:
         void apply (int lane, int step)
         {
-            if (session.getProject().lanes[(size_t) lane].steps[(size_t) step] == paintValue)
+            const auto* clip = owner.clip();
+            if (clip == nullptr || clip->pattern[(size_t) lane][(size_t) step] == paintValue)
                 return;
 
-            session.setStep (lane, step, paintValue);
+            session.setStep (clip->id, lane, step, paintValue);
 
             // Audition is not an edit: it goes straight to the engine.
-            if (paintValue && engine.getState() == audio::TransportState::stopped)
-                engine.getDrumMachine().preview (lane);
+            if (paintValue && engine.getState() == audio::TransportState::stopped && owner.slot() >= 0)
+                engine.drums (owner.slot()).preview (lane);
 
             repaint (cellBounds (lane, step));
         }
@@ -293,59 +313,95 @@ namespace beatforge
                      juce::jlimit (0, numSteps - 1, (int) ((float) p.x / cellWidth())) };
         }
 
+        DrumMachinePanel& owner;
         audio::AudioEngine& engine;
         project::Session& session;
         int playingStep = -1, paintLane = -1;
-        bool paintValue = true;
+        bool paintValue = true, painting = false;
     };
 
     //==============================================================================
-    DrumMachinePanel::DrumMachinePanel (audio::AudioEngine& e, project::Session& s) : engine (e), session (s)
+    DrumMachinePanel::DrumMachinePanel (audio::AudioEngine& e, project::Session& s, Selection& sel)
+        : engine (e), session (s), selection (sel)
     {
-        grid = std::make_unique<StepGrid> (engine, session);
+        grid = std::make_unique<StepGrid> (*this);
         addAndMakeVisible (*grid);
 
         for (int lane = 0; lane < numLanes; ++lane)
         {
-            headers[(size_t) lane] = std::make_unique<LaneHeader> (session, engine.getDrumMachine(), lane);
+            headers[(size_t) lane] = std::make_unique<LaneHeader> (*this, lane);
             headers[(size_t) lane]->onEditFinished = [this] { if (onTextEditFinished) onTextEditFinished(); };
             addAndMakeVisible (*headers[(size_t) lane]);
         }
 
-        clearButton.setTooltip ("Clear all steps");
+        clearButton.setTooltip ("Clear all steps of this pattern");
         clearButton.setWantsKeyboardFocus (false);
-        clearButton.onClick = [this] { session.clearPattern(); };
+        clearButton.onClick = [this] { session.clearPattern (clipId()); };
         addAndMakeVisible (clearButton);
 
         listenerId = session.addListener ([this] (project::Session::Change change)
         {
-            using Change = project::Session::Change;
-            if (change == Change::replaced || change == Change::pattern)
-                grid->repaint();
-            if (change == Change::replaced || change == Change::lanes)
-                for (auto& h : headers)
-                    h->refresh();
+            if (change != project::Session::Change::metadata && change != project::Session::Change::instrument)
+                refreshAll();
         });
+        selectionListener = selection.addListener ([this] { refreshAll(); });
 
+        refreshAll();
         startTimerHz (60);
     }
 
     DrumMachinePanel::~DrumMachinePanel()
     {
         session.removeListener (listenerId);
+        selection.removeListener (selectionListener);
+    }
+
+    project::TrackId DrumMachinePanel::trackId() const
+    {
+        const auto* t = session.findTrack (selection.getTrack());
+        return t != nullptr && t->type == project::TrackType::drums ? t->id : 0;
+    }
+
+    project::ClipId DrumMachinePanel::clipId() const
+    {
+        return trackId() != 0 ? selection.getClip() : 0;
+    }
+
+    const project::Track* DrumMachinePanel::track() const { return session.findTrack (trackId()); }
+    const project::Clip* DrumMachinePanel::clip() const   { return session.findClip (clipId()); }
+    int DrumMachinePanel::slot() const                    { return session.slotOf (trackId()); }
+
+    void DrumMachinePanel::refreshAll()
+    {
+        const bool hasTrack = trackId() != 0, hasClip = clip() != nullptr;
+        for (auto& h : headers)
+        {
+            h->setVisible (hasTrack);
+            h->refresh();
+        }
+        grid->setVisible (hasClip);
+        clearButton.setVisible (hasClip);
+        grid->repaint();
+        repaint();
     }
 
     void DrumMachinePanel::timerCallback()
     {
         // Playing step, from the musical position (display only).
-        const bool playing = engine.getState() == audio::TransportState::playing;
-        const auto step = (int) (engine.getPositionTicks() / (double) time::Transport::stepTicks) % numSteps;
-        grid->setPlayingStep (playing ? step : -1);
+        // Playing step: only while the playhead is inside the edited clip.
+        int step = -1;
+        if (const auto* c = clip(); c != nullptr && engine.getState() == audio::TransportState::playing)
+        {
+            const auto pos = engine.getPositionTicks();
+            if (pos >= (double) c->start && pos < (double) c->end())
+                step = (int) ((pos - (double) c->start) / (double) time::Transport::stepTicks) % numSteps;
+        }
+        grid->setPlayingStep (step);
 
         // Trigger lights: flash when a lane's hit count changes, then fade.
         for (int lane = 0; lane < numLanes; ++lane)
         {
-            const auto count = engine.getDrumMachine().getTriggerCount (lane);
+            const auto count = slot() >= 0 ? engine.drums (slot()).getTriggerCount (lane) : lastTriggerCounts[(size_t) lane];
             auto& flash = flashes[(size_t) lane];
 
             if (count != lastTriggerCounts[(size_t) lane])
@@ -370,9 +426,39 @@ namespace beatforge
         g.setColour (theme::border);
         g.drawRoundedRectangle (bounds.reduced (0.5f), theme::cornerRadius, 1.0f);
 
+        // Title: caption, track name and where the clip sits.
+        auto title = titleArea.withWidth (headerWidth - 80);
         g.setColour (theme::textSecondary);
         g.setFont (theme::captionFont());
-        g.drawText ("DRUMS", titleArea, juce::Justification::centredLeft);
+        g.drawText ("STEP SEQUENCER", title.removeFromLeft (118), juce::Justification::centredLeft);
+
+        const auto* t = track();
+        const auto* c = clip();
+        if (t != nullptr)
+        {
+            g.setColour (selection.colourOf (t->id));
+            g.setFont (theme::font (13.0f, juce::Font::bold));
+            g.drawText (juce::String::fromUTF8 (t->name.c_str()), title, juce::Justification::centredLeft, true);
+        }
+
+        if (c == nullptr)
+        {
+            g.setColour (theme::textMuted);
+            g.setFont (theme::font (14.0f));
+            const auto message = t == nullptr ? "Select a drum track or one of its clips in the arrangement."
+                                              : "This drum track has no clip selected. Double-click its lane in the arrangement to create one.";
+            g.drawFittedText (message, getLocalBounds().withTrimmedLeft (t != nullptr ? headerWidth : 0).reduced (24),
+                              juce::Justification::centred, 2);
+            return;
+        }
+
+        const auto perBar = session.getProject().timeSignature.ticksPerBar();
+        g.setColour (theme::textSecondary);
+        g.setFont (theme::font (12.0f));
+        const auto bars = juce::String ((double) c->length / (double) perBar, 2).trimCharactersAtEnd ("0").trimCharactersAtEnd (".");
+        g.drawText ("Clip at bar " + juce::String (c->start / perBar + 1) + ", " + bars + (c->length == perBar ? " bar" : " bars")
+                        + (c->length > perBar ? ", pattern repeats every bar" : ""),
+                    titleArea.withTrimmedLeft (headerWidth + 4).withRight (getWidth() - 14), juce::Justification::centredRight);
 
         // Step numbers above the grid.
         const auto gridBounds = grid->getBounds();
@@ -382,7 +468,7 @@ namespace beatforge
             const float w = (float) gridBounds.getWidth() / numSteps;
             g.setColour (step % 4 == 0 ? theme::textPrimary : theme::textSecondary);
             g.drawText (juce::String (step + 1),
-                        juce::Rectangle<float> (gridBounds.getX() + step * w, (float) titleArea.getY(), w, (float) titleArea.getHeight()),
+                        juce::Rectangle<float> (gridBounds.getX() + step * w, (float) stepNumbers.getY(), w, (float) stepNumbers.getHeight()),
                         juce::Justification::centred);
         }
     }
@@ -391,6 +477,7 @@ namespace beatforge
     {
         auto area = getLocalBounds().reduced (12, 6);
         titleArea = area.removeFromTop (32);
+        stepNumbers = area.removeFromTop (18);
         clearButton.setBounds (titleArea.withLeft (titleArea.getX() + headerWidth - 70).withWidth (60).reduced (0, 4));
 
         auto headerColumn = area.removeFromLeft (headerWidth);

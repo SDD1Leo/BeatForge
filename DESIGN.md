@@ -61,7 +61,10 @@ Fixed per musical role (`theme::track`), identical in every view:
 | Clap | violet |
 | Synth (lead MIDI track) | electric blue |
 
-Bass, lead, pads, vocals, FX and master get colours when those tracks exist.
+Arrangement tracks take colours by kind and order (`theme::track::forTrack`):
+drum tracks magenta → amber → teal → bright violet; synth tracks electric
+blue → cyan → green → violet, then repeating. The selected track/clip uses
+that colour in the editor headers.
 Colour always comes with a text label; it is never the only signal.
 
 ## State conventions
@@ -84,7 +87,7 @@ Colour always comes with a text label; it is never the only signal.
 | 3a | Rotary `Knob` (arc in section colour, pointer, hover/drag states, unit-aware value) | done (0.6.0) |
 | 3 | Remaining shared controls: `Panel` with header, compact M/S, meter strip; replace one-off painting | planned |
 | 4 | Step sequencer polish to the reference (velocity lane when velocity exists) | planned |
-| 5 | Arrangement-first layout (track headers + clips, timeline takes most space) with Phase 7 | planned |
+| 5 | Arrangement-first layout: ruler with loop strip + playhead, track headers (name, M/S, volume, pan), clips with pattern/note previews; editors below follow the selection | done (0.7.0) |
 | 6a | Piano roll (keyboard, grid, notes in track colour, velocity lane, header controls) + workspace tabs | done (0.5.0) |
 | 6b | Instrument editor (sections, wave buttons, live waveform/filter/envelope displays) | done (0.6.0) |
 | 6 | Mixer, export dialog in the same language as each feature lands (Phases 7, 9, 11) | planned |

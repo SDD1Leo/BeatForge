@@ -1,4 +1,5 @@
 #include "AllocationGuard.h"
+#include "EngineHelpers.h"
 
 #include <beatforge/audio/AudioEngine.h>
 #include <beatforge/dsp/Envelope.h>
@@ -264,17 +265,17 @@ TEST_CASE ("Switching instruments releases the old one's notes", "[instrument][e
     audio::AudioEngine engine;
     engine.prepare (sr);
     midi::Clip clip { 3840, { { 1, 48, 100, 0, 3840 } } };
-    engine.setMidiClip (&clip);
+    beatforge::test::playNotes (engine, 0, clip.notes, clip.length);
     engine.play();
     renderEngine (engine, 4800);
-    REQUIRE (engine.getActiveSynthVoices() == 1);
+    REQUIRE (engine.getActiveVoices (0) == 1);
 
-    engine.getInstruments().setType (InstrumentType::monoBass);
+    engine.instruments (0).setType (InstrumentType::monoBass);
     renderEngine (engine, 24000);
-    REQUIRE (engine.getActiveSynthVoices() == 0);   // poly note released; bass waits for the next note-on
+    REQUIRE (engine.getActiveVoices (0) == 0);   // poly note released; bass waits for the next note-on
 
     renderEngine (engine, 96000);                     // the clip loops: the bass plays it now
-    REQUIRE (engine.getInstruments().getBass().activeVoices() == 1);
+    REQUIRE (engine.instruments (0).getBass().activeVoices() == 1);
 }
 
 TEST_CASE ("Parameter changes and instrument switches are allocation-free", "[instrument][engine][realtime]")
@@ -282,8 +283,8 @@ TEST_CASE ("Parameter changes and instrument switches are allocation-free", "[in
     audio::AudioEngine engine;
     engine.prepare (sr);
     midi::Clip clip { 3840, { { 1, 40, 127, 0, 3840 } } };
-    engine.setMidiClip (&clip);
-    auto& params = engine.getInstruments().params (InstrumentType::polySynth);
+    beatforge::test::playNotes (engine, 0, clip.notes, clip.length);
+    auto& params = engine.instruments (0).params (InstrumentType::polySynth);
     params.set (Param::envAmount, 0.0f);
     engine.play();
     renderEngine (engine, 4800);
@@ -295,8 +296,8 @@ TEST_CASE ("Parameter changes and instrument switches are allocation-free", "[in
     for (int i = 0; i < 40; ++i)
         engine.process (ch, 2, 512);
     params.set (Param::cutoff, 200.0f);
-    engine.getInstruments().setType (InstrumentType::monoBass);
-    engine.getInstruments().setType (InstrumentType::polySynth);
+    engine.instruments (0).setType (InstrumentType::monoBass);
+    engine.instruments (0).setType (InstrumentType::polySynth);
     for (int i = 0; i < 40; ++i)
         engine.process (ch, 2, 512);
     REQUIRE (allocations.count() == 0);
@@ -309,8 +310,8 @@ TEST_CASE ("Cutoff set on the engine changes what it plays", "[instrument][engin
         audio::AudioEngine engine;
         engine.prepare (sr);
         midi::Clip clip { 3840, { { 1, 40, 127, 0, 3840 } } };
-        engine.setMidiClip (&clip);
-        auto& params = engine.getInstruments().params (InstrumentType::polySynth);
+        beatforge::test::playNotes (engine, 0, clip.notes, clip.length);
+        auto& params = engine.instruments (0).params (InstrumentType::polySynth);
         params.set (Param::envAmount, 0.0f);
         params.set (Param::cutoff, cutoff);
         engine.play();
@@ -321,41 +322,59 @@ TEST_CASE ("Cutoff set on the engine changes what it plays", "[instrument][engin
 }
 
 //==============================================================================
+namespace
+{
+    project::TrackId firstSynthTrack (const project::Session& session)
+    {
+        for (auto& t : session.getProject().tracks)
+            if (t.type == project::TrackType::instrument)
+                return t.id;
+        return 0;
+    }
+}
+
 TEST_CASE ("Instrument choice and settings go through the session", "[session][instrument]")
 {
     audio::AudioEngine engine;
     project::Session session (engine);
+    const auto synth = firstSynthTrack (session);
+    auto& rack = engine.instruments (session.slotOf (synth));
     int instrumentChanges = 0;
     session.addListener ([&] (project::Session::Change c) { instrumentChanges += c == project::Session::Change::instrument; });
 
-    session.setInstrument (InstrumentType::monoBass);
-    REQUIRE (engine.getInstruments().getType() == InstrumentType::monoBass);
+    session.setInstrument (synth, InstrumentType::monoBass);
+    REQUIRE (rack.getType() == InstrumentType::monoBass);
     REQUIRE (session.isDirty());
 
-    session.setInstrumentParam (InstrumentType::monoBass, Param::cutoff, 99999.0f);
-    REQUIRE (session.getInstrumentParam (InstrumentType::monoBass, Param::cutoff) == 16000.0f);
-    REQUIRE (engine.getInstruments().params (InstrumentType::monoBass).get (Param::cutoff) == 16000.0f);
+    session.setInstrumentParam (synth, InstrumentType::monoBass, Param::cutoff, 99999.0f);
+    REQUIRE (session.getInstrumentParam (synth, InstrumentType::monoBass, Param::cutoff) == 16000.0f);
+    REQUIRE (rack.params (InstrumentType::monoBass).get (Param::cutoff) == 16000.0f);
 
-    session.setInstrumentParam (InstrumentType::polySynth, Param::wave, 2.4f);
-    REQUIRE (session.getInstrumentParam (InstrumentType::polySynth, Param::wave) == 2.0f);
+    session.setInstrumentParam (synth, InstrumentType::polySynth, Param::wave, 2.4f);
+    REQUIRE (session.getInstrumentParam (synth, InstrumentType::polySynth, Param::wave) == 2.0f);
 
-    session.setInstrumentParam (InstrumentType::polySynth, Param::wave, 2.0f);   // no-op
+    session.setInstrumentParam (synth, InstrumentType::polySynth, Param::wave, 2.0f);   // no-op
     REQUIRE (instrumentChanges == 3);
 
-    session.resetInstrumentParams (InstrumentType::monoBass);
-    REQUIRE (session.getInstrumentParam (InstrumentType::monoBass, Param::cutoff)
+    session.resetInstrumentParams (synth, InstrumentType::monoBass);
+    REQUIRE (session.getInstrumentParam (synth, InstrumentType::monoBass, Param::cutoff)
              == audio::defaultValue (InstrumentType::monoBass, Param::cutoff));
+
+    // Drum tracks have no instrument.
+    session.setInstrument (session.getProject().tracks[0].id, InstrumentType::monoBass);
+    REQUIRE (session.getProject().tracks[0].instrument == InstrumentType::polySynth);
 }
 
 TEST_CASE ("Instrument and settings survive save and load", "[session][instrument][file]")
 {
     audio::AudioEngine engine;
     project::Session session (engine);
-    session.setInstrument (InstrumentType::monoBass);
-    session.setInstrumentParam (InstrumentType::monoBass, Param::wave, 2.0f);
-    session.setInstrumentParam (InstrumentType::monoBass, Param::cutoff, 650.0f);
-    session.setInstrumentParam (InstrumentType::monoBass, Param::glide, 0.08f);
-    session.setInstrumentParam (InstrumentType::polySynth, Param::attack, 0.4f);
+    const auto synth = firstSynthTrack (session);
+    session.setInstrument (synth, InstrumentType::monoBass);
+    session.setInstrumentParam (synth, InstrumentType::monoBass, Param::wave, 2.0f);
+    session.setInstrumentParam (synth, InstrumentType::monoBass, Param::cutoff, 650.0f);
+    session.setInstrumentParam (synth, InstrumentType::monoBass, Param::glide, 0.08f);
+    session.setInstrumentParam (synth, InstrumentType::polySynth, Param::attack, 0.4f);
 
     const auto text = project::toJson (session.getProject(), "test");
     const auto j = nlohmann::json::parse (text);
@@ -371,9 +390,10 @@ TEST_CASE ("Instrument and settings survive save and load", "[session][instrumen
     audio::AudioEngine engine2;
     project::Session reopened (engine2);
     reopened.openProject (*loaded.project, std::nullopt);
-    REQUIRE (engine2.getInstruments().getType() == InstrumentType::monoBass);
-    REQUIRE (engine2.getInstruments().params (InstrumentType::monoBass).get (Param::glide) == Approx (0.08f));
-    REQUIRE (engine2.getInstruments().params (InstrumentType::polySynth).get (Param::attack) == Approx (0.4f));
+    auto& rack = engine2.instruments (reopened.slotOf (firstSynthTrack (reopened)));
+    REQUIRE (rack.getType() == InstrumentType::monoBass);
+    REQUIRE (rack.params (InstrumentType::monoBass).get (Param::glide) == Approx (0.08f));
+    REQUIRE (rack.params (InstrumentType::polySynth).get (Param::attack) == Approx (0.4f));
 }
 
 TEST_CASE ("Older and odd instrument data loads safely", "[instrument][file][compat]")
@@ -385,9 +405,10 @@ TEST_CASE ("Older and odd instrument data loads safely", "[instrument][file][com
             {"type":"instrument","instrument":"basicSynth","name":"Synth","clip":{"lengthTicks":3840,"notes":[]}}]})");
         REQUIRE (r.ok());
         REQUIRE (r.warnings.empty());
-        REQUIRE (r.project->instrument == InstrumentType::polySynth);
-        REQUIRE (r.project->instrumentParams == project::Project::defaultInstrumentParams());
-        REQUIRE (r.project->synthClip.has_value());
+        const auto& synth = r.project->tracks[1];
+        REQUIRE (synth.instrument == InstrumentType::polySynth);
+        REQUIRE (synth.instrumentParams == project::Track::defaultInstrumentParams());
+        REQUIRE (synth.clips.size() == 1);
     }
 
     SECTION ("bad values are corrected, unknown settings kept")
@@ -398,10 +419,11 @@ TEST_CASE ("Older and odd instrument data loads safely", "[instrument][file][com
                 "monoBass":{"cutoff":-5,"wave":"noise","resonance":0.3,"drive":0.7},
                 "fmSynth":{"ratio":2}}}]})");
         REQUIRE (r.ok());
-        REQUIRE (r.project->instrument == InstrumentType::monoBass);
-        REQUIRE (r.project->instrumentParams[1][(size_t) Param::cutoff] == 40.0f);
-        REQUIRE (r.project->instrumentParams[1][(size_t) Param::resonance] == Approx (0.3f));
-        REQUIRE (r.project->instrumentParams[1][(size_t) Param::wave] == audio::defaultValue (InstrumentType::monoBass, Param::wave));
+        const auto& bassTrack = r.project->tracks[1];
+        REQUIRE (bassTrack.instrument == InstrumentType::monoBass);
+        REQUIRE (bassTrack.instrumentParams[1][(size_t) Param::cutoff] == 40.0f);
+        REQUIRE (bassTrack.instrumentParams[1][(size_t) Param::resonance] == Approx (0.3f));
+        REQUIRE (bassTrack.instrumentParams[1][(size_t) Param::wave] == audio::defaultValue (InstrumentType::monoBass, Param::wave));
         REQUIRE (std::any_of (r.warnings.begin(), r.warnings.end(),
                               [] (const std::string& w) { return w.find ("2 Nebula Bass setting(s)") != std::string::npos; }));
 
@@ -410,7 +432,7 @@ TEST_CASE ("Older and odd instrument data loads safely", "[instrument][file][com
         REQUIRE (synth["params"]["monoBass"]["drive"] == 0.7);
         REQUIRE (synth["params"]["fmSynth"]["ratio"] == 2);
         REQUIRE_FALSE (synth.contains ("otherInstrumentParams"));
-        REQUIRE_FALSE (synth.contains ("clip"));
+        REQUIRE (synth["clips"].empty());
     }
 }
 
@@ -421,7 +443,7 @@ TEST_CASE ("Default levels leave headroom for chords and a full beat", "[instrum
         CAPTURE (std::string (audio::instrumentName (type)));
         audio::AudioEngine engine;
         engine.prepare (sr);
-        engine.getInstruments().setType (type);
+        engine.instruments (0).setType (type);
 
         // Four-note chords on every beat (the bass plays the newest note).
         midi::Clip clip { 3840, {} };
@@ -429,12 +451,13 @@ TEST_CASE ("Default levels leave headroom for chords and a full beat", "[instrum
         for (int beat = 0; beat < 4; ++beat)
             for (int pitch : { 36, 43, 48, 52 })
                 clip.notes.push_back ({ id++, pitch + (type == InstrumentType::polySynth ? 12 : 0), 127, (time::Tick) beat * 960, 900 });
-        engine.setMidiClip (&clip);
+        beatforge::test::playNotes (engine, 0, clip.notes, clip.length);
 
-        auto& drums = engine.getDrumMachine();
+        project::DrumPattern beat {};
         for (int s = 0; s < 16; ++s)
             for (int lane = 0; lane < audio::DrumMachine::numLanes; ++lane)
-                drums.setStep (lane, s, lane == 0 ? s % 4 == 0 : lane == 2 || s % 4 == 2);
+                beat[(size_t) lane][(size_t) s] = lane == 0 ? s % 4 == 0 : lane == 2 || s % 4 == 2;
+        beatforge::test::playPattern (engine, 1, beat, 16);
 
         engine.play();
         const auto out = renderEngine (engine, 96000 * 2);

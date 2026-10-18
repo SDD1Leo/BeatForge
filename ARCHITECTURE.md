@@ -9,11 +9,13 @@ BeatForge/
 ├── core/                 beatforge_core: GUI-free static library
 │   ├── include/beatforge/  public headers
 │   └── src/
-│       ├── audio/          AudioEngine, DrumMachine, DrumKit, Instruments (Poly, Bass, rack, params),
-│       │                   Metronome, LevelMeter, PreviewQueue
+│       ├── audio/          AudioEngine (16 track slots + mixer), TrackSchedule, DrumMachine, DrumKit,
+│       │                   Instruments (Poly, Bass, rack, params), Metronome, LevelMeter, PreviewQueue
 │       ├── dsp/            Biquad, Noise, Oscillator (PolyBLEP), StateVariableLowPass, Envelope (ADSR)
-│       ├── midi/           Note/Clip model, quantize, NoteSchedule + lock-free ScheduleExchange
-│       └── project/        Project model, ProjectFile (JSON), Session (single mutation path)
+│       ├── midi/           Note model, quantize
+│       ├── project/        Project model (tracks, clips), ProjectFile (JSON), ScheduleBuilder,
+│       │                   Session (single mutation path, undo/redo)
+│       ├── util/           LockFreeExchange (audio-thread hand-over)
 │       └── time/           MusicalTime (PPQ 960, bar/beat/tick), TempoMap, Transport
 ├── app/                  BeatForge GUI executable (JUCE)
 │   └── Source/
@@ -22,7 +24,7 @@ BeatForge/
 │       ├── audio/          AudioDeviceController (JUCE AudioDeviceManager <-> engine)
 │       ├── project/        ProjectActions (file commands, dialogs, recent files)
 │       └── ui/             theme, LookAndFeel, TransportBar, ProjectButton, SignatureField, TempoField,
-│                           TimelineRuler, DrumMachinePanel, PianoRollPanel, InstrumentPanel, Knob, TabBar,
+│                           ArrangementView, Selection, DrumMachinePanel, PianoRollPanel, InstrumentPanel, Knob, TabBar,
 │                           LevelMeterComponent, StatusBar
 ├── tools/                analyze_onsets.py (timing analysis of captured audio)
 ├── tests/                Catch2 unit tests + app launch test (CTest)
@@ -77,21 +79,51 @@ Rules that hold from day one:
 - **Gain staging:** sources are calibrated so drums (−7.5 dBFS typical),
   four-note chords (−7.3) and bass sum below 0 dBFS at defaults (tested).
 
+## Arrangement (Phase 7)
+
+```
+ ArrangementView / editors ──► Session::createClip/moveClip/setTrackVolume/... (undo snapshot)
+                                    │
+                                    ├─► Project.tracks[i].clips (sorted, absolute ticks)
+                                    └─► syncEngine: track i ─► engine slot i (type, mix)
+                                                  buildSchedule(track) ─► TrackSchedule
+                                                        │  drum hits + note on/off on absolute ticks
+                                                        ▼
+                         LockFreeExchange<TrackSchedule>: pending ──► current (audio thread, per slot)
+```
+
+- **Tracks** are drum or synth (instrument) tracks, at most 16, each mapped to
+  one engine slot with its own DrumMachine or InstrumentRack, schedule and
+  scratch buffers (all allocated up front). Slots are mixed with smoothed
+  volume and balance-pan (10 ms); mute/solo reach exactly zero.
+- **Clips** sit at absolute tick positions. `buildSchedule` flattens a track:
+  a drum clip repeats its 16-step pattern every bar; notes are cut at the clip
+  end; a clip that overlaps a later one stops where the later one starts.
+  Voice ids are `clipId << 32 | noteId`, so the same note in two clips is two voices.
+- **Seek** moves the play start; Play starts there and Stop returns there.
+  A seek or loop jump releases voices whose note does not cover the new position.
+- **Undo/redo:** every Session edit stores a snapshot of the whole Project
+  (plain data, small) before changing it; 200 steps. `beginGesture`/`endGesture`
+  make a whole drag one step. Undo replaces the project and re-syncs the engine.
+- **Selection** (app) holds the selected track/clip, repairs itself after
+  deletes/undo/open, and drives the editors: Step Sequencer for drum clips,
+  Piano Roll for synth clips, Instrument for synth tracks.
+
 ## MIDI (Phase 5)
 
 ```
- PianoRoll ─► Session::addNote/updateNotes/... ─► Project.synthClip
+ PianoRoll ─► Session::addNote/updateNotes/... ─► Project.tracks[i].clips[j].notes
                        │
-                       └─► AudioEngine::setMidiClip ─► NoteSchedule::build (message thread)
+                       └─► buildSchedule (message thread) ─► TrackSchedule
                                                         │  sorted on/off events, offs first
                                                         ▼
-                         ScheduleExchange: pending ──acquire()──► current (audio thread)
+                         LockFreeExchange: pending ──acquire()──► current (audio thread)
                                            retired ◄──────────────┘  freed later by collectGarbage()
 ```
 
-- **Note** = id, pitch, velocity, start tick, length (clip-local). The clip
-  loops from bar 1 every `length` ticks. Quantize moves starts to the nearest
-  grid line (ties later), keeps lengths, keeps notes inside the clip.
+- **Note** = id, pitch, velocity, start tick, length (clip-local). Quantize
+  moves starts to the nearest grid line (ties later), keeps lengths, keeps
+  notes inside the clip.
 - **Hand-over without locks or frees on the audio thread:** the message
   thread publishes an immutable schedule; the audio thread swaps it in at a
   block start and parks the old one in a "retired" slot that only the message
@@ -102,13 +134,11 @@ Rules that hold from day one:
   segment, so every event has exactly one owner across blocks, tempo changes
   and loop wraps (stress-tested with random tempo changes at block sizes
   1/37/64/4096: bit-identical output).
-- Within a block, note on/off, loop jumps and grid lines (drums, metronome)
-  are merged in sample order (offs, jumps, grid, ons) and voices are rendered
+- Within a block, note on/off, loop jumps, grid lines (metronome) and drum
+  hits are merged in sample order (offs, jumps, grid, drum hits, ons) and voices are rendered
   between them.
-- **No stuck notes:** voices are keyed by note id; on a schedule change, a loop
+- **No stuck notes:** voices are keyed by voice id; on a schedule change, a loop
   wrap, or Stop, voices whose note no longer covers the playhead are released.
-- **PolySynth** (16 voices): PolyBLEP saw, one-pole low-pass, linear ADSR,
-  velocity gain, voice stealing. A placeholder sound until Phase 6.
 - Editor auditions go through a lock-free SPSC `PreviewQueue`.
 
 ## Projects and the command path (Phase 4)
@@ -122,37 +152,44 @@ Rules that hold from day one:
 
 - **`Session`** is the only way to change the project: it validates, updates
   the `Project`, pushes the change into the engine and notifies listeners
-  (`replaced`, `transport`, `pattern`, `lanes`, `metadata`). It tracks the file
-  path and the dirty flag. Message-thread only. MCP (Phase 10) will call the
+  (`replaced`, `transport`, `tracks`, `clips`, `instrument`, `metadata`). It
+  records undo steps and tracks the file path and the dirty flag (dirty =
+  differs from the last saved project, so undoing back to it is clean). Message-thread only. MCP (Phase 10) will call the
   same methods.
 - Auditioning a drum is not an edit, so it goes straight to the engine.
 - **`ProjectActions`** (app) adds file dialogs, prompts, recent files and
   error reporting on top of the Session. In `--smoke-test` mode it prints
   results instead of opening dialogs and never touches recent-file settings.
 
-### File format v1 (`.beatforge`, UTF-8 JSON)
+### File format v2 (`.beatforge`, UTF-8 JSON, since 0.7)
 
 ```json
-{ "format": "beatforge-project", "version": 1, "savedBy": "BeatForge 0.4.0",
+{ "format": "beatforge-project", "version": 2, "savedBy": "BeatForge 0.7.0",
   "name": "Night Drive", "tempo": 124.0,
-  "timeSignature": { "numerator": 4, "denominator": 4 },
-  "metronome": false, "loop": { "enabled": false, "startBar": 1, "bars": 4 },
-  "tracks": [ { "type": "drumMachine", "name": "Drums", "lanes": [
-      { "sound": "kick", "name": "808 Kick", "gainDb": 0.0, "muted": false,
-        "soloed": false, "steps": "x...x...x...x..." } ] } ] }
+  "timeSignature": { "numerator": 4, "denominator": 4 }, "metronome": false,
+  "loop": { "enabled": true, "start": 7680, "end": 15360 },
+  "tracks": [
+    { "type": "drumMachine", "name": "Drums", "volumeDb": 0.0, "pan": 0.0, "muted": false, "soloed": false,
+      "lanes": [ { "sound": "kick", "name": "808 Kick", "gainDb": 0.0, "muted": false, "soloed": false } ],
+      "clips": [ { "start": 0, "length": 30720,
+                   "pattern": { "kick": "x...x...x...x...", "clap": "....x.......x..." } } ] },
+    { "type": "instrument", "instrument": "monoBass", "name": "Bass", "volumeDb": -3.0, "pan": 0.0,
+      "muted": false, "soloed": false,
+      "params": { "polySynth": { "wave": "saw", "cutoff": 2800.0, "...": 0 },
+                  "monoBass":  { "wave": "square", "glide": 0.08, "...": 0 } },
+      "clips": [ { "start": 15360, "length": 15360,
+                   "notes": [ { "pitch": 36, "velocity": 100, "start": 0, "length": 480 } ] } ] } ] }
 ```
 
-Synth track (format version 1; always written since 0.6). `instrument` is
-`polySynth` or `monoBass` (0.5's `basicSynth` loads as `polySynth`); both
-instruments' settings are kept so switching back restores the sound:
+All positions are ticks (960 per quarter note); clip `start` is absolute,
+note `start` is relative to its clip. `instrument` is `polySynth` or
+`monoBass` (0.5's `basicSynth` loads as `polySynth`); both instruments'
+settings are kept so switching back restores the sound.
 
-```json
-{ "type": "instrument", "instrument": "monoBass", "name": "Synth",
-  "params": { "polySynth": { "wave": "saw", "attack": 0.005, "cutoff": 2800.0, "level": -10.0, "...": 0 },
-              "monoBass":  { "wave": "square", "cutoff": 650.0, "glide": 0.08, "...": 0 } },
-  "clip": { "lengthTicks": 15360,
-            "notes": [ { "pitch": 36, "velocity": 100, "start": 480, "length": 480 } ] } }
-```
+**Version 1 files (0.4–0.6) are upgraded on open:** the drum pattern becomes
+one drum clip at bar 1 (as long as the synth clip, at least one bar), the synth
+clip goes on a synth track at bar 1, and the old loop (`startBar`, `bars`)
+becomes a loop region. Saving writes version 2.
 
 Loading rules:
 - Not JSON, wrong `format`, or missing `version` → refused with a reason.
@@ -160,7 +197,8 @@ Loading rules:
   never half-read.
 - Out-of-range or wrong-typed values → corrected, each with a warning shown to
   the user; nothing changes on disk until they save.
-- Unknown keys, extra steps beyond 16, unknown lanes and track types,
+- Unknown keys (top level, tracks, lanes, clips, notes), extra steps beyond 16,
+  unknown lanes and track types, unreadable clips,
   unknown note keys and unreadable notes, unknown instrument settings and
   settings of unknown instruments → kept and written back on save (no silent
   data loss). Out-of-range pitch/velocity/settings are limited with a warning.

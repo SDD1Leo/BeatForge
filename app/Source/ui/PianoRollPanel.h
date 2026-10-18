@@ -3,6 +3,8 @@
 #include <beatforge/audio/AudioEngine.h>
 #include <beatforge/project/Session.h>
 
+#include "ui/Selection.h"
+
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <memory>
@@ -25,7 +27,7 @@ namespace beatforge
                                  private juce::Timer
     {
     public:
-        PianoRollPanel (audio::AudioEngine&, project::Session&);
+        PianoRollPanel (audio::AudioEngine&, project::Session&, Selection&);
         ~PianoRollPanel() override;
 
         void paint (juce::Graphics&) override;
@@ -43,15 +45,23 @@ namespace beatforge
         void quantizeSelectionOrAll();
         time::Tick gridTicks() const;
 
+        // What the panel edits: the selected synth track's selected clip.
+        project::TrackId trackId() const;
+        project::ClipId clipId() const;
+        const project::Clip* clipPtr() const;
+        int slot() const;
+
         audio::AudioEngine& engine;
         project::Session& session;
-        int listenerId = 0;
+        Selection& target;
+        int listenerId = 0, targetListener = 0;
+        project::ClipId shownClip = 0;
 
         std::set<midi::NoteId> selection;
         time::Tick newNoteLength = 240;
 
         juce::ComboBox clipLengthBox, gridBox;
-        juce::TextButton quantizeButton { "Quantize" }, createButton { "Create 4-bar MIDI clip" };
+        juce::TextButton quantizeButton { "Quantize" }, createButton { "Create a 4-bar clip" };
         juce::Viewport viewport;
         std::unique_ptr<Editor> editor;
         std::unique_ptr<VelocityLane> velocityLane;

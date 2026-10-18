@@ -3,29 +3,41 @@
 A native desktop DAW for electronic music, built in C++ with JUCE.
 Small feature set, reliable audio, pleasant workflow.
 
-**Status:** Phase 6 (built-in synthesizer and bass) built — awaiting hands-on test.
-A 16-step drum machine and a Synth track (Nebula Poly or Nebula Bass) playing
-a looping MIDI clip edited in a piano roll, on a sample-accurate musical clock
-(40–240 BPM, time signatures, loop, metronome), saved as versioned
-`.beatforge` project files.
+**Status:** Phase 7 (arrangement view) built — awaiting hands-on test.
+Arrange drum and synth tracks (Nebula Poly or Nebula Bass) as clips on a
+timeline, with per-track volume, pan, mute and solo, a loop region, seek and
+undo/redo. The selected clip opens in the step sequencer or piano roll. Runs on a
+sample-accurate musical clock (40–240 BPM, time signatures, metronome) and saves
+as versioned `.beatforge` project files.
 
 ### Controls
 
 | Action | How |
 |---|---|
-| Build a beat | Click steps in the drum grid; click-drag along a row to paint several. While stopped, a newly set step is auditioned |
+| Add a track | **+ Drums** / **+ Synth** above the track headers (up to 16) |
+| Rename / delete a track | Double-click its name / right-click its header → Delete track |
+| Track volume / pan / mute / solo | Header slider (double-click = 0 dB), pan knob, **M**, **S** |
+| Create a clip | Double-click an empty spot in a track's lane (a 1-bar pattern on drum tracks, 4 bars on synth tracks) |
+| Select / open a clip | Click it / double-click it (opens it in the editor below) |
+| Move a clip | Drag it (snaps to beats; drop on another track of the same kind to move it there) |
+| Resize a clip | Drag its right edge |
+| Duplicate / delete a clip | **Ctrl+D** / **Delete**, or right-click it |
+| Loop region | Drag across the ruler's thin top strip (snaps to bar lines; a click loops one bar). Loop button or **L** turns looping on/off |
+| Move the playhead | Click or drag the ruler below the strip. Play starts there; Stop returns there |
+| Undo / redo | **Ctrl+Z** / **Ctrl+Shift+Z** or **Ctrl+Y**, also in the project menu |
+| Switch editor / instrument | Tabs below the arrangement, or **Ctrl+1** / **Ctrl+2**. The editor follows the selected track: Step Sequencer for drums, Piano Roll for synths |
+| Build a beat | Click steps in the step grid; click-drag along a row to paint several. While stopped, a newly set step is auditioned. The pattern repeats every bar of the clip |
 | Hear a drum | Click its name |
 | Drum level / mute / solo | Row slider (double-click = 0 dB), **M**, **S** buttons |
 | Clear the pattern | **Clear** |
 | Rename a drum | Double-click its name |
-| Project menu | Click the project name (top left): New, Open, Open Recent, Save, Save As, Rename |
+| Project menu | Click the project name (top left): New, Open, Open Recent, Save, Save As, Rename, Undo, Redo |
 | New / Open / Save / Save As | **Ctrl+N** / **Ctrl+O** / **Ctrl+S** / **Ctrl+Shift+S** |
-| Switch Drums / Piano Roll / Instrument | Tabs above the editor, or **Ctrl+1** / **Ctrl+2** / **Ctrl+3** |
-| Choose the synth track's instrument | Instrument tab → **Nebula Poly** (chords, leads) or **Nebula Bass** (mono, glide) |
+| Choose a synth track's instrument | Select the track → Instrument tab → **Nebula Poly** (chords, leads) or **Nebula Bass** (mono, glide) |
 | Shape the sound | Instrument tab: wave buttons; knobs (drag up/down or scroll, Shift = fine, double-click = default); **Reset** restores defaults |
-| Create a MIDI clip | Piano Roll tab → **Create 4-bar MIDI clip**; length 1/2/4/8 bars in the header |
+| Clip length | Drag the clip's edge, or the bars dropdown in the piano roll header |
 | Draw / select notes | Click empty grid to add a note; drag on empty grid to box-select; Shift/Ctrl+click adds to the selection |
-| Move / resize / delete | Drag a note; drag its right edge; right-click it or press **Delete** |
+| Move / resize / delete notes | Drag a note; drag its right edge; right-click it or press **Delete** |
 | Velocity | Drag the bars in the velocity lane (selected notes move together) |
 | Transpose / nudge | **Up/Down** (Shift = octave), **Left/Right** by the grid |
 | Quantize | **Q** or the Quantize button (selection, or all notes); grid 1/4…1/32 in the header |
@@ -34,7 +46,7 @@ a looping MIDI clip edited in a piano roll, on a sample-accurate musical clock
 | Tempo | Drag the BPM field up/down or scroll (Shift = 0.1 BPM), double-click to type |
 | Time signature | Click **SIG** in the readout (2/4 … 7/8) |
 | Metronome (off by default) | Metronome button or **M** |
-| Loop | Loop button or **L**; length (1/2/4/8 bars from bar 1) in the dropdown |
+
 See [ROADMAP.md](ROADMAP.md).
 
 ## Ubuntu setup (24.04)

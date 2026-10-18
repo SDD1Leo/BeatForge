@@ -1,3 +1,5 @@
+#include "EngineHelpers.h"
+
 #include <beatforge/audio/AudioEngine.h>
 
 #include <catch2/catch_approx.hpp>
@@ -52,11 +54,22 @@ namespace
         return p;
     }
 
+    // One drum track (slot 0) with a 16-bar clip whose pattern the test edits.
     struct Fixture
     {
-        Fixture (double rate = 48000.0) { engine.prepare (rate); }
-        DrumMachine& drums() { return engine.getDrumMachine(); }
+        Fixture (double rate = 48000.0)
+        {
+            engine.prepare (rate);
+            beatforge::test::playPattern (engine, 0, pat, 16);
+        }
+        DrumMachine& drums() { return engine.drums (0); }
+        void step (int lane, int s)
+        {
+            pat[(size_t) lane][(size_t) s] = true;
+            beatforge::test::playPattern (engine, 0, pat, 16);
+        }
         AudioEngine engine;
+        beatforge::project::DrumPattern pat {};
     };
 }
 
@@ -65,8 +78,8 @@ TEST_CASE ("Kicks land on their exact step samples", "[drums]")
     // Steps 0 and 8: 1 s apart, longer than the 0.55 s kick, so each onset
     // follows silence and can be located exactly.
     Fixture f;
-    f.drums().setStep (kick, 0, true);
-    f.drums().setStep (kick, 8, true);
+    f.step (kick, 0);
+    f.step (kick, 8);
 
     f.engine.play();
     REQUIRE (onsets (render (f.engine, 96000 * 2, 512)) == std::vector<size_t> { 0, 48000, 96000, 144000 });
@@ -76,7 +89,7 @@ TEST_CASE ("Four-on-the-floor triggers every beat", "[drums]")
 {
     Fixture f;
     for (int step : { 0, 4, 8, 12 })
-        f.drums().setStep (kick, step, true);
+        f.step (kick, step);
 
     f.engine.play();
     render (f.engine, 96000 * 2, 512);   // 2 bars @ 120 BPM
@@ -87,7 +100,7 @@ TEST_CASE ("16th-note hats hit every step", "[drums]")
 {
     Fixture f;
     for (int step = 0; step < 16; ++step)
-        f.drums().setStep (closedHat, step, true);
+        f.step (closedHat, step);
 
     f.engine.play();
     const auto hits = onsets (render (f.engine, 96000, 300));
@@ -100,8 +113,8 @@ TEST_CASE ("Pattern loops every bar and follows the tempo", "[drums]")
 {
     Fixture f;
     f.engine.setTempo (100.0);   // 16th = 0.15 s = 7200 samples
-    f.drums().setStep (clap, 4, true);
-    f.drums().setStep (clap, 12, true);
+    f.step (clap, 4);
+    f.step (clap, 12);
 
     f.engine.play();
     const auto hits = onsets (render (f.engine, 7200 * 16 * 3, 480));
@@ -117,11 +130,11 @@ TEST_CASE ("Drum output is identical for any block size", "[drums]")
 
     auto makeBeat = [] (Fixture& f)
     {
-        for (int s : { 0, 4, 8, 12 }) f.drums().setStep (kick, s, true);
-        for (int s : { 4, 12 })       f.drums().setStep (snare, s, true);
-        for (int s = 0; s < 16; s += 2) f.drums().setStep (closedHat, s, true);
-        f.drums().setStep (openHat, 14, true);
-        f.drums().setStep (clap, 12, true);
+        for (int s : { 0, 4, 8, 12 }) f.step (kick, s);
+        for (int s : { 4, 12 })       f.step (snare, s);
+        for (int s = 0; s < 16; s += 2) f.step (closedHat, s);
+        f.step (openHat, 14);
+        f.step (clap, 12);
         f.engine.setTempo (127.0);
         f.engine.play();
     };
@@ -139,11 +152,11 @@ TEST_CASE ("Drum output is identical for any block size", "[drums]")
 TEST_CASE ("Step edits during playback apply from the next step", "[drums]")
 {
     Fixture f;
-    f.drums().setStep (kick, 0, true);
+    f.step (kick, 0);
     f.engine.play();
 
     auto first = render (f.engine, 30000, 512);    // past step 4 (24000)
-    f.drums().setStep (kick, 8, true);              // step 8 is at 48000
+    f.step (kick, 8);              // step 8 is at 48000
     auto rest = render (f.engine, 66000, 512);
     first.insert (first.end(), rest.begin(), rest.end());
 
@@ -156,8 +169,8 @@ TEST_CASE ("Mute, solo and lane volume", "[drums][controls]")
     auto snareAndKick = [] (Fixture& f)
     {
         render (f.engine, 1024, 512);   // device running while the user clicks: ramps settle
-        f.drums().setStep (kick, 0, true);
-        f.drums().setStep (snare, 4, true);
+        f.step (kick, 0);
+        f.step (snare, 4);
         f.engine.play();
         return render (f.engine, 48000, 512);
     };
@@ -227,9 +240,9 @@ TEST_CASE ("Closed hat chokes the open hat", "[drums]")
     auto openHatTail = [] (bool withClosedHat)
     {
         Fixture f;
-        f.drums().setStep (openHat, 0, true);
+        f.step (openHat, 0);
         if (withClosedHat)
-            f.drums().setStep (closedHat, 2, true);   // 12000 samples; closed hat ends ~17760
+            f.step (closedHat, 2);   // 12000 samples; closed hat ends ~17760
         f.engine.play();
         const auto out = render (f.engine, 24000, 512);
         return peakIn (out, 19000, 23000);
@@ -242,7 +255,7 @@ TEST_CASE ("Closed hat chokes the open hat", "[drums]")
 TEST_CASE ("Stopping lets drum tails ring but triggers nothing new", "[drums]")
 {
     Fixture f;
-    for (int s = 0; s < 16; ++s) f.drums().setStep (kick, s, true);
+    for (int s = 0; s < 16; ++s) f.step (kick, s);
     f.engine.play();
     render (f.engine, 1000, 500);
     f.engine.stop();
@@ -259,7 +272,7 @@ TEST_CASE ("Muting while a drum rings fades it out within 5 ms", "[drums][contro
     CAPTURE (blockSize);
 
     Fixture f;
-    f.drums().setStep (kick, 0, true);
+    f.step (kick, 0);
     f.engine.play();
     render (f.engine, 4096, blockSize);           // kick ringing
     f.drums().setLaneMuted (kick, true);

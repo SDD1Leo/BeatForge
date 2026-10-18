@@ -10,6 +10,7 @@ target_sources(BeatForge
         Source/MainComponent.cpp
         Source/audio/AudioDeviceController.cpp
         Source/project/ProjectActions.cpp
+        Source/ui/ArrangementView.cpp
         Source/ui/BeatForgeLookAndFeel.cpp
         Source/ui/DrumMachinePanel.cpp
         Source/ui/InstrumentPanel.cpp
@@ -21,7 +22,6 @@ target_sources(BeatForge
         Source/ui/StatusBar.cpp
         Source/ui/TabBar.cpp
         Source/ui/TempoField.cpp
-        Source/ui/TimelineRuler.cpp
         Source/ui/TransportBar.cpp
         Source/ui/TransportButton.cpp)
 

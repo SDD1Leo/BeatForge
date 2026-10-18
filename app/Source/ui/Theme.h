@@ -54,7 +54,17 @@ namespace beatforge::theme
         inline const juce::Colour openHat   = teal;
         inline const juce::Colour clap      = violet;
         inline const juce::Colour synth     = electricBlue;   // synth / lead MIDI track
-        // Planned roles (bass, pads, vocals, FX) get colours when they exist.
+        // Planned roles (pads, vocals, FX) get colours when they exist.
+
+        // Arrangement tracks: the first track of a type gets its role colour,
+        // further ones step through a fixed palette (never random).
+        inline juce::Colour forTrack (bool isDrums, int indexOfType)
+        {
+            static const juce::Colour drums[] { magenta, amber, teal, brightViolet };
+            static const juce::Colour synths[] { electricBlue, cyan, green, violet };
+            const auto i = (size_t) (indexOfType % 4);
+            return isDrums ? drums[i] : synths[i];
+        }
     }
 
     // --- Geometry ----------------------------------------------------------------

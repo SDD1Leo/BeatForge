@@ -8,11 +8,12 @@
 
 namespace beatforge::audio
 {
-    // 16-step, 5-lane sample drum machine.
+    // 5-lane sample drum machine: plays the hits it is given (patterns live in
+    // clips and arrive as scheduled hits).
     //
-    // The pattern and lane controls are atomics: the UI writes them, the audio
-    // thread reads them each block. Voices and the kit are audio-thread state
-    // (the kit is rebuilt in prepare(), which must not overlap render()).
+    // Lane controls are atomics: the UI writes them, the audio thread reads
+    // them each block. Voices and the kit are audio-thread state (the kit is
+    // rebuilt in prepare(), which must not overlap render()).
     class DrumMachine
     {
     public:
@@ -25,11 +26,7 @@ namespace beatforge::audio
         void prepare (double sampleRate);
         void reset() noexcept;
 
-        // --- Pattern and controls: any thread -------------------------------
-        void setStep (int lane, int step, bool on) noexcept;
-        bool getStep (int lane, int step) const noexcept;
-        void clearPattern() noexcept;
-
+        // --- Lane controls: any thread -----------------------------------------
         void setLaneGainDb (int lane, float db) noexcept;   // <= -60 dB is silence
         float getLaneGainDb (int lane) const noexcept;
         void setLaneMuted (int lane, bool) noexcept;
@@ -44,8 +41,8 @@ namespace beatforge::audio
         std::uint32_t getTriggerCount (int lane) const noexcept;
 
         // --- Audio thread ----------------------------------------------------
-        // Starts all lanes whose step is on. Call on a 16th-note grid line.
-        void triggerStep (int step) noexcept;
+        // Starts every lane whose bit is set in `laneMask`.
+        void triggerLanes (std::uint8_t laneMask) noexcept;
         void trigger (int lane) noexcept;
         void startPendingPreviews() noexcept;
 
@@ -90,7 +87,6 @@ namespace beatforge::audio
         int gainRampSamples = 240;
         int retriggerFade = 64, chokeFade = 240;
 
-        std::array<std::atomic<bool>, numLanes * numSteps> steps;
         std::array<std::atomic<float>, numLanes> gainDb;
         std::array<std::atomic<bool>, numLanes> muted, soloed, previewPending;
         std::array<std::atomic<std::uint32_t>, numLanes> triggerCounts;

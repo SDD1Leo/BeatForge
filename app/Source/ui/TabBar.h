@@ -14,6 +14,7 @@ namespace beatforge
 
         void setCurrentTab (int index, juce::NotificationType = juce::sendNotificationSync);
         int getCurrentTab() const noexcept { return current; }
+        void setTabName (int index, const juce::String& name) { if (names[index] != name) { names.set (index, name); repaint(); } }
 
         std::function<void (int)> onChange;
 

@@ -8,6 +8,7 @@ FetchContent_MakeAvailable(Catch2)
 
 add_executable(beatforge_tests
     unit/AllocationGuard.cpp
+    unit/ArrangementTests.cpp
     unit/AudioEngineTests.cpp
     unit/BuildInfoTests.cpp
     unit/DrumKitTests.cpp
@@ -15,7 +16,6 @@ add_executable(beatforge_tests
     unit/LevelMeterTests.cpp
     unit/InstrumentTests.cpp
     unit/MetronomeTests.cpp
-    unit/MidiSessionTests.cpp
     unit/MidiTests.cpp
     unit/MusicalTimeTests.cpp
     unit/ProjectFileTests.cpp

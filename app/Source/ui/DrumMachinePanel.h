@@ -3,6 +3,8 @@
 #include <beatforge/audio/AudioEngine.h>
 #include <beatforge/project/Session.h>
 
+#include "ui/Selection.h"
+
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <array>
@@ -18,7 +20,7 @@ namespace beatforge
                                    private juce::Timer
     {
     public:
-        DrumMachinePanel (audio::AudioEngine&, project::Session&);
+        DrumMachinePanel (audio::AudioEngine&, project::Session&, Selection&);
         ~DrumMachinePanel() override;
 
         void paint (juce::Graphics&) override;
@@ -27,21 +29,30 @@ namespace beatforge
         static juce::Colour laneColour (int lane);
 
         std::function<void()> onTextEditFinished;   // a rename finished: return focus
-        static constexpr int preferredHeight = 44 + audio::DrumMachine::numLanes * 44 + 12;
+        static constexpr int preferredHeight = 44 + 18 + audio::DrumMachine::numLanes * 44 + 12;
 
     private:
         class StepGrid;
         class LaneHeader;
 
         void timerCallback() override;
+        void refreshAll();
+
+        // What the panel edits: the selected drum track and clip (0 when none).
+        project::TrackId trackId() const;
+        project::ClipId clipId() const;
+        const project::Track* track() const;
+        const project::Clip* clip() const;
+        int slot() const;
 
         audio::AudioEngine& engine;
         project::Session& session;
-        int listenerId = 0;
+        Selection& selection;
+        int listenerId = 0, selectionListener = 0;
         juce::TextButton clearButton { "Clear" };
         std::unique_ptr<StepGrid> grid;
         std::array<std::unique_ptr<LaneHeader>, audio::DrumMachine::numLanes> headers;
-        juce::Rectangle<int> titleArea;
+        juce::Rectangle<int> titleArea, stepNumbers;
 
         std::array<std::uint32_t, audio::DrumMachine::numLanes> lastTriggerCounts {};
         std::array<float, audio::DrumMachine::numLanes> flashes {};

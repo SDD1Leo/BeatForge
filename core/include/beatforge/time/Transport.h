@@ -43,6 +43,10 @@ namespace beatforge::time
         // Back to tick 0 at sample 0.
         void rewind() noexcept;
 
+        // Continues from `tick` at the current sample. Events at exactly `tick`
+        // (grid lines, notes) fire on the next sample rendered.
+        void seekTo (double tick) noexcept;
+
         // Applied from the current sample onwards; earlier beats keep their timing.
         void setTempo (double bpm) noexcept;
         void setTimeSignature (TimeSignature) noexcept;

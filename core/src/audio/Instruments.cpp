@@ -119,7 +119,7 @@ namespace beatforge::audio
             v.amp.setParameters (p.attack, p.decay, p.sustain, p.release);
     }
 
-    void PolySynthInstrument::noteOn (midi::NoteId id, int pitch, int velocity) noexcept
+    void PolySynthInstrument::noteOn (VoiceId id, int pitch, int velocity) noexcept
     {
         Voice* target = nullptr;
         for (auto& v : voices)
@@ -150,7 +150,7 @@ namespace beatforge::audio
         v.startedAt = ++counter;
     }
 
-    void PolySynthInstrument::noteOff (midi::NoteId id) noexcept
+    void PolySynthInstrument::noteOff (VoiceId id) noexcept
     {
         for (auto& v : voices)
             if (v.id == id && v.amp.isActive() && v.amp.getStage() != dsp::Envelope::Stage::release)
@@ -273,7 +273,7 @@ namespace beatforge::audio
         }
     }
 
-    void MonoBassInstrument::noteOn (midi::NoteId id, int pitch, int velocity) noexcept
+    void MonoBassInstrument::noteOn (VoiceId id, int pitch, int velocity) noexcept
     {
         const bool legato = heldCount > 0 && amp.isActive() && amp.getStage() != dsp::Envelope::Stage::release;
 
@@ -301,7 +301,7 @@ namespace beatforge::audio
             startPitch (top.pitch, top.velocity, amp.isActive() && amp.getStage() != dsp::Envelope::Stage::release);
     }
 
-    void MonoBassInstrument::noteOff (midi::NoteId id) noexcept
+    void MonoBassInstrument::noteOff (VoiceId id) noexcept
     {
         int kept = 0;
         for (int i = 0; i < heldCount; ++i)

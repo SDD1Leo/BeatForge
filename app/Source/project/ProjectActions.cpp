@@ -244,6 +244,13 @@ namespace beatforge
         menu.addItem (item (4, "Save As...", "Ctrl+Shift+S"));
         menu.addSeparator();
         menu.addItem (item (5, "Rename...", {}));
+        menu.addSeparator();
+        auto undoItem = item (6, "Undo", "Ctrl+Z");
+        undoItem.isEnabled = session.canUndo();
+        auto redoItem = item (7, "Redo", "Ctrl+Shift+Z");
+        redoItem.isEnabled = session.canRedo();
+        menu.addItem (undoItem);
+        menu.addItem (redoItem);
 
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&anchor).withMinimumWidth (anchor.getWidth()),
                              [this] (int id)
@@ -256,6 +263,8 @@ namespace beatforge
                 case 3: save(); break;
                 case 4: saveAs(); break;
                 case 5: renameProject(); break;
+                case 6: session.undo(); break;
+                case 7: session.redo(); break;
                 default:
                     if (id >= recentBase)
                         openFile (recent.getFile (id - recentBase));

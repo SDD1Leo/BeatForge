@@ -1,376 +1,641 @@
 #include "beatforge/project/Session.h"
 
+#include "beatforge/project/ScheduleBuilder.h"
+
 #include <algorithm>
 #include <cmath>
 #include <utility>
 
 namespace beatforge::project
 {
-    Session::Session (audio::AudioEngine& e) : engine (e)
+    namespace
     {
-        applyAllToEngine();
+        bool validLane (int lane) noexcept { return lane >= 0 && lane < audio::DrumMachine::numLanes; }
+
+        void sortClips (Track& t)
+        {
+            std::stable_sort (t.clips.begin(), t.clips.end(), [] (const Clip& a, const Clip& b) { return a.start < b.start; });
+        }
+
+        template <typename T>
+        bool assign (T& target, const T& value)
+        {
+            if (target == value)
+                return false;
+            target = value;
+            return true;
+        }
     }
 
-    bool Session::validLane (int lane) noexcept
+    Session::Session (audio::AudioEngine& e) : engine (e)
     {
-        return lane >= 0 && lane < audio::DrumMachine::numLanes;
+        replaceProject (Project::makeDefault());
+        savedProject = project;
+    }
+
+    //==============================================================================
+    const Track* Session::findTrack (TrackId id) const noexcept
+    {
+        for (auto& t : project.tracks)
+            if (t.id == id)
+                return &t;
+        return nullptr;
+    }
+
+    const Clip* Session::findClip (ClipId id) const noexcept
+    {
+        for (auto& t : project.tracks)
+            for (auto& c : t.clips)
+                if (c.id == id)
+                    return &c;
+        return nullptr;
+    }
+
+    TrackId Session::trackOfClip (ClipId id) const noexcept
+    {
+        for (auto& t : project.tracks)
+            for (auto& c : t.clips)
+                if (c.id == id)
+                    return t.id;
+        return 0;
+    }
+
+    int Session::slotOf (TrackId id) const noexcept
+    {
+        for (size_t i = 0; i < slotTracks.size(); ++i)
+            if (slotTracks[i] == id && id != 0)
+                return (int) i;
+        return -1;
+    }
+
+    const midi::Note* Session::findNote (ClipId c, midi::NoteId n) const noexcept
+    {
+        if (auto* cl = findClip (c))
+            for (auto& note : cl->notes)
+                if (note.id == n)
+                    return &note;
+        return nullptr;
+    }
+
+    Track* Session::track (TrackId id) noexcept         { return const_cast<Track*> (std::as_const (*this).findTrack (id)); }
+    Clip* Session::clip (ClipId id) noexcept            { return const_cast<Clip*> (std::as_const (*this).findClip (id)); }
+
+    Track* Session::trackWithClip (ClipId id) noexcept
+    {
+        const auto t = trackOfClip (id);
+        return t != 0 ? track (t) : nullptr;
+    }
+
+    //==============================================================================
+    template <typename Mutate>
+    bool Session::edit (Change change, Mutate&& mutate)
+    {
+        const bool wasDirty = isDirty(), couldUndo = canUndo(), couldRedo = canRedo();
+        Project before = project;
+
+        if (! mutate (project))
+            return false;
+
+        if (gestureDepth == 0 || ! gestureRecorded)
+        {
+            undoStack.push_back (std::move (before));
+            if (undoStack.size() > maxUndoSteps)
+                undoStack.pop_front();
+            gestureRecorded = gestureDepth > 0;
+        }
+        redoStack.clear();
+
+        syncEngine (change);
+        notify (change, wasDirty, couldUndo, couldRedo);
+        return true;
+    }
+
+    void Session::notify (Change change, bool wasDirty, bool couldUndo, bool couldRedo)
+    {
+        auto current = listeners;   // a listener may add/remove listeners
+        const bool metadataChanged = wasDirty != isDirty() || couldUndo != canUndo() || couldRedo != canRedo();
+
+        for (auto& [id, listener] : current)
+        {
+            listener (change);
+            if (metadataChanged && change != Change::metadata)
+                listener (Change::metadata);
+        }
+    }
+
+    //==============================================================================
+    void Session::assignSlots()
+    {
+        // Free slots of tracks that no longer exist.
+        for (auto& s : slotTracks)
+            if (s != 0 && findTrack (s) == nullptr)
+                s = 0;
+
+        // Give every track a slot, keeping existing ones (their voices keep ringing).
+        for (auto& t : project.tracks)
+            if (slotOf (t.id) < 0)
+                for (auto& s : slotTracks)
+                    if (s == 0) { s = t.id; break; }
+    }
+
+    void Session::syncEngine (Change change)
+    {
+        engine.setTempo (project.tempo);
+        engine.setTimeSignature (project.timeSignature);
+        engine.setMetronomeEnabled (project.metronomeEnabled);
+        engine.setLoop (project.loopEnabled, project.loopStart, project.loopEnd);
+
+        if (change == Change::transport || change == Change::metadata)
+            return;
+
+        assignSlots();
+
+        for (int slot = 0; slot < audio::AudioEngine::maxTracks; ++slot)
+        {
+            const auto* t = findTrack (slotTracks[(size_t) slot]);
+            if (t == nullptr)
+            {
+                if (engine.getSlotType (slot) != audio::SlotType::none)
+                {
+                    engine.setSlotType (slot, audio::SlotType::none);
+                    engine.setSlotSchedule (slot, nullptr);
+                }
+                continue;
+            }
+
+            engine.setSlotType (slot, t->type == TrackType::drums ? audio::SlotType::drums : audio::SlotType::instrument);
+            engine.setSlotMix (slot, t->volumeDb, t->pan, t->muted, t->soloed);
+
+            if (t->type == TrackType::drums)
+            {
+                auto& drums = engine.drums (slot);
+                for (int lane = 0; lane < audio::DrumMachine::numLanes; ++lane)
+                {
+                    const auto& l = t->lanes[(size_t) lane];
+                    drums.setLaneGainDb (lane, l.gainDb);
+                    drums.setLaneMuted (lane, l.muted);
+                    drums.setLaneSoloed (lane, l.soloed);
+                }
+            }
+            else
+            {
+                auto& rack = engine.instruments (slot);
+                rack.setType (t->instrument);
+                for (int type = 0; type < audio::numInstrumentTypes; ++type)
+                    for (int p = 0; p < audio::numParams; ++p)
+                        rack.params ((audio::InstrumentType) type).set ((audio::Param) p, t->instrumentParams[(size_t) type][(size_t) p]);
+            }
+
+            if (change == Change::clips || change == Change::replaced)
+                engine.setSlotSchedule (slot, buildSchedule (*t));
+        }
+    }
+
+    void Session::refreshIds()
+    {
+        nextTrackId = nextClipId = nextNoteId = 1;
+        for (auto& t : project.tracks)
+        {
+            nextTrackId = std::max (nextTrackId, t.id + 1);
+            for (auto& c : t.clips)
+            {
+                nextClipId = std::max (nextClipId, c.id + 1);
+                for (auto& n : c.notes)
+                    nextNoteId = std::max (nextNoteId, n.id + 1);
+            }
+        }
+    }
+
+    void Session::replaceProject (Project p)
+    {
+        project = std::move (p);
+
+        // Files carry no ids; give anything without one a fresh id.
+        refreshIds();
+        for (auto& t : project.tracks)
+        {
+            if (t.id == 0) t.id = nextTrackId++;
+            for (auto& c : t.clips)
+            {
+                if (c.id == 0) c.id = nextClipId++;
+                for (auto& n : c.notes)
+                    if (n.id == 0) n.id = nextNoteId++;
+            }
+            sortClips (t);
+        }
+        refreshIds();
+        syncEngine (Change::replaced);
     }
 
     //==============================================================================
     void Session::setTempo (double bpm)
     {
         bpm = time::clampTempo (bpm);
-        if (bpm == project.tempo)
-            return;
-
-        project.tempo = bpm;
-        engine.setTempo (bpm);
-        changed (Change::transport);
+        edit (Change::transport, [&] (Project& p) { return assign (p.tempo, bpm); });
     }
 
     void Session::setTimeSignature (time::TimeSignature sig)
     {
-        if (! sig.isValid() || sig == project.timeSignature)
-            return;
-
-        project.timeSignature = sig;
-        engine.setTimeSignature (sig);
-        applyLoop();   // loop length is in bars
-        changed (Change::transport);
+        if (sig.isValid())
+            edit (Change::transport, [&] (Project& p) { return assign (p.timeSignature, sig); });
     }
 
     void Session::setMetronomeEnabled (bool enabled)
     {
-        if (enabled == project.metronomeEnabled)
-            return;
-
-        project.metronomeEnabled = enabled;
-        engine.setMetronomeEnabled (enabled);
-        changed (Change::transport);
+        edit (Change::transport, [&] (Project& p) { return assign (p.metronomeEnabled, enabled); });
     }
 
-    void Session::setLoop (bool enabled, int bars)
+    void Session::setLoop (bool enabled, time::Tick start, time::Tick end)
     {
-        if (! Project::isValidLoopBars (bars))
-            bars = project.loopBars;
-
-        if (enabled == project.loopEnabled && bars == project.loopBars)
+        if (start < 0 || end <= start)
             return;
-
-        project.loopEnabled = enabled;
-        project.loopBars = bars;
-        applyLoop();
-        changed (Change::transport);
-    }
-
-    void Session::applyLoop()
-    {
-        engine.setLoop (project.loopEnabled, 0, project.timeSignature.ticksPerBar() * project.loopBars);
-    }
-
-    //==============================================================================
-    void Session::setStep (int lane, int step, bool on)
-    {
-        if (! validLane (lane) || step < 0 || step >= audio::DrumMachine::numSteps)
-            return;
-
-        auto& s = project.lanes[(size_t) lane].steps[(size_t) step];
-        if (s == on)
-            return;
-
-        s = on;
-        engine.getDrumMachine().setStep (lane, step, on);
-        changed (Change::pattern);
-    }
-
-    void Session::clearPattern()
-    {
-        bool any = false;
-        for (auto& lane : project.lanes)
-            for (auto& s : lane.steps)
-                any |= std::exchange (s, false);
-
-        if (! any)
-            return;
-
-        engine.getDrumMachine().clearPattern();
-        changed (Change::pattern);
-    }
-
-    void Session::setLaneGainDb (int lane, float db)
-    {
-        if (! validLane (lane))
-            return;
-
-        db = std::clamp (db, audio::DrumMachine::minGainDb, audio::DrumMachine::maxGainDb);
-        auto& stored = project.lanes[(size_t) lane].gainDb;
-        if (db == stored)
-            return;
-
-        stored = db;
-        engine.getDrumMachine().setLaneGainDb (lane, db);
-        changed (Change::lanes);
-    }
-
-    void Session::setLaneMuted (int lane, bool muted)
-    {
-        if (! validLane (lane) || project.lanes[(size_t) lane].muted == muted)
-            return;
-
-        project.lanes[(size_t) lane].muted = muted;
-        engine.getDrumMachine().setLaneMuted (lane, muted);
-        changed (Change::lanes);
-    }
-
-    void Session::setLaneSoloed (int lane, bool soloed)
-    {
-        if (! validLane (lane) || project.lanes[(size_t) lane].soloed == soloed)
-            return;
-
-        project.lanes[(size_t) lane].soloed = soloed;
-        engine.getDrumMachine().setLaneSoloed (lane, soloed);
-        changed (Change::lanes);
-    }
-
-    bool Session::renameLane (int lane, const std::string& name)
-    {
-        if (! validLane (lane) || name.empty() || name.size() > (size_t) Project::maxLaneNameLength)
-            return false;
-
-        if (project.lanes[(size_t) lane].name != name)
+        edit (Change::transport, [&] (Project& p)
         {
-            project.lanes[(size_t) lane].name = name;
-            changed (Change::lanes);
-        }
-        return true;
+            const bool a = assign (p.loopEnabled, enabled);
+            const bool b = assign (p.loopStart, start);
+            const bool c = assign (p.loopEnd, end);
+            return a || b || c;
+        });
     }
 
     bool Session::renameProject (const std::string& name)
     {
         if (name.empty() || name.size() > (size_t) Project::maxNameLength)
             return false;
-
-        if (project.name != name)
-        {
-            project.name = name;
-            changed (Change::metadata);
-        }
+        edit (Change::metadata, [&] (Project& p) { return assign (p.name, name); });
         return true;
     }
 
     //==============================================================================
-    //==============================================================================
-    void Session::createMidiClip (int bars)
+    TrackId Session::addTrack (TrackType type)
     {
-        if (project.synthClip || ! Project::isValidClipBars (bars))
-            return;
-
-        project.synthClip = midi::Clip { project.timeSignature.ticksPerBar() * bars, {} };
-        notesChanged();
-    }
-
-    void Session::setMidiClipBars (int bars)
-    {
-        if (! project.synthClip || ! Project::isValidClipBars (bars))
-            return;
-
-        const auto length = project.timeSignature.ticksPerBar() * bars;
-        if (length == project.synthClip->length)
-            return;
-
-        // Notes past a shorter end are kept (silent and hidden) so lengthening
-        // the clip again brings them back.
-        project.synthClip->length = length;
-        notesChanged();
-    }
-
-    int Session::getMidiClipBars() const noexcept
-    {
-        return project.synthClip ? (int) (project.synthClip->length / project.timeSignature.ticksPerBar()) : 0;
-    }
-
-    midi::NoteId Session::addNote (midi::Note note)
-    {
-        if (! project.synthClip)
+        if ((int) project.tracks.size() >= Project::maxTracks)
             return 0;
 
-        note = midi::constrained (note, project.synthClip->length);
-        note.id = nextNoteId++;
-        project.synthClip->notes.push_back (note);
-        notesChanged();
-        return note.id;
-    }
-
-    void Session::updateNotes (const std::vector<midi::Note>& updates)
-    {
-        if (! project.synthClip)
-            return;
-
-        bool any = false;
-        for (const auto& update : updates)
-            for (auto& n : project.synthClip->notes)
-                if (n.id == update.id)
-                {
-                    const auto next = midi::constrained (update, project.synthClip->length);
-                    any |= ! (next == n);
-                    n = next;
-                }
-
-        if (any)
-            notesChanged();
-    }
-
-    void Session::removeNotes (const std::vector<midi::NoteId>& ids)
-    {
-        if (! project.synthClip)
-            return;
-
-        const auto removed = std::erase_if (project.synthClip->notes, [&] (const midi::Note& n)
+        const auto id = nextTrackId;
+        edit (Change::tracks, [&] (Project& p)
         {
-            return std::find (ids.begin(), ids.end(), n.id) != ids.end();
+            Track t;
+            t.id = id;
+            t.type = type;
+
+            // "Drums", "Drums 2", ... / "Synth", "Synth 2", ...
+            const std::string base = type == TrackType::drums ? "Drums" : "Synth";
+            int count = 0;
+            for (auto& existing : p.tracks)
+                count += existing.type == type ? 1 : 0;
+            t.name = count == 0 ? base : base + " " + std::to_string (count + 1);
+
+            p.tracks.push_back (t);
+            return true;
         });
-
-        for (auto id : ids)
-            project.noteExtra.erase (id);
-
-        if (removed > 0)
-            notesChanged();
+        ++nextTrackId;
+        return id;
     }
 
-    void Session::quantizeNotes (const std::vector<midi::NoteId>& ids, time::Tick grid)
+    bool Session::removeTrack (TrackId id)
     {
-        if (! project.synthClip || ! midi::isValidGrid (grid))
+        return edit (Change::clips, [&] (Project& p)
+        {
+            return std::erase_if (p.tracks, [&] (const Track& t) { return t.id == id; }) > 0;
+        });
+    }
+
+    bool Session::renameTrack (TrackId id, const std::string& name)
+    {
+        if (name.empty() || name.size() > (size_t) Project::maxNameLength || findTrack (id) == nullptr)
+            return false;
+        edit (Change::tracks, [&] (Project&) { return assign (track (id)->name, name); });
+        return true;
+    }
+
+    void Session::setTrackVolume (TrackId id, float db)
+    {
+        if (findTrack (id) == nullptr || ! std::isfinite (db)) return;
+        db = std::clamp (db, Project::minVolumeDb, Project::maxVolumeDb);
+        edit (Change::tracks, [&] (Project&) { return assign (track (id)->volumeDb, db); });
+    }
+
+    void Session::setTrackPan (TrackId id, float pan)
+    {
+        if (findTrack (id) == nullptr || ! std::isfinite (pan)) return;
+        pan = std::clamp (pan, -1.0f, 1.0f);
+        edit (Change::tracks, [&] (Project&) { return assign (track (id)->pan, pan); });
+    }
+
+    void Session::setTrackMuted (TrackId id, bool m)
+    {
+        if (findTrack (id) != nullptr) edit (Change::tracks, [&] (Project&) { return assign (track (id)->muted, m); });
+    }
+
+    void Session::setTrackSoloed (TrackId id, bool s)
+    {
+        if (findTrack (id) != nullptr) edit (Change::tracks, [&] (Project&) { return assign (track (id)->soloed, s); });
+    }
+
+    void Session::setLaneGainDb (TrackId id, int lane, float db)
+    {
+        auto* t = findTrack (id);
+        if (t == nullptr || t->type != TrackType::drums || ! validLane (lane) || ! std::isfinite (db)) return;
+        db = std::clamp (db, audio::DrumMachine::minGainDb, audio::DrumMachine::maxGainDb);
+        edit (Change::tracks, [&] (Project&) { return assign (track (id)->lanes[(size_t) lane].gainDb, db); });
+    }
+
+    void Session::setLaneMuted (TrackId id, int lane, bool m)
+    {
+        auto* t = findTrack (id);
+        if (t != nullptr && t->type == TrackType::drums && validLane (lane))
+            edit (Change::tracks, [&] (Project&) { return assign (track (id)->lanes[(size_t) lane].muted, m); });
+    }
+
+    void Session::setLaneSoloed (TrackId id, int lane, bool s)
+    {
+        auto* t = findTrack (id);
+        if (t != nullptr && t->type == TrackType::drums && validLane (lane))
+            edit (Change::tracks, [&] (Project&) { return assign (track (id)->lanes[(size_t) lane].soloed, s); });
+    }
+
+    bool Session::renameLane (TrackId id, int lane, const std::string& name)
+    {
+        auto* t = findTrack (id);
+        if (t == nullptr || t->type != TrackType::drums || ! validLane (lane)
+            || name.empty() || name.size() > (size_t) Project::maxLaneNameLength)
+            return false;
+        edit (Change::tracks, [&] (Project&) { return assign (track (id)->lanes[(size_t) lane].name, name); });
+        return true;
+    }
+
+    void Session::setInstrument (TrackId id, audio::InstrumentType type)
+    {
+        auto* t = findTrack (id);
+        if (t != nullptr && t->type == TrackType::instrument)
+            edit (Change::instrument, [&] (Project&) { return assign (track (id)->instrument, type); });
+    }
+
+    void Session::setInstrumentParam (TrackId id, audio::InstrumentType type, audio::Param param, float value)
+    {
+        auto* t = findTrack (id);
+        if (t == nullptr || t->type != TrackType::instrument || ! std::isfinite (value))
             return;
 
-        const auto before = project.synthClip->notes;
-        midi::quantize (project.synthClip->notes, grid, project.synthClip->length, ids);
-
-        if (project.synthClip->notes != before)
-            notesChanged();
-    }
-
-    const midi::Note* Session::findNote (midi::NoteId id) const noexcept
-    {
-        if (project.synthClip)
-            for (auto& n : project.synthClip->notes)
-                if (n.id == id)
-                    return &n;
-        return nullptr;
-    }
-
-    void Session::setInstrument (audio::InstrumentType type)
-    {
-        if (type == project.instrument)
-            return;
-
-        project.instrument = type;
-        engine.getInstruments().setType (type);
-        changed (Change::instrument);
-    }
-
-    void Session::setInstrumentParam (audio::InstrumentType type, audio::Param param, float value)
-    {
         const auto& spec = audio::paramSpec (param);
-        if (! std::isfinite (value))
-            return;
         if (param == audio::Param::wave)
             value = std::round (value);
         value = std::clamp (value, spec.min, spec.max);
+        edit (Change::instrument, [&] (Project&) { return assign (track (id)->instrumentParams[(size_t) type][(size_t) param], value); });
+    }
 
-        auto& stored = project.instrumentParams[(size_t) type][(size_t) param];
-        if (stored == value)
+    float Session::getInstrumentParam (TrackId id, audio::InstrumentType type, audio::Param param) const noexcept
+    {
+        if (auto* t = findTrack (id))
+            return t->instrumentParams[(size_t) type][(size_t) param];
+        return audio::defaultValue (type, param);
+    }
+
+    void Session::resetInstrumentParams (TrackId id, audio::InstrumentType type)
+    {
+        auto* t = findTrack (id);
+        if (t == nullptr || t->type != TrackType::instrument)
+            return;
+        const auto defaults = Track::defaultInstrumentParams()[(size_t) type];
+        edit (Change::instrument, [&] (Project&) { return assign (track (id)->instrumentParams[(size_t) type], defaults); });
+    }
+
+    //==============================================================================
+    ClipId Session::createClip (TrackId trackId, time::Tick start, time::Tick length)
+    {
+        if (findTrack (trackId) == nullptr || start < 0 || length < 1 || length > Project::maxClipLength)
+            return 0;
+
+        const auto id = nextClipId;
+        edit (Change::clips, [&] (Project&)
+        {
+            Clip c;
+            c.id = id;
+            c.start = start;
+            c.length = length;
+            auto* t = track (trackId);
+            t->clips.push_back (c);
+            sortClips (*t);
+            return true;
+        });
+        ++nextClipId;
+        return id;
+    }
+
+    bool Session::deleteClip (ClipId id)
+    {
+        return edit (Change::clips, [&] (Project&)
+        {
+            auto* t = trackWithClip (id);
+            return t != nullptr && std::erase_if (t->clips, [&] (const Clip& c) { return c.id == id; }) > 0;
+        });
+    }
+
+    void Session::moveClip (ClipId id, time::Tick newStart, TrackId toTrack)
+    {
+        auto* from = trackWithClip (id);
+        if (from == nullptr || newStart < 0)
+            return;
+        if (toTrack == 0)
+            toTrack = from->id;
+        auto* to = findTrack (toTrack);
+        if (to == nullptr || to->type != from->type)
             return;
 
-        stored = value;
-        engine.getInstruments().params (type).set (param, value);
-        changed (Change::instrument);
+        edit (Change::clips, [&] (Project&)
+        {
+            auto* src = trackWithClip (id);
+            auto it = std::find_if (src->clips.begin(), src->clips.end(), [&] (const Clip& c) { return c.id == id; });
+            if (it->start == newStart && src->id == toTrack)
+                return false;
+
+            Clip moved = *it;
+            moved.start = newStart;
+            src->clips.erase (it);
+            auto* dst = track (toTrack);
+            dst->clips.push_back (moved);
+            sortClips (*src);
+            sortClips (*dst);
+            return true;
+        });
     }
 
-    float Session::getInstrumentParam (audio::InstrumentType type, audio::Param param) const noexcept
+    void Session::resizeClip (ClipId id, time::Tick newLength)
     {
-        return project.instrumentParams[(size_t) type][(size_t) param];
-    }
-
-    void Session::resetInstrumentParams (audio::InstrumentType type)
-    {
-        const auto defaults = Project::defaultInstrumentParams()[(size_t) type];
-        if (project.instrumentParams[(size_t) type] == defaults)
+        if (newLength < 1 || newLength > Project::maxClipLength || findClip (id) == nullptr)
             return;
-
-        project.instrumentParams[(size_t) type] = defaults;
-        for (int p = 0; p < audio::numParams; ++p)
-            engine.getInstruments().params (type).set ((audio::Param) p, defaults[(size_t) p]);
-        changed (Change::instrument);
+        edit (Change::clips, [&] (Project&) { return assign (clip (id)->length, newLength); });
     }
 
-    void Session::notesChanged()
+    ClipId Session::duplicateClip (ClipId id)
     {
-        engine.setMidiClip (project.synthClip ? &*project.synthClip : nullptr);
-        changed (Change::notes);
+        if (findClip (id) == nullptr)
+            return 0;
+
+        const auto newId = nextClipId;
+        edit (Change::clips, [&] (Project&)
+        {
+            auto* t = trackWithClip (id);
+            Clip copy = *clip (id);
+            copy.id = newId;
+            copy.start = copy.end();
+            t->clips.push_back (copy);
+            sortClips (*t);
+            return true;
+        });
+        ++nextClipId;
+        return newId;
     }
 
-    // Notes loaded from a file have no ids yet; ids only need to be unique.
-    void Session::assignNoteIds()
+    //==============================================================================
+    void Session::setStep (ClipId id, int lane, int step, bool on)
     {
-        nextNoteId = 1;
-        if (project.synthClip)
-            for (auto& n : project.synthClip->notes)
-                nextNoteId = std::max (nextNoteId, n.id + 1);
+        auto* t = trackWithClip (id);
+        if (t == nullptr || t->type != TrackType::drums || ! validLane (lane) || step < 0 || step >= stepsPerPattern)
+            return;
+        edit (Change::clips, [&] (Project&) { return assign (clip (id)->pattern[(size_t) lane][(size_t) step], on); });
+    }
 
-        if (project.synthClip)
-            for (auto& n : project.synthClip->notes)
-                if (n.id == 0)
-                    n.id = nextNoteId++;
+    void Session::clearPattern (ClipId id)
+    {
+        auto* t = trackWithClip (id);
+        if (t == nullptr || t->type != TrackType::drums)
+            return;
+        edit (Change::clips, [&] (Project&) { return assign (clip (id)->pattern, DrumPattern {}); });
+    }
+
+    midi::NoteId Session::addNote (ClipId id, midi::Note note)
+    {
+        auto* t = trackWithClip (id);
+        if (t == nullptr || t->type != TrackType::instrument)
+            return 0;
+
+        const auto noteId = nextNoteId;
+        edit (Change::clips, [&] (Project&)
+        {
+            auto* c = clip (id);
+            note = midi::constrained (note, c->length);
+            note.id = noteId;
+            c->notes.push_back (note);
+            return true;
+        });
+        ++nextNoteId;
+        return noteId;
+    }
+
+    void Session::updateNotes (ClipId id, const std::vector<midi::Note>& updates)
+    {
+        if (findClip (id) == nullptr)
+            return;
+        edit (Change::clips, [&] (Project&)
+        {
+            auto* c = clip (id);
+            bool any = false;
+            for (const auto& u : updates)
+                for (auto& n : c->notes)
+                    if (n.id == u.id)
+                    {
+                        const auto next = midi::constrained (u, c->length);
+                        any |= ! (next == n);
+                        n = next;
+                    }
+            return any;
+        });
+    }
+
+    void Session::removeNotes (ClipId id, const std::vector<midi::NoteId>& ids)
+    {
+        if (findClip (id) == nullptr)
+            return;
+        edit (Change::clips, [&] (Project&)
+        {
+            auto* c = clip (id);
+            const auto removed = std::erase_if (c->notes, [&] (const midi::Note& n)
+            {
+                return std::find (ids.begin(), ids.end(), n.id) != ids.end();
+            });
+            for (auto n : ids)
+                c->noteExtra.erase (n);
+            return removed > 0;
+        });
+    }
+
+    void Session::quantizeNotes (ClipId id, const std::vector<midi::NoteId>& ids, time::Tick grid)
+    {
+        if (findClip (id) == nullptr || ! midi::isValidGrid (grid))
+            return;
+        edit (Change::clips, [&] (Project&)
+        {
+            auto* c = clip (id);
+            const auto before = c->notes;
+            midi::quantize (c->notes, grid, c->length, ids);
+            return c->notes != before;
+        });
+    }
+
+    //==============================================================================
+    void Session::beginGesture()
+    {
+        if (gestureDepth++ == 0)
+            gestureRecorded = false;
+    }
+
+    void Session::endGesture()
+    {
+        if (gestureDepth > 0 && --gestureDepth == 0)
+            gestureRecorded = false;
+    }
+
+    void Session::undo()
+    {
+        if (undoStack.empty())
+            return;
+        const bool wasDirty = isDirty(), couldUndo = canUndo(), couldRedo = canRedo();
+        redoStack.push_back (project);
+        project = std::move (undoStack.back());
+        undoStack.pop_back();
+        refreshIds();
+        syncEngine (Change::replaced);
+        notify (Change::replaced, wasDirty, couldUndo, couldRedo);
+    }
+
+    void Session::redo()
+    {
+        if (redoStack.empty())
+            return;
+        const bool wasDirty = isDirty(), couldUndo = canUndo(), couldRedo = canRedo();
+        undoStack.push_back (project);
+        project = std::move (redoStack.back());
+        redoStack.pop_back();
+        refreshIds();
+        syncEngine (Change::replaced);
+        notify (Change::replaced, wasDirty, couldUndo, couldRedo);
     }
 
     //==============================================================================
     void Session::newProject()
     {
-        openProject (Project {}, std::nullopt);
+        openProject (Project::makeDefault(), std::nullopt);
     }
 
     void Session::openProject (Project p, std::optional<std::filesystem::path> f)
     {
-        project = std::move (p);
+        const bool wasDirty = isDirty(), couldUndo = canUndo(), couldRedo = canRedo();
+        replaceProject (std::move (p));
+        savedProject = project;
         file = std::move (f);
-        dirty = false;
-        assignNoteIds();
-        applyAllToEngine();
-        changed (Change::replaced, false);
+        undoStack.clear();
+        redoStack.clear();
+        notify (Change::replaced, wasDirty, couldUndo, couldRedo);
     }
 
     void Session::markSaved (const std::filesystem::path& f)
     {
+        const bool wasDirty = isDirty(), couldUndo = canUndo(), couldRedo = canRedo();
+        savedProject = project;
         file = f;
-        dirty = false;
-        changed (Change::metadata, false);
-    }
-
-    void Session::applyAllToEngine()
-    {
-        engine.setTempo (project.tempo);
-        engine.setTimeSignature (project.timeSignature);
-        engine.setMetronomeEnabled (project.metronomeEnabled);
-        applyLoop();
-
-        auto& drums = engine.getDrumMachine();
-        for (int lane = 0; lane < audio::DrumMachine::numLanes; ++lane)
-        {
-            const auto& l = project.lanes[(size_t) lane];
-            drums.setLaneGainDb (lane, l.gainDb);
-            drums.setLaneMuted (lane, l.muted);
-            drums.setLaneSoloed (lane, l.soloed);
-            for (int step = 0; step < audio::DrumMachine::numSteps; ++step)
-                drums.setStep (lane, step, l.steps[(size_t) step]);
-        }
-
-        engine.setMidiClip (project.synthClip ? &*project.synthClip : nullptr);
-
-        auto& rack = engine.getInstruments();
-        rack.setType (project.instrument);
-        for (int t = 0; t < audio::numInstrumentTypes; ++t)
-            for (int p = 0; p < audio::numParams; ++p)
-                rack.params ((audio::InstrumentType) t).set ((audio::Param) p, project.instrumentParams[(size_t) t][(size_t) p]);
+        notify (Change::metadata, wasDirty, couldUndo, couldRedo);
     }
 
     //==============================================================================
@@ -383,20 +648,5 @@ namespace beatforge::project
     void Session::removeListener (int id)
     {
         std::erase_if (listeners, [id] (auto& l) { return l.first == id; });
-    }
-
-    void Session::changed (Change change, bool makesDirty)
-    {
-        const bool becameDirty = makesDirty && ! dirty;
-        dirty = dirty || makesDirty;
-
-        // Copy: a listener may add/remove listeners.
-        auto current = listeners;
-        for (auto& [id, listener] : current)
-        {
-            listener (change);
-            if (becameDirty && change != Change::metadata)
-                listener (Change::metadata);
-        }
     }
 }

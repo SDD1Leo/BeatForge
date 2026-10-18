@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.7.0] — Phase 7: arrangement view (awaiting user test)
+
+### Added
+- Arrangement as the main screen: ruler, track headers, lanes with clips.
+- Up to 16 tracks, drum or synth. Add with "+ Drums" / "+ Synth"; rename
+  (double-click the name) and delete (right-click).
+- Per-track volume, pan, mute and solo, smoothed on the audio thread
+  (mute and solo are exact silence).
+- Clips on a timeline: double-click to create, drag to move (snaps to beats,
+  also onto another track of the same kind), drag the right edge to resize,
+  Ctrl+D / right-click Duplicate, Delete key / right-click Delete. Clips show
+  their pattern or notes.
+- Loop region: drag across the ruler's top strip (bar lines); seek by clicking
+  below it. Play starts from the seek point and Stop returns there.
+- Undo / redo for every edit (Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y, project menu),
+  200 steps; a whole drag is one step.
+- The editors follow the selection: the Step Sequencer or Piano Roll for the
+  selected clip, the Instrument tab for the selected synth track (Ctrl+1 / Ctrl+2).
+- Project format v2 (tracks with clips, loop start/end). 0.4–0.6 files are
+  upgraded on open (pattern → drum clip, synth clip → synth track, loop kept)
+  and unknown data is still preserved.
+- 8 new test cases (126 ctest in total), including timeline placement, mixing,
+  seek, and allocation-free slot changes.
+
+### Changed
+- Engine: 16 track slots with their own drum machine or instrument; schedules
+  are built from clips and handed to the audio thread lock-free.
+- The loop-length dropdown is gone; the loop button toggles the ruler's region.
+- Shortcut Ctrl+3 removed (two editor tabs now).
+
+### Fixed
+- A drag across the loop strip took in the bar under the release point
+  (dragging to the bar-5 line looped bars 3–6 instead of 3–5).
+
 ## [0.6.0] — Phase 6: built-in synthesizer and bass (approved 2026-10-18)
 
 ### Added

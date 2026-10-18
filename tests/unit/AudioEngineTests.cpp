@@ -1,4 +1,5 @@
 #include "AllocationGuard.h"
+#include "EngineHelpers.h"
 
 #include <beatforge/audio/AudioEngine.h>
 
@@ -232,18 +233,25 @@ TEST_CASE ("Audio callback path never allocates", "[audio][engine][realtime]")
     FakeDevice device (engine, 48000.0, 256);   // allocates here, outside the guard
     device.recording.reserve (1 << 20);
 
+    beatforge::project::DrumPattern busy {};
     for (int step = 0; step < 16; ++step)
         for (int lane = 0; lane < DrumMachine::numLanes; ++lane)
-            engine.getDrumMachine().setStep (lane, step, (step + lane) % 3 == 0);
+            busy[(size_t) lane][(size_t) step] = (step + lane) % 3 == 0;
+    beatforge::test::playPattern (engine, 0, busy, 16);
+    beatforge::test::playNotes (engine, 1, { { 0, 48, 100, 0, 960 }, { 0, 55, 100, 480, 960 }, { 0, 60, 100, 960, 1920 } }, 3840, false);
 
     beatforge::test::ScopedAllocationCounter allocations;
     engine.setMetronomeEnabled (true);
-    engine.getDrumMachine().preview (2);
+    engine.drums (0).preview (2);
+    engine.previewNoteOn (1, 72, 100);
     engine.play();
     device.runBlocks (100);
-    engine.getDrumMachine().setLaneMuted (1, true);
-    engine.getDrumMachine().setLaneSoloed (0, true);
-    engine.getDrumMachine().setLaneGainDb (0, -6.0f);
+    engine.drums (0).setLaneMuted (1, true);
+    engine.drums (0).setLaneSoloed (0, true);
+    engine.drums (0).setLaneGainDb (0, -6.0f);
+    engine.setSlotMix (1, -3.0f, 0.5f, false, true);
+    engine.seek (960.0);
+    engine.instruments (1).setType (InstrumentType::monoBass);
     engine.setTempo (90.0);
     engine.setTimeSignature ({ 7, 8 });
     engine.setLoop (true, 0, 3360);

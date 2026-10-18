@@ -42,7 +42,7 @@ namespace beatforge
         // --- geometry -------------------------------------------------------------
         time::Tick clipLength() const
         {
-            const auto& clip = owner.session.getProject().synthClip;
+            const auto* clip = owner.clipPtr();
             return clip ? clip->length : 3840;
         }
 
@@ -61,7 +61,7 @@ namespace beatforge
 
         const midi::Note* noteAt (juce::Point<float> p) const
         {
-            const auto& clip = owner.session.getProject().synthClip;
+            const auto* clip = owner.clipPtr();
             if (! clip) return nullptr;
             // Topmost = last drawn = last in the list.
             for (auto it = clip->notes.rbegin(); it != clip->notes.rend(); ++it)
@@ -81,7 +81,7 @@ namespace beatforge
         // --- painting -------------------------------------------------------------
         void paint (juce::Graphics& g) override
         {
-            const auto clip = owner.session.getProject().synthClip;
+            const auto* clip = owner.clipPtr();
             const auto clipLen = clipLength();
             const auto grid = owner.gridTicks();
             const auto perBeat = owner.session.getProject().timeSignature.ticksPerBeat();
@@ -216,12 +216,12 @@ namespace beatforge
             if (pos.x < gridLeft())   // keyboard: audition
             {
                 heldPitch = yToPitch (pos.y);
-                owner.engine.previewNoteOn (heldPitch, 100);
+                owner.engine.previewNoteOn (owner.slot(), heldPitch, 100);
                 repaint (0, 0, keyboardWidth, getHeight());
                 return;
             }
 
-            if (! owner.session.getProject().synthClip)
+            if (owner.clipPtr() == nullptr)
                 return;
 
             const auto* hit = noteAt (pos);
@@ -230,7 +230,7 @@ namespace beatforge
             if (hit != nullptr && e.mods.isPopupMenu())
             {
                 owner.selection.erase (hit->id);
-                owner.session.removeNotes ({ hit->id });
+                owner.session.removeNotes (owner.clipId(), { hit->id });
                 return;
             }
 
@@ -251,12 +251,13 @@ namespace beatforge
                 anchorId = hit->id;
                 originals.clear();
                 for (auto id : owner.selection)
-                    if (auto* n = owner.session.findNote (id))
+                    if (auto* n = owner.session.findNote (owner.clipId(), id))
                         originals.push_back (*n);
 
                 mode = noteBounds (*hit).getRight() - pos.x <= 6.0f ? Mode::resize : Mode::move;
+                owner.session.beginGesture();   // the whole drag is one undo step
                 auditionPitch = hit->pitch;
-                owner.engine.previewNoteOn (auditionPitch, hit->velocity);
+                owner.engine.previewNoteOn (owner.slot(), auditionPitch, hit->velocity);
                 owner.repaint();
                 return;
             }
@@ -276,9 +277,9 @@ namespace beatforge
                 const auto pitch = yToPitch (pos.y);
                 if (pitch != heldPitch)
                 {
-                    owner.engine.previewNoteOff (heldPitch);
+                    owner.engine.previewNoteOff (owner.slot(), heldPitch);
                     heldPitch = pitch;
-                    owner.engine.previewNoteOn (heldPitch, 100);
+                    owner.engine.previewNoteOn (owner.slot(), heldPitch, 100);
                     repaint (0, 0, keyboardWidth, getHeight());
                 }
                 return;
@@ -313,13 +314,13 @@ namespace beatforge
                         n.pitch = juce::jlimit (midi::minPitch, midi::maxPitch, n.pitch + deltaPitch);
                         moved.push_back (n);
                     }
-                    owner.session.updateNotes (moved);
+                    owner.session.updateNotes (owner.clipId(), moved);
 
-                    if (auto* anchor = owner.session.findNote (anchorId); anchor && anchor->pitch != auditionPitch)
+                    if (auto* anchor = owner.session.findNote (owner.clipId(), anchorId); anchor && anchor->pitch != auditionPitch)
                     {
-                        owner.engine.previewNoteOff (auditionPitch);
+                        owner.engine.previewNoteOff (owner.slot(), auditionPitch);
                         auditionPitch = anchor->pitch;
-                        owner.engine.previewNoteOn (auditionPitch, anchor->velocity);
+                        owner.engine.previewNoteOn (owner.slot(), auditionPitch, anchor->velocity);
                     }
                     break;
                 }
@@ -332,8 +333,8 @@ namespace beatforge
                         n.length = juce::jmax<time::Tick> (grid, n.length + deltaTicks);
                         resized.push_back (n);
                     }
-                    owner.session.updateNotes (resized);
-                    if (auto* anchor = owner.session.findNote (anchorId))
+                    owner.session.updateNotes (owner.clipId(), resized);
+                    if (auto* anchor = owner.session.findNote (owner.clipId(), anchorId))
                         owner.newNoteLength = anchor->length;
                     break;
                 }
@@ -347,7 +348,7 @@ namespace beatforge
         {
             if (heldPitch >= 0)
             {
-                owner.engine.previewNoteOff (heldPitch);
+                owner.engine.previewNoteOff (owner.slot(), heldPitch);
                 heldPitch = -1;
                 repaint (0, 0, keyboardWidth, getHeight());
                 return;
@@ -358,21 +359,24 @@ namespace beatforge
                 const auto grid = owner.gridTicks();
                 const auto start = (time::Tick) std::floor (xToTick (e.position.x) / (double) grid) * grid;
                 const auto pitch = yToPitch (e.position.y);
-                const auto id = owner.session.addNote ({ 0, pitch, 100, start, owner.newNoteLength });
+                const auto id = owner.session.addNote (owner.clipId(), { 0, pitch, 100, start, owner.newNoteLength });
                 if (id != 0)
                 {
                     owner.selection = { id };
-                    owner.engine.previewNoteOn (pitch, 100);
+                    owner.engine.previewNoteOn (owner.slot(), pitch, 100);
                     juce::Timer::callAfterDelay (180, [this, pitch, safe = juce::Component::SafePointer<Editor> (this)]
                     {
                         if (safe != nullptr)
-                            owner.engine.previewNoteOff (pitch);
+                            owner.engine.previewNoteOff (owner.slot(), pitch);
                     });
                 }
             }
 
             if (mode == Mode::move || mode == Mode::resize)
-                owner.engine.previewNoteOff (auditionPitch);
+            {
+                owner.engine.previewNoteOff (owner.slot(), auditionPitch);
+                owner.session.endGesture();
+            }
 
             mode = Mode::none;
             owner.repaint();
@@ -392,7 +396,7 @@ namespace beatforge
         bool keyPressed (const juce::KeyPress& key) override
         {
             auto& session = owner.session;
-            const auto& clip = session.getProject().synthClip;
+            const auto* clip = owner.clipPtr();
             if (! clip)
                 return false;
 
@@ -400,7 +404,7 @@ namespace beatforge
 
             if (key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey)
             {
-                session.removeNotes (selectedIds);
+                session.removeNotes (owner.clipId(), selectedIds);
                 owner.selection.clear();
                 return true;
             }
@@ -437,14 +441,14 @@ namespace beatforge
                 const auto ticks = (right ? 1 : left ? -1 : 0) * owner.gridTicks();
                 std::vector<midi::Note> changed;
                 for (auto id : selectedIds)
-                    if (auto* n = session.findNote (id))
+                    if (auto* n = session.findNote (owner.clipId(), id))
                     {
                         auto m = *n;
                         m.pitch = juce::jlimit (midi::minPitch, midi::maxPitch, m.pitch + semis);
                         m.start = juce::jlimit<time::Tick> (0, clip->length - 1, m.start + ticks);
                         changed.push_back (m);
                     }
-                session.updateNotes (changed);
+                session.updateNotes (owner.clipId(), changed);
                 return true;
             }
 
@@ -458,7 +462,7 @@ namespace beatforge
         {
             if (! additive)
                 owner.selection.clear();
-            for (auto& n : owner.session.getProject().synthClip->notes)
+            for (auto& n : owner.clipPtr()->notes)
                 if (n.start < clipLength() && noteBounds (n).intersects (marquee))
                     owner.selection.insert (n.id);
             owner.repaint();
@@ -495,7 +499,7 @@ namespace beatforge
             g.setFont (theme::captionFont (9.5f));
             g.drawText ("VELOCITY", juce::Rectangle<int> (0, 6, keyboardWidth - 6, 14), juce::Justification::centredRight);
 
-            const auto& clip = owner.session.getProject().synthClip;
+            const auto* clip = owner.clipPtr();
             if (! clip)
                 return;
 
@@ -518,7 +522,7 @@ namespace beatforge
 
         void mouseDown (const juce::MouseEvent& e) override
         {
-            const auto& clip = owner.session.getProject().synthClip;
+            const auto* clip = owner.clipPtr();
             if (! clip)
                 return;
 
@@ -541,9 +545,10 @@ namespace beatforge
 
             originals.clear();
             for (auto id : owner.selection)
-                if (auto* n = owner.session.findNote (id))
+                if (auto* n = owner.session.findNote (owner.clipId(), id))
                     originals.push_back (*n);
             anchorVelocity = best->velocity;
+            owner.session.beginGesture();
             setVelocityFromY (e.position.y);
         }
 
@@ -553,7 +558,12 @@ namespace beatforge
                 setVelocityFromY (e.position.y);
         }
 
-        void mouseUp (const juce::MouseEvent&) override { originals.clear(); }
+        void mouseUp (const juce::MouseEvent&) override
+        {
+            if (! originals.empty())
+                owner.session.endGesture();
+            originals.clear();
+        }
 
     private:
         juce::Rectangle<float> barArea() const
@@ -573,7 +583,7 @@ namespace beatforge
                 n.velocity = juce::jlimit (1, 127, n.velocity + delta);
                 changed.push_back (n);
             }
-            owner.session.updateNotes (changed);
+            owner.session.updateNotes (owner.clipId(), changed);
         }
 
         PianoRollPanel& owner;
@@ -583,7 +593,8 @@ namespace beatforge
     };
 
     //==============================================================================
-    PianoRollPanel::PianoRollPanel (audio::AudioEngine& e, project::Session& s) : engine (e), session (s)
+    PianoRollPanel::PianoRollPanel (audio::AudioEngine& e, project::Session& s, Selection& sel)
+        : engine (e), session (s), target (sel)
     {
         editor = std::make_unique<Editor> (*this);
         velocityLane = std::make_unique<VelocityLane> (*this, *editor);
@@ -597,7 +608,10 @@ namespace beatforge
         for (int bars : { 1, 2, 4, 8 })
             clipLengthBox.addItem (juce::String (bars) + (bars == 1 ? " bar" : " bars"), bars);
         clipLengthBox.setTooltip ("Clip length (the clip loops from bar 1)");
-        clipLengthBox.onChange = [this] { session.setMidiClipBars (clipLengthBox.getSelectedId()); };
+        clipLengthBox.onChange = [this]
+        {
+            session.resizeClip (clipId(), (time::Tick) clipLengthBox.getSelectedId() * session.getProject().timeSignature.ticksPerBar());
+        };
 
         for (int i = 0; i < (int) std::size (grids); ++i)
             gridBox.addItem (grids[i].name, i + 1);
@@ -612,9 +626,19 @@ namespace beatforge
         quantizeButton.setTooltip ("Quantize the selected notes, or all notes if none are selected (Q)");
         quantizeButton.onClick = [this] { quantizeSelectionOrAll(); };
 
-        createButton.setTooltip ("Create a 4-bar MIDI clip on the Synth track");
+        createButton.setTooltip ("Create a 4-bar clip on this track, after its last clip");
         createButton.setColour (juce::TextButton::buttonColourId, theme::violet);
-        createButton.onClick = [this] { session.createMidiClip (4); };
+        createButton.onClick = [this]
+        {
+            const auto* t = session.findTrack (trackId());
+            if (t == nullptr)
+                return;
+            time::Tick start = 0;
+            for (auto& c : t->clips)
+                start = std::max (start, c.end());
+            if (const auto id = session.createClip (t->id, start, 4 * session.getProject().timeSignature.ticksPerBar()))
+                target.selectClip (id);
+        };
 
         for (auto* c : std::initializer_list<juce::Component*> { &clipLengthBox, &gridBox, &quantizeButton, &createButton })
         {
@@ -625,9 +649,10 @@ namespace beatforge
         listenerId = session.addListener ([this] (project::Session::Change change)
         {
             using Change = project::Session::Change;
-            if (change == Change::replaced || change == Change::notes || change == Change::transport)
+            if (change == Change::replaced || change == Change::clips || change == Change::transport || change == Change::tracks)
                 refreshFromSession();
         });
+        targetListener = target.addListener ([this] { refreshFromSession(); });
 
         refreshFromSession();
         startTimerHz (60);
@@ -636,7 +661,18 @@ namespace beatforge
     PianoRollPanel::~PianoRollPanel()
     {
         session.removeListener (listenerId);
+        target.removeListener (targetListener);
     }
+
+    project::TrackId PianoRollPanel::trackId() const
+    {
+        const auto* t = session.findTrack (target.getTrack());
+        return t != nullptr && t->type == project::TrackType::instrument ? t->id : 0;
+    }
+
+    project::ClipId PianoRollPanel::clipId() const          { return trackId() != 0 ? target.getClip() : 0; }
+    const project::Clip* PianoRollPanel::clipPtr() const    { return session.findClip (clipId()); }
+    int PianoRollPanel::slot() const                         { return std::max (0, session.slotOf (trackId())); }
 
     time::Tick PianoRollPanel::gridTicks() const
     {
@@ -646,20 +682,35 @@ namespace beatforge
 
     void PianoRollPanel::quantizeSelectionOrAll()
     {
-        session.quantizeNotes (std::vector<midi::NoteId> (selection.begin(), selection.end()), gridTicks());
+        session.quantizeNotes (clipId(), std::vector<midi::NoteId> (selection.begin(), selection.end()), gridTicks());
     }
 
     void PianoRollPanel::refreshFromSession()
     {
-        const bool hasClip = session.getProject().synthClip.has_value();
+        const bool hasClip = clipPtr() != nullptr;
+
+        // A different clip: start with no notes selected.
+        if (clipId() != shownClip)
+        {
+            shownClip = clipId();
+            selection.clear();
+        }
 
         // Drop selected ids that no longer exist (deleted, or another project).
-        std::erase_if (selection, [this] (midi::NoteId id) { return session.findNote (id) == nullptr; });
+        std::erase_if (selection, [this] (midi::NoteId id) { return session.findNote (clipId(), id) == nullptr; });
 
-        clipLengthBox.setSelectedId (session.getMidiClipBars(), juce::dontSendNotification);
+        if (const auto* c = clipPtr())
+        {
+            const auto perBar = session.getProject().timeSignature.ticksPerBar();
+            const auto bars = (int) (c->length / perBar);
+            const bool standard = c->length % perBar == 0 && (bars == 1 || bars == 2 || bars == 4 || bars == 8);
+            clipLengthBox.setSelectedId (standard ? bars : 0, juce::dontSendNotification);
+            if (! standard)
+                clipLengthBox.setText (juce::String ((double) c->length / (double) perBar, 2) + " bars", juce::dontSendNotification);
+        }
         for (auto* c : std::initializer_list<juce::Component*> { &clipLengthBox, &gridBox, &quantizeButton, &viewport, velocityLane.get() })
             c->setVisible (hasClip);
-        createButton.setVisible (! hasClip);
+        createButton.setVisible (! hasClip && trackId() != 0);
 
         editor->repaint();
         velocityLane->repaint();
@@ -668,9 +719,12 @@ namespace beatforge
 
     void PianoRollPanel::timerCallback()
     {
-        const auto& clip = session.getProject().synthClip;
+        // Playhead inside the edited clip only.
+        const auto* clip = clipPtr();
         const bool playing = engine.getState() == audio::TransportState::playing;
-        const double position = clip && playing ? std::fmod (engine.getPositionTicks(), (double) clip->length) : -1.0;
+        const auto pos = engine.getPositionTicks();
+        const double position = clip != nullptr && playing && pos >= (double) clip->start && pos < (double) clip->end()
+                                    ? pos - (double) clip->start : -1.0;
 
         if (! juce::exactlyEqual (position, lastPlayhead))
         {
@@ -690,7 +744,8 @@ namespace beatforge
 
         // Header: track-colour stripe, caption, track name, note count.
         auto header = headerArea;
-        g.setColour (theme::track::synth);
+        const auto* track = session.findTrack (trackId());
+        g.setColour (track != nullptr ? target.colourOf (track->id) : theme::textMuted);
         g.fillRoundedRectangle (header.removeFromLeft (4).toFloat().reduced (0.0f, 6.0f), 2.0f);
         header.removeFromLeft (10);
         g.setColour (theme::textSecondary);
@@ -698,10 +753,10 @@ namespace beatforge
         g.drawText ("PIANO ROLL", header.removeFromLeft (88), juce::Justification::centredLeft);
         g.setColour (theme::textPrimary);
         g.setFont (theme::font (13.5f, juce::Font::bold));
-        g.drawText (juce::String::fromUTF8 (session.getProject().synthTrackName.c_str()), header.removeFromLeft (120),
+        g.drawText (track != nullptr ? juce::String::fromUTF8 (track->name.c_str()) : juce::String(), header.removeFromLeft (120),
                     juce::Justification::centredLeft);
 
-        if (const auto& clip = session.getProject().synthClip)
+        if (const auto* clip = clipPtr())
         {
             g.setColour (theme::textSecondary);
             g.setFont (theme::font (12.5f));
@@ -715,7 +770,9 @@ namespace beatforge
         {
             g.setColour (theme::textMuted);
             g.setFont (theme::font (14.0f));
-            g.drawText ("The Synth track has no MIDI clip yet.", emptyArea.withTrimmedBottom (70), juce::Justification::centred);
+            g.drawFittedText (track == nullptr ? "Select a synth track or one of its clips in the arrangement."
+                                               : "This synth track has no clip selected. Double-click its lane in the arrangement, or:",
+                              emptyArea.withTrimmedBottom (70).reduced (24, 0), juce::Justification::centred, 2);
         }
     }
 

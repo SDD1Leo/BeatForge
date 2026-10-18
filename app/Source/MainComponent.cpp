@@ -16,27 +16,22 @@ namespace beatforge
     MainComponent::MainComponent (audio::AudioEngine& e, AudioDeviceController& d,
                                   project::Session& s, juce::PropertiesFile& settings)
         : devices (d), engine (e), session (s), actions (s, settings, *this),
-          transportBar (e, s), ruler (e), drumPanel (e, s), pianoRoll (e, s), instrumentPanel (s), outputMeter (e.getOutputMeter())
+          transportBar (e, s), selection (s), arrangement (e, s, selection), drumPanel (e, s, selection),
+          pianoRoll (e, s, selection), instrumentPanel (s, selection), outputMeter (e.getOutputMeter())
     {
         transportBar.onOpenAudioSettings = [this] { openAudioSettings(); };
         transportBar.onProjectMenu = [this] (juce::Component& anchor) { actions.showMenu (anchor); };
         transportBar.onTextEditFinished = [this] { grabKeyboardFocus(); };
         drumPanel.onTextEditFinished = [this] { grabKeyboardFocus(); };
+        arrangement.onTextEditFinished = [this] { grabKeyboardFocus(); };
+        arrangement.onOpenEditor = [this] { showTab (0); };
 
-        auto syncRuler = [this]
-        {
-            ruler.setLoop (session.getProject().loopEnabled, session.getProject().loopBars);
-        };
-        syncRuler();
-        sessionListenerId = session.addListener ([syncRuler] (project::Session::Change change)
-        {
-            if (change == project::Session::Change::replaced || change == project::Session::Change::transport)
-                syncRuler();
-        });
+        // The clip editor follows the selected track's kind.
+        selectionListenerId = selection.addListener ([this] { showTab (workspaceTabs.getCurrentTab()); });
 
         addAndMakeVisible (transportBar);
-        addAndMakeVisible (ruler);
-        addAndMakeVisible (drumPanel);
+        addAndMakeVisible (arrangement);
+        addChildComponent (drumPanel);
         addChildComponent (pianoRoll);
         addChildComponent (instrumentPanel);
         addAndMakeVisible (workspaceTabs);
@@ -48,13 +43,14 @@ namespace beatforge
         devices.addChangeListener (this);
         refreshDeviceStatus();
         startTimer (500);   // dropout counter has no change notification
+        showTab (0);
 
         setSize (1280, 800);
     }
 
     MainComponent::~MainComponent()
     {
-        session.removeListener (sessionListenerId);
+        selection.removeListener (selectionListenerId);
         devices.removeChangeListener (this);
 
         if (settingsWindow != nullptr)
@@ -70,10 +66,14 @@ namespace beatforge
 
     void MainComponent::showTab (int index)
     {
+        const auto* track = session.findTrack (selection.getTrack());
+        const bool drums = track == nullptr || track->type == project::TrackType::drums;
+        workspaceTabs.setTabName (0, drums ? "Step Sequencer" : "Piano Roll");
         workspaceTabs.setCurrentTab (index, juce::dontSendNotification);
-        drumPanel.setVisible (index == 0);
-        pianoRoll.setVisible (index == 1);
-        instrumentPanel.setVisible (index == 2);
+        drumPanel.setVisible (index == 0 && drums);
+        pianoRoll.setVisible (index == 0 && ! drums);
+        instrumentPanel.setVisible (index == 1);
+        resized();
         repaint (workspaceArea);
     }
 
@@ -85,7 +85,6 @@ namespace beatforge
         if (! s.deviceOpen)
         {
             statusBar.setStatus ("Audio unavailable: " + s.error + dot + "open Audio Settings to choose a device", true);
-            setWorkspaceHint ("No audio output - open Audio Settings to choose a device");
             return;
         }
 
@@ -99,16 +98,6 @@ namespace beatforge
             text = "Audio error: " + s.error + dot + text;
 
         statusBar.setStatus (text, s.error.isNotEmpty());
-        setWorkspaceHint ("Click steps to build a beat    Space: play / stop    M: metronome    L: loop    Ctrl+2: piano roll");
-    }
-
-    void MainComponent::setWorkspaceHint (const juce::String& hint)
-    {
-        if (hint != workspaceHint)
-        {
-            workspaceHint = hint;
-            repaint (workspaceArea);
-        }
     }
 
     void MainComponent::openAudioSettings()
@@ -148,9 +137,14 @@ namespace beatforge
         if (key == juce::KeyPress ('s', ctrl | juce::ModifierKeys::shiftModifier, 0)
             || key == juce::KeyPress ('S', ctrl | juce::ModifierKeys::shiftModifier, 0)) { actions.saveAs(); return true; }
 
+        if (key == juce::KeyPress ('z', ctrl, 0))  { session.undo(); return true; }
+        if (key == juce::KeyPress ('y', ctrl, 0)
+            || key == juce::KeyPress ('z', ctrl | juce::ModifierKeys::shiftModifier, 0)
+            || key == juce::KeyPress ('Z', ctrl | juce::ModifierKeys::shiftModifier, 0)) { session.redo(); return true; }
+        if (key == juce::KeyPress ('d', ctrl, 0))  { arrangement.duplicateSelectedClip(); return true; }
+
         if (key == juce::KeyPress ('1', ctrl, 0))  { showTab (0); return true; }
         if (key == juce::KeyPress ('2', ctrl, 0))  { showTab (1); return true; }
-        if (key == juce::KeyPress ('3', ctrl, 0))  { showTab (2); return true; }
 
         if (key == juce::KeyPress::spaceKey)      { transportBar.togglePlayStop();  return true; }
         // Single-letter shortcuts only without modifiers (Ctrl+L etc. stay free).
@@ -189,13 +183,6 @@ namespace beatforge
         g.setFont (theme::font (13.0f));
         g.drawText ("v" + toJuce (versionString()), header, juce::Justification::centredRight);
 
-        // Empty workspace hint until the sequencer/timeline arrive.
-        g.setColour (theme::textMuted);
-        g.setFont (theme::font (14.0f));
-        if (drumPanel.isVisible())
-            g.drawText (workspaceHint, workspaceArea.withTrimmedTop (drumPanel.getBottom() - workspaceArea.getY()),
-                        juce::Justification::centred);
-
         // Master output panel.
         g.setColour (theme::panel);
         g.fillRoundedRectangle (outputCard.toFloat(), theme::cornerRadius);
@@ -218,13 +205,17 @@ namespace beatforge
         outputCard = body.removeFromRight (120);
         body.removeFromRight (16);
         workspaceArea = body;
-        ruler.setBounds (body.removeFromTop (64));
-        body.removeFromTop (6);
-        workspaceTabs.setBounds (body.removeFromTop (34).withWidth (workspaceTabs.getPreferredWidth()));
-        body.removeFromTop (8);
-        pianoRoll.setBounds (body);
-        instrumentPanel.setBounds (body.withHeight (juce::jmin (body.getHeight(), 380)));
-        drumPanel.setBounds (body.removeFromTop (DrumMachinePanel::preferredHeight));
+
+        // Editor below: at least the step sequencer's height, up to half the body.
+        auto editor = body.removeFromBottom (juce::jmax (DrumMachinePanel::preferredHeight + 42, body.getHeight() / 2));
+        body.removeFromBottom (10);
+        arrangement.setBounds (body);
+
+        workspaceTabs.setBounds (editor.removeFromTop (34).withWidth (workspaceTabs.getPreferredWidth()));
+        editor.removeFromTop (8);
+        pianoRoll.setBounds (editor);
+        instrumentPanel.setBounds (editor);
+        drumPanel.setBounds (editor.removeFromTop (DrumMachinePanel::preferredHeight));
         outputMeter.setBounds (outputCard.reduced (16, 0).withTrimmedTop (36).withTrimmedBottom (16));
     }
 }

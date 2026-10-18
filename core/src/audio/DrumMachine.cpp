@@ -8,7 +8,6 @@ namespace beatforge::audio
     namespace
     {
         bool validLane (int lane) noexcept           { return lane >= 0 && lane < DrumMachine::numLanes; }
-        bool validStep (int step) noexcept           { return step >= 0 && step < DrumMachine::numSteps; }
 
         float dbToGain (float db) noexcept
         {
@@ -18,7 +17,6 @@ namespace beatforge::audio
 
     DrumMachine::DrumMachine()
     {
-        for (auto& s : steps) s.store (false);
         for (int i = 0; i < numLanes; ++i)
         {
             gainDb[(size_t) i].store (0.0f);
@@ -50,24 +48,6 @@ namespace beatforge::audio
             lane.gain = lane.targetGain = laneTargetGain (i, anySolo);
             lane.gainStep = 0.0f;
         }
-    }
-
-    void DrumMachine::setStep (int lane, int step, bool on) noexcept
-    {
-        if (validLane (lane) && validStep (step))
-            steps[(size_t) (lane * numSteps + step)].store (on, std::memory_order_release);
-    }
-
-    bool DrumMachine::getStep (int lane, int step) const noexcept
-    {
-        return validLane (lane) && validStep (step)
-            && steps[(size_t) (lane * numSteps + step)].load (std::memory_order_acquire);
-    }
-
-    void DrumMachine::clearPattern() noexcept
-    {
-        for (auto& s : steps)
-            s.store (false, std::memory_order_release);
     }
 
     void DrumMachine::setLaneGainDb (int lane, float db) noexcept
@@ -162,13 +142,10 @@ namespace beatforge::audio
         triggerCounts[(size_t) lane].fetch_add (1, std::memory_order_relaxed);
     }
 
-    void DrumMachine::triggerStep (int step) noexcept
+    void DrumMachine::triggerLanes (std::uint8_t laneMask) noexcept
     {
-        if (! validStep (step))
-            return;
-
         for (int lane = 0; lane < numLanes; ++lane)
-            if (steps[(size_t) (lane * numSteps + step)].load (std::memory_order_acquire))
+            if (laneMask & (1u << lane))
                 trigger (lane);
     }
 

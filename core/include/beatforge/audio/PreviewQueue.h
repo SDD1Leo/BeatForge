@@ -14,6 +14,7 @@ namespace beatforge::audio
     public:
         struct Request
         {
+            int slot = 0;       // track slot
             int pitch = 60;
             int velocity = 0;   // 0 = note off
         };

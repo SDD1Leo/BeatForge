@@ -12,6 +12,9 @@
 
 namespace beatforge::audio
 {
+    // Identifies a sounding note (clip + note), so note-offs find their voice.
+    using VoiceId = std::uint64_t;
+
     enum class InstrumentType { polySynth, monoBass };
     constexpr int numInstrumentTypes = 2;
 
@@ -72,8 +75,8 @@ namespace beatforge::audio
         void reset() noexcept;
         void setParams (const BlockParams&) noexcept;
 
-        void noteOn (midi::NoteId, int pitch, int velocity) noexcept;
-        void noteOff (midi::NoteId) noexcept;
+        void noteOn (VoiceId, int pitch, int velocity) noexcept;
+        void noteOff (VoiceId) noexcept;
         void previewOff (int pitch) noexcept;
         void releaseAll() noexcept;
         template <typename Keep> void releaseUnless (Keep&& keep) noexcept
@@ -86,12 +89,12 @@ namespace beatforge::audio
         void render (float* const* channels, int numChannels, int start, int num) noexcept;
         int activeVoices() const noexcept;
 
-        static constexpr midi::NoteId previewId = 0xffffffffu;
+        static constexpr VoiceId previewId = ~VoiceId (0);
 
     private:
         struct Voice
         {
-            midi::NoteId id = 0;
+            VoiceId id = 0;
             int pitch = 0;
             float velocityGain = 0.0f;
             dsp::Oscillator osc;
@@ -117,8 +120,8 @@ namespace beatforge::audio
         void reset() noexcept;
         void setParams (const BlockParams&) noexcept;
 
-        void noteOn (midi::NoteId, int pitch, int velocity) noexcept;
-        void noteOff (midi::NoteId) noexcept;
+        void noteOn (VoiceId, int pitch, int velocity) noexcept;
+        void noteOff (VoiceId) noexcept;
         void previewOff (int pitch) noexcept;
         void releaseAll() noexcept;
         template <typename Keep> void releaseUnless (Keep&& keep) noexcept
@@ -136,7 +139,7 @@ namespace beatforge::audio
         double currentFrequency() const noexcept { return frequency; }
 
     private:
-        struct Held { midi::NoteId id; int pitch; int velocity; };
+        struct Held { VoiceId id; int pitch; int velocity; };
 
         void followHeldNotes() noexcept;   // sound the newest held note, or release
         void startPitch (int pitch, int velocity, bool legato) noexcept;
@@ -174,8 +177,8 @@ namespace beatforge::audio
 
         // Audio thread.
         void beginBlock() noexcept;
-        void noteOn (midi::NoteId id, int pitch, int velocity) noexcept { if (active == InstrumentType::polySynth) poly.noteOn (id, pitch, velocity); else bass.noteOn (id, pitch, velocity); }
-        void noteOff (midi::NoteId id) noexcept     { poly.noteOff (id); bass.noteOff (id); }
+        void noteOn (VoiceId id, int pitch, int velocity) noexcept { if (active == InstrumentType::polySynth) poly.noteOn (id, pitch, velocity); else bass.noteOn (id, pitch, velocity); }
+        void noteOff (VoiceId id) noexcept     { poly.noteOff (id); bass.noteOff (id); }
         void previewOff (int pitch) noexcept        { poly.previewOff (pitch); bass.previewOff (pitch); }
         void releaseAll() noexcept                  { poly.releaseAll(); bass.releaseAll(); }
         template <typename Keep> void releaseUnless (Keep&& keep) noexcept { poly.releaseUnless (keep); bass.releaseUnless (keep); }

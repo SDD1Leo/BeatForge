@@ -2,13 +2,13 @@
 
 #include "audio/AudioDeviceController.h"
 #include "project/ProjectActions.h"
+#include "ui/ArrangementView.h"
 #include "ui/DrumMachinePanel.h"
 #include "ui/InstrumentPanel.h"
 #include "ui/LevelMeterComponent.h"
 #include "ui/PianoRollPanel.h"
 #include "ui/TabBar.h"
 #include "ui/StatusBar.h"
-#include "ui/TimelineRuler.h"
 #include "ui/TransportBar.h"
 
 #include <beatforge/audio/AudioEngine.h>
@@ -18,8 +18,9 @@
 
 namespace beatforge
 {
-    // Root content of the main window: header, transport bar, master output
-    // panel and status bar.
+    // Root content of the main window: header, transport bar, the arrangement
+    // (main screen), the editor for the selected clip/track below it, master
+    // output panel and status bar.
     class MainComponent final : public juce::Component,
                                 private juce::ChangeListener,
                                 private juce::Timer
@@ -52,20 +53,19 @@ namespace beatforge
         ProjectActions actions;
         int sessionListenerId = 0;
         TransportBar transportBar;
-        TimelineRuler ruler;
+        Selection selection;
+        ArrangementView arrangement;
         DrumMachinePanel drumPanel;
         PianoRollPanel pianoRoll;
         InstrumentPanel instrumentPanel;
-        TabBar workspaceTabs { { "Drums", "Piano Roll", "Instrument" } };
-        void showTab (int index);
+        TabBar workspaceTabs { { "Step Sequencer", "Instrument" } };
+        int selectionListenerId = 0;
+        void showTab (int index);           // 0 = clip editor (by track type), 1 = instrument
         LevelMeterComponent outputMeter;
         StatusBar statusBar;
         juce::TooltipWindow tooltips { this, 600 };
 
         juce::Rectangle<int> headerArea, outputCard, workspaceArea;
-        juce::String workspaceHint;
-
-        void setWorkspaceHint (const juce::String&);
         juce::Component::SafePointer<juce::DialogWindow> settingsWindow;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)

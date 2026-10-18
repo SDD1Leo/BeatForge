@@ -109,7 +109,7 @@ namespace beatforge
     };
 
     //==============================================================================
-    InstrumentPanel::InstrumentPanel (project::Session& s) : session (s)
+    InstrumentPanel::InstrumentPanel (project::Session& s, Selection& sel) : session (s), target (sel)
     {
         for (auto* b : { &polyButton, &bassButton })
         {
@@ -119,18 +119,18 @@ namespace beatforge
         }
         polyButton.setTooltip ("Polyphonic synth: chords, leads, pads");
         bassButton.setTooltip ("Monophonic bass: one note at a time, last note wins, optional glide");
-        polyButton.onClick = [this] { session.setInstrument (audio::InstrumentType::polySynth); };
-        bassButton.onClick = [this] { session.setInstrument (audio::InstrumentType::monoBass); };
+        polyButton.onClick = [this] { session.setInstrument (trackId(), audio::InstrumentType::polySynth); };
+        bassButton.onClick = [this] { session.setInstrument (trackId(), audio::InstrumentType::monoBass); };
 
         resetButton.setTooltip ("Reset this instrument's controls to their defaults");
         resetButton.setWantsKeyboardFocus (false);
-        resetButton.onClick = [this] { session.resetInstrumentParams (type()); };
+        resetButton.onClick = [this] { session.resetInstrumentParams (trackId(), type()); };
         addAndMakeVisible (resetButton);
 
         for (int w = 0; w < 4; ++w)
         {
             waveButtons[(size_t) w] = std::make_unique<WaveButton> ((dsp::Waveform) w);
-            waveButtons[(size_t) w]->onClick = [this, w] { session.setInstrumentParam (type(), Param::wave, (float) w); };
+            waveButtons[(size_t) w]->onClick = [this, w] { session.setInstrumentParam (trackId(), type(), Param::wave, (float) w); };
             addAndMakeVisible (*waveButtons[(size_t) w]);
         }
 
@@ -143,16 +143,18 @@ namespace beatforge
             const auto& spec = audio::paramSpec (p);
             auto knobPtr = std::make_unique<Knob> (juce::String (spec.label.data(), spec.label.size()), sectionColour (p));
             knobPtr->setUnit (unitFor (p));
-            knobPtr->onChange = [this, p] (double v) { session.setInstrumentParam (type(), p, (float) v); };
+            knobPtr->onChange = [this, p] (double v) { session.setInstrumentParam (trackId(), type(), p, (float) v); };
             addChildComponent (*knobPtr);
             knobs[(size_t) i] = std::move (knobPtr);
         }
 
         listenerId = session.addListener ([this] (project::Session::Change change)
         {
-            if (change == project::Session::Change::instrument || change == project::Session::Change::replaced)
+            using Change = project::Session::Change;
+            if (change == Change::instrument || change == Change::replaced || change == Change::tracks)
                 refreshFromSession();
         });
+        targetListener = target.addListener ([this] { refreshFromSession(); });
 
         refreshFromSession();
     }
@@ -160,14 +162,32 @@ namespace beatforge
     InstrumentPanel::~InstrumentPanel()
     {
         session.removeListener (listenerId);
+        target.removeListener (targetListener);
     }
 
-    audio::InstrumentType InstrumentPanel::type() const { return session.getProject().instrument; }
-    float InstrumentPanel::value (Param p) const         { return session.getInstrumentParam (type(), p); }
+    project::TrackId InstrumentPanel::trackId() const
+    {
+        const auto* t = session.findTrack (target.getTrack());
+        return t != nullptr && t->type == project::TrackType::instrument ? t->id : 0;
+    }
+
+    audio::InstrumentType InstrumentPanel::type() const
+    {
+        const auto* t = session.findTrack (trackId());
+        return t != nullptr ? t->instrument : audio::InstrumentType::polySynth;
+    }
+
+    float InstrumentPanel::value (Param p) const { return session.getInstrumentParam (trackId(), type(), p); }
 
     void InstrumentPanel::refreshFromSession()
     {
         const auto t = type();
+        const bool hasTrack = trackId() != 0;
+        for (auto* b : { &polyButton, &bassButton, &resetButton })
+            b->setVisible (hasTrack);
+        for (auto& b : waveButtons)
+            b->setVisible (hasTrack);
+
         polyButton.setToggleState (t == audio::InstrumentType::polySynth, juce::dontSendNotification);
         bassButton.setToggleState (t == audio::InstrumentType::monoBass, juce::dontSendNotification);
 
@@ -185,7 +205,7 @@ namespace beatforge
             k.setRange (spec.min, spec.max, spec.logarithmic, audio::defaultValue (t, p));
             k.setValue (value (p), juce::dontSendNotification);
             k.setTooltip (tooltipFor (p, t) + " (double-click: default)");
-            k.setVisible (audio::usesParam (t, p));
+            k.setVisible (hasTrack && audio::usesParam (t, p));
         }
 
         resized();
@@ -298,9 +318,10 @@ namespace beatforge
         g.setColour (theme::border);
         g.drawRoundedRectangle (bounds.reduced (0.5f), theme::cornerRadius, theme::borderWidth);
 
-        // Header: synth-track stripe, caption, track name.
+        // Header: track-colour stripe, caption, track name.
+        const auto* track = session.findTrack (trackId());
         auto header = headerArea;
-        g.setColour (theme::track::synth);
+        g.setColour (track != nullptr ? target.colourOf (track->id) : theme::textMuted);
         g.fillRoundedRectangle (header.removeFromLeft (4).toFloat().reduced (0.0f, 6.0f), 2.0f);
         header.removeFromLeft (10);
         g.setColour (theme::textSecondary);
@@ -308,8 +329,17 @@ namespace beatforge
         g.drawText ("INSTRUMENT", header.removeFromLeft (92), juce::Justification::centredLeft);
         g.setColour (theme::textPrimary);
         g.setFont (theme::font (13.5f, juce::Font::bold));
-        g.drawText (juce::String::fromUTF8 (session.getProject().synthTrackName.c_str()), header.removeFromLeft (110),
+        g.drawText (track != nullptr ? juce::String::fromUTF8 (track->name.c_str()) : juce::String(), header.removeFromLeft (110),
                     juce::Justification::centredLeft);
+
+        if (track == nullptr)
+        {
+            g.setColour (theme::textMuted);
+            g.setFont (theme::font (14.0f));
+            g.drawText ("Select a synth track in the arrangement to edit its instrument.",
+                        getLocalBounds().withTrimmedTop (headerArea.getBottom()), juce::Justification::centred);
+            return;
+        }
 
         // Sections.
         auto section = [&] (juce::Rectangle<int> area, const char* title)

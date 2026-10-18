@@ -1,5 +1,7 @@
 #include "beatforge/time/Transport.h"
 
+#include <algorithm>
+#include <cmath>
 #include <numeric>
 
 namespace beatforge::time
@@ -30,6 +32,15 @@ namespace beatforge::time
         reanchor (now, tickAt (now));
         bpm = newBpm;
         samplesPerTick = TempoMap::secondsPerTick (bpm) * sampleRate;
+    }
+
+    void Transport::seekTo (double tick) noexcept
+    {
+        tick = std::max (0.0, tick);
+        reanchor (now, tick);
+        lastLineTick = (Tick) std::ceil (tick) - 1;
+        eventBoundary = std::ceil (tick) - 0.5;
+        jumpPending = true;
     }
 
     Tick Transport::gridTicks() const noexcept

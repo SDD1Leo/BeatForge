@@ -15,7 +15,7 @@ add_library(beatforge_core STATIC
     src/audio/Instruments.cpp
     src/dsp/Biquad.cpp
     src/midi/Note.cpp
-    src/midi/NoteSchedule.cpp
+    src/project/ScheduleBuilder.cpp
     src/project/Project.cpp
     src/project/ProjectFile.cpp
     src/project/Session.cpp

@@ -1,7 +1,10 @@
 #include "AllocationGuard.h"
 
 #include <beatforge/audio/AudioEngine.h>
-#include <beatforge/midi/NoteSchedule.h>
+#include "EngineHelpers.h"
+
+#include <beatforge/project/ScheduleBuilder.h>
+#include <beatforge/util/LockFreeExchange.h>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -115,56 +118,95 @@ TEST_CASE ("Notes are constrained to valid ranges and the clip", "[midi]")
     REQUIRE (midi::pitchToFrequency (60) == Catch::Approx (261.6256).epsilon (1e-5));
 }
 
-TEST_CASE ("Schedule orders events and wraps note-offs at the clip end", "[midi][schedule]")
+TEST_CASE ("Schedules order events and cut notes at clip ends", "[midi][schedule]")
 {
-    const auto s = midi::NoteSchedule::build (clipWith ({ { 0, 60, 90, 480, 480 },   // off at 960
-                                                          { 0, 64, 80, 0, 3840 },    // off at clip end -> 0
-                                                          { 0, 67, 70, 960, 240 },   // on at 960 (after the off)
-                                                          { 0, 72, 70, 4000, 240 } })); // beyond the clip: skipped
-    REQUIRE (s->notes.size() == 3);
-    REQUIRE (s->events.size() == 6);
-    REQUIRE ((s->events[0].tick == 0 && ! s->events[0].on && s->events[0].pitch == 64));   // wrapped off first
-    REQUIRE ((s->events[1].tick == 0 && s->events[1].on && s->events[1].pitch == 64));
-    REQUIRE ((s->events[2].tick == 480 && s->events[2].on));
-    REQUIRE ((s->events[3].tick == 960 && ! s->events[3].on && s->events[3].pitch == 60));
-    REQUIRE ((s->events[4].tick == 960 && s->events[4].on && s->events[4].pitch == 67));
-    REQUIRE (s->covers (2, 3839.0));
-    REQUIRE_FALSE (s->covers (1, 960.0));
-    REQUIRE_FALSE (s->covers (99, 0.0));
+    project::Track t;
+    t.type = project::TrackType::instrument;
+    project::Clip a;
+    a.id = 7;
+    a.start = 0;
+    a.length = 3840;
+    a.notes = { { 1, 60, 90, 480, 480 },     // off at 960
+                { 2, 64, 80, 0, 3840 },      // whole clip
+                { 3, 67, 70, 960, 240 },     // on at 960 (after the off)
+                { 4, 72, 70, 4000, 240 } };  // beyond the clip: kept, silent
+    project::Clip b = a;
+    b.id = 8;
+    b.start = 3840 + 1920;                   // second clip starts half a bar after the first ends
+    t.clips = { a, b };
+
+    const auto s = project::buildSchedule (t);
+    REQUIRE (s->spans.size() == 6);
+    REQUIRE (s->events.size() == 12);
+    REQUIRE ((s->events[0].tick == 0 && s->events[0].kind == audio::TrackSchedule::Kind::noteOn && s->events[0].pitch == 64));
+    REQUIRE ((s->events[1].tick == 480 && s->events[1].pitch == 60));
+    REQUIRE ((s->events[2].tick == 960 && s->events[2].kind == audio::TrackSchedule::Kind::noteOff));   // offs before ons
+    REQUIRE ((s->events[3].tick == 960 && s->events[3].kind == audio::TrackSchedule::Kind::noteOn));
+    REQUIRE (s->covers (project::voiceId (7, 2), 3839.0));
+    REQUIRE_FALSE (s->covers (project::voiceId (7, 2), 3840.0));             // cut at the clip end
+    REQUIRE (s->covers (project::voiceId (8, 2), 5760.0));                   // the copy in the second clip
+    REQUIRE_FALSE (s->covers (project::voiceId (7, 4), 4000.0));
 }
 
-TEST_CASE ("Schedule exchange hands over without losing or leaking", "[midi][schedule][realtime]")
+TEST_CASE ("A later clip takes over from an overlapping one", "[midi][schedule]")
 {
-    midi::ScheduleExchange exchange;
+    project::Track t;
+    t.type = project::TrackType::instrument;
+    project::Clip a;
+    a.id = 1;
+    a.length = 7680;
+    a.notes = { { 1, 60, 100, 0, 7680 } };
+    project::Clip b;
+    b.id = 2;
+    b.start = 3840;
+    b.length = 3840;
+    b.notes = { { 1, 67, 100, 0, 240 } };
+    t.clips = { a, b };
+
+    const auto s = project::buildSchedule (t);
+    REQUIRE_FALSE (s->covers (project::voiceId (1, 1), 3840.0));   // a's long note ends where b starts
+    REQUIRE (s->covers (project::voiceId (2, 1), 3840.0));
+}
+
+TEST_CASE ("Drum clips repeat their pattern every bar", "[midi][schedule]")
+{
+    project::Track t;
+    t.type = project::TrackType::drums;
+    project::Clip c;
+    c.id = 1;
+    c.start = 3840;
+    c.length = 3 * 3840 + 960;   // 3.25 bars
+    c.pattern[0][0] = c.pattern[0][8] = c.pattern[1][4] = true;
+    t.clips = { c };
+
+    const auto s = project::buildSchedule (t);
+    std::vector<time::Tick> kicks, snares;
+    for (auto& e : s->events)
+    {
+        if (e.laneMask & 1) kicks.push_back (e.tick);
+        if (e.laneMask & 2) snares.push_back (e.tick);
+    }
+    REQUIRE (kicks == std::vector<time::Tick> { 3840, 3840 + 1920, 7680, 7680 + 1920, 11520, 11520 + 1920, 15360 });
+    REQUIRE (snares == std::vector<time::Tick> { 3840 + 960, 7680 + 960, 11520 + 960 });   // the 4th bar is cut before beat 2
+}
+
+TEST_CASE ("Lock-free exchange hands over without losing or leaking", "[midi][schedule][realtime]")
+{
+    util::LockFreeExchange<std::vector<int>> exchange;
     bool changed = false;
     REQUIRE (exchange.acquire (changed) == nullptr);
     REQUIRE_FALSE (changed);
 
-    exchange.publish (midi::NoteSchedule::build (clipWith ({ { 0, 60, 100, 0, 240 } })));
-    const auto* first = exchange.acquire (changed);
+    exchange.publish (std::make_unique<std::vector<int>> (1, 1));
+    REQUIRE (exchange.acquire (changed)->size() == 1);
     REQUIRE (changed);
-    REQUIRE (first->notes.size() == 1);
-
-    // The first schedule had no predecessor, so the retired slot is free and
-    // the next one is taken over immediately.
-    exchange.publish (midi::NoteSchedule::build (clipWith ({ { 0, 60, 100, 0, 240 }, { 0, 62, 100, 240, 240 } })));
-    const auto* second = exchange.acquire (changed);
-    REQUIRE (changed);
-    REQUIRE (second->notes.size() == 2);
-
-    // publish() collects what the audio thread retired, so every newer schedule
-    // is taken over at the next block; the audio side never frees memory.
-    exchange.publish (midi::NoteSchedule::build (clipWith ({})));
-    REQUIRE (exchange.acquire (changed)->notes.empty());
-    REQUIRE (changed);
-    REQUIRE (exchange.acquire (changed)->notes.empty());
+    REQUIRE (exchange.acquire (changed)->size() == 1);
     REQUIRE_FALSE (changed);
 
-    // Two publishes before the audio thread looks: only the newest is played,
-    // the skipped one is freed by the message thread.
-    exchange.publish (midi::NoteSchedule::build (clipWith ({ { 0, 60, 100, 0, 240 } })));
-    exchange.publish (midi::NoteSchedule::build (clipWith ({ { 0, 60, 100, 0, 240 }, { 0, 61, 100, 0, 240 }, { 0, 62, 100, 0, 240 } })));
-    REQUIRE (exchange.acquire (changed)->notes.size() == 3);
+    // Two publishes before the audio thread looks: only the newest is used.
+    exchange.publish (std::make_unique<std::vector<int>> (2, 2));
+    exchange.publish (std::make_unique<std::vector<int>> (3, 3));
+    REQUIRE (exchange.acquire (changed)->size() == 3);
     exchange.collectGarbage();
 
     {
@@ -246,7 +288,7 @@ TEST_CASE ("A note starts and stops on its exact samples", "[midi][engine]")
     audio::AudioEngine engine;
     engine.prepare (48000.0);
     const auto clip = clipWith ({ { 0, 69, 100, 960, 480 } });   // beat 2, an eighth long
-    engine.setMidiClip (&clip);
+    beatforge::test::playNotes (engine, 0, clip.notes, clip.length);
     engine.play();
     const auto out = render (engine, 96000);
 
@@ -258,7 +300,7 @@ TEST_CASE ("A note starts and stops on its exact samples", "[midi][engine]")
     audio::AudioEngine longer;
     longer.prepare (48000.0);
     const auto longClip = clipWith ({ { 0, 69, 100, 960, 960 } });
-    longer.setMidiClip (&longClip);
+    beatforge::test::playNotes (longer, 0, longClip.notes, longClip.length);
     longer.play();
     const auto outLong = render (longer, 96000);
 
@@ -278,9 +320,8 @@ TEST_CASE ("MIDI output is identical for any block size", "[midi][engine]")
         e.setTempo (131.0);
         clip = clipWith ({ { 0, 60, 100, 0, 240 }, { 0, 64, 90, 240, 700 }, { 0, 67, 80, 1000, 2840 },
                            { 0, 72, 127, 3600, 240 }, { 0, 48, 60, 7, 13 } });
-        e.setMidiClip (&clip);
-        e.getDrumMachine().setStep (0, 0, true);
-        e.getDrumMachine().setStep (0, 8, true);
+        beatforge::test::playNotes (e, 0, clip.notes, clip.length);
+        beatforge::test::playPattern (e, 1, beatforge::test::pattern ({ { 0, { 0, 8 } } }), 16);
         e.setLoop (true, 0, 3840 * 2);
         e.play();
     };
@@ -297,7 +338,7 @@ TEST_CASE ("The clip loops every clip length", "[midi][engine]")
     audio::AudioEngine engine;
     engine.prepare (48000.0);
     const auto clip = clipWith ({ { 0, 60, 100, 0, 240 } });   // 1-bar clip, note at bar start
-    engine.setMidiClip (&clip);
+    beatforge::test::playNotes (engine, 0, clip.notes, clip.length);
     engine.play();
     const auto out = render (engine, 96000 * 3);
 
@@ -314,7 +355,7 @@ TEST_CASE ("Notes stay on the musical grid when the tempo changes", "[midi][engi
     audio::AudioEngine engine;
     engine.prepare (48000.0);
     const auto clip = clipWith ({ { 0, 60, 100, 1920, 240 } });   // beat 3
-    engine.setMidiClip (&clip);
+    beatforge::test::playNotes (engine, 0, clip.notes, clip.length);
     engine.play();
     auto out = render (engine, 30000, 500);   // 1.25 beats at 120 (tick 1200)
     engine.setTempo (60.0);                   // 50 samples per tick
@@ -332,16 +373,16 @@ TEST_CASE ("Deleting or moving a sounding note releases it", "[midi][engine][stu
         audio::AudioEngine engine;
         engine.prepare (48000.0);
         const auto clip = clipWith ({ { 0, 60, 100, 0, 3840 } });   // whole bar
-        engine.setMidiClip (&clip);
+        beatforge::test::playNotes (engine, 0, clip.notes, clip.length);
         engine.play();
         render (engine, 24000);   // half a bar in: sounding
-        REQUIRE (engine.getActiveSynthVoices() == 1);
+        REQUIRE (engine.getActiveVoices (0) == 1);
 
         const auto edited = moveInsteadOfDelete ? clipWith ({ { 0, 60, 100, 3000, 240 } }) : clipWith ({});
-        engine.setMidiClip (&edited);
+        beatforge::test::playNotes (engine, 0, edited.notes, edited.length);
         const auto out = render (engine, 24000);
         REQUIRE (peak (out, (size_t) releaseSamples + 512, 24000) == 0.0f);
-        REQUIRE (engine.getActiveSynthVoices() == 0);
+        REQUIRE (engine.getActiveVoices (0) == 0);
     }
 }
 
@@ -350,14 +391,14 @@ TEST_CASE ("Stop releases every note", "[midi][engine][stuck]")
     audio::AudioEngine engine;
     engine.prepare (48000.0);
     const auto clip = clipWith ({ { 0, 60, 100, 0, 3840 }, { 0, 64, 100, 0, 3840 }, { 0, 67, 100, 0, 3840 } });
-    engine.setMidiClip (&clip);
+    beatforge::test::playNotes (engine, 0, clip.notes, clip.length);
     engine.play();
     render (engine, 12000);
-    REQUIRE (engine.getActiveSynthVoices() == 3);
+    REQUIRE (engine.getActiveVoices (0) == 3);
     engine.stop();
     const auto out = render (engine, 24000);
     REQUIRE (peak (out, (size_t) releaseSamples + 512, 24000) == 0.0f);
-    REQUIRE (engine.getActiveSynthVoices() == 0);
+    REQUIRE (engine.getActiveVoices (0) == 0);
 }
 
 TEST_CASE ("A loop wrap releases notes that cross the loop end", "[midi][engine][stuck]")
@@ -365,7 +406,7 @@ TEST_CASE ("A loop wrap releases notes that cross the loop end", "[midi][engine]
     audio::AudioEngine engine;
     engine.prepare (48000.0);
     const auto clip = clipWith ({ { 0, 60, 100, 2880, 1920 } }, 3840 * 2);   // beat 4 of bar 1 into bar 2
-    engine.setMidiClip (&clip);
+    beatforge::test::playNotes (engine, 0, clip.notes, clip.length);
     engine.setLoop (true, 0, 3840);                                         // loop bar 1 only
     engine.play();
 
@@ -378,10 +419,11 @@ TEST_CASE ("Editor auditions play while stopped", "[midi][engine]")
 {
     audio::AudioEngine engine;
     engine.prepare (48000.0);
-    engine.previewNoteOn (60, 100);
+    beatforge::test::playNotes (engine, 0, {}, 3840, false);
+    engine.previewNoteOn (0, 60, 100);
     auto held = render (engine, 9600);
     REQUIRE (peak (held, 0, 9600) > 0.05f);
-    engine.previewNoteOff (60);
+    engine.previewNoteOff (0, 60);
     const auto after = render (engine, 24000);
     REQUIRE (peak (after, (size_t) releaseSamples + 512, 24000) == 0.0f);
     REQUIRE (engine.getState() == audio::TransportState::stopped);
@@ -396,21 +438,21 @@ TEST_CASE ("Audio thread stays allocation-free with MIDI and clip swaps", "[midi
 
     const auto first = clipWith ({ { 0, 60, 100, 0, 960 }, { 0, 64, 100, 480, 960 }, { 0, 67, 100, 960, 1920 } });
     const auto second = clipWith ({ { 0, 62, 100, 0, 3840 } });
-    engine.setMidiClip (&first);
+    beatforge::test::playNotes (engine, 0, first.notes, first.length);
     engine.play();
 
     for (int round = 0; round < 3; ++round)
     {
         {
             beatforge::test::ScopedAllocationCounter allocations;
-            engine.previewNoteOn (72, 90);
+            engine.previewNoteOn (0, 72, 90);
             for (int i = 0; i < 200; ++i)
                 engine.process (chans, 2, 256);
-            engine.previewNoteOff (72);
+            engine.previewNoteOff (0, 72);
             REQUIRE (allocations.count() == 0);
         }
         // Message thread work (allocates by design): new clip, garbage collection.
-        engine.setMidiClip (round % 2 == 0 ? &second : &first);
+        beatforge::test::playNotes (engine, 0, (round % 2 == 0 ? second : first).notes, 3840);
         engine.collectGarbage();
     }
 }
@@ -429,8 +471,8 @@ TEST_CASE ("Random tempo changes never shift, drop or repeat a note", "[midi][en
     {
         audio::AudioEngine e;
         e.prepare (44100.0);
-        e.setMidiClip (&clip);
-        for (int s = 0; s < 16; s += 3) e.getDrumMachine().setStep (2, s, true);
+        beatforge::test::playNotes (e, 0, clip.notes, clip.length);
+        beatforge::test::playPattern (e, 1, beatforge::test::pattern ({ { 2, { 0, 3, 6, 9, 12, 15 } } }), 16);
         e.setLoop (true, 960, 3840 + 1440);
         e.play();
 

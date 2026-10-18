@@ -7,8 +7,6 @@ namespace beatforge
 {
     namespace
     {
-        const int loopLengths[] { 1, 2, 4, 8 };
-
         void drawSegment (juce::Graphics& g, juce::Rectangle<int> area, const juce::String& value,
                           const juce::String& caption, float valueSize)
         {
@@ -32,8 +30,8 @@ namespace beatforge
           settingsButton ("Audio Settings", TransportButton::Icon::settings, theme::accent)
     {
         playButton.setTooltip ("Play (Space)");
-        stopButton.setTooltip ("Stop and return to bar 1 (Space)");
-        loopButton.setTooltip ("Loop from bar 1 (L)");
+        stopButton.setTooltip ("Stop and return to where playback started (Space)");
+        loopButton.setTooltip ("Loop the region marked on the ruler (L)");
         metronomeButton.setTooltip ("Metronome on/off (M)");
         settingsButton.setTooltip ("Audio settings: output device, sample rate, buffer size");
 
@@ -48,23 +46,15 @@ namespace beatforge
         tempoField.onEditFinished = [this] { if (onTextEditFinished) onTextEditFinished(); };
         signatureField.onChange = [this] (time::TimeSignature sig) { session.setTimeSignature (sig); };
 
-        for (auto bars : loopLengths)
-            loopLengthBox.addItem (juce::String (bars) + (bars == 1 ? " bar" : " bars"), bars);
-        loopLengthBox.setTooltip ("Loop length, from bar 1");
-        loopLengthBox.setWantsKeyboardFocus (false);   // keep Space for the transport
-        loopLengthBox.onChange = [this]
-        {
-            session.setLoop (session.getProject().loopEnabled, loopLengthBox.getSelectedId());
-        };
-
         for (auto* c : std::initializer_list<juce::Component*> { &projectButton, &playButton, &stopButton, &loopButton,
                                                                   &tempoField, &signatureField, &metronomeButton,
-                                                                  &loopLengthBox, &settingsButton })
+                                                                  &settingsButton })
             addAndMakeVisible (c);
 
         listenerId = session.addListener ([this] (project::Session::Change change)
         {
-            if (change != project::Session::Change::pattern && change != project::Session::Change::lanes)
+            using Change = project::Session::Change;
+            if (change == Change::replaced || change == Change::transport || change == Change::metadata)
                 refreshFromSession();
         });
 
@@ -86,7 +76,6 @@ namespace beatforge
         signatureField.setSignature (p.timeSignature);
         loopButton.setLit (p.loopEnabled);
         metronomeButton.setLit (p.metronomeEnabled);
-        loopLengthBox.setSelectedId (p.loopBars, juce::dontSendNotification);
         repaint (savedArea);
     }
 
@@ -111,7 +100,7 @@ namespace beatforge
     void TransportBar::toggleLoop()
     {
         const auto& p = session.getProject();
-        session.setLoop (! p.loopEnabled, p.loopBars);
+        session.setLoop (! p.loopEnabled, p.loopStart, p.loopEnd);
     }
 
     void TransportBar::toggleMetronome()
@@ -228,8 +217,6 @@ namespace beatforge
         beatArea = area.removeFromLeft (84);
         area.removeFromLeft (12);
         metronomeButton.setBounds (area.removeFromLeft (40).reduced (0, 3));
-        area.removeFromLeft (8);
-        loopLengthBox.setBounds (area.removeFromLeft (92).reduced (0, 7));
 
         settingsButton.setBounds (area.removeFromRight (40).reduced (0, 3));
     }

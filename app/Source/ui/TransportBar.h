@@ -16,7 +16,7 @@ namespace beatforge
 {
     // NEBULA transport row: project + saved state, transport buttons, the
     // readout strip (BPM | SIG | BAR.BEAT.TICK | TIME), beat lights, metronome,
-    // loop length and audio settings. Settings go through the Session; the
+    // loop on/off (the region is set on the arrangement ruler) and audio settings. Settings go through the Session; the
     // playing position is read from the engine for display only.
     class TransportBar final : public juce::Component,
                                private juce::Timer
@@ -53,7 +53,6 @@ namespace beatforge
         TransportButton playButton, stopButton, loopButton, metronomeButton, settingsButton;
         TempoField tempoField;
         SignatureField signatureField;
-        juce::ComboBox loopLengthBox;
 
         juce::Rectangle<int> savedArea, stripArea, positionArea, timeArea, beatArea;
         bool showTime = true;

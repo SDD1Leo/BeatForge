@@ -10,18 +10,20 @@
 namespace beatforge::project
 {
     // On-disk format: UTF-8 JSON, extension ".beatforge".
-    //   { "format": "beatforge-project", "version": 1, ... }
+    //   { "format": "beatforge-project", "version": 2, ... }
     // Readers accept any version <= currentVersion; newer files are refused
-    // (never half-read). Older versions are upgraded in memory.
+    // (never half-read). Version 1 (one looping pattern + one looping clip,
+    // 0.4-0.6) is upgraded in memory to the arrangement model.
     constexpr const char* fileExtension = ".beatforge";
     constexpr const char* formatName = "beatforge-project";
-    constexpr int currentVersion = 1;
+    constexpr int currentVersion = 2;
 
     struct LoadResult
     {
         std::optional<Project> project;      // empty on error
         std::string error;                   // why loading failed
         std::vector<std::string> warnings;   // what was corrected while loading
+        int fileVersion = 0;                 // version found in the file
 
         bool ok() const noexcept { return project.has_value(); }
     };

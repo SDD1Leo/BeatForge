@@ -14,7 +14,7 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 | 4 | Project save/load (versioned format) | ✅ |
 | 5 | MIDI engine & piano roll | ✅ |
 | 6 | Built-in synth & mono bass | ✅ |
-| 7 | Arrangement view (tracks, clips, volume/pan, loop, undo) | ⏳ |
+| 7 | Arrangement view (tracks, clips, volume/pan, loop, undo) | 🧪 |
 | 8 | MIDI device input, recording, MIDI file export | ⏳ |
 | 9 | Offline render & WAV export | ⏳ |
 | 10 | MCP server (TypeScript, local IPC) | ⏳ |
@@ -28,27 +28,23 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 - Changing device / sample rate / buffer size stops playback (device restart).
 - JACK backend disabled; ALSA-via-PipeWire only. Default buffer is 512 samples
   (~46 ms reported output latency) — fine for now, tune in Audio Settings.
-- Loop always starts at bar 1 (1/2/4/8 bars); dragging loop points arrives with
-  the arrangement view (Phase 7). No seek/pause yet — Stop returns to bar 1.
 - One time signature for the whole project (time-signature changes later).
-- The ruler is display-only (it pages along with the playhead).
-- One 16-step pattern (one 4/4 bar of 16ths, aligned to bar 1); in other time
-  signatures it still repeats every 16 sixteenths. No step velocity/accent,
-  swing, or pattern length options yet. Loading your own samples comes later.
-- No undo/redo yet (planned with the arrangement editing in Phase 7).
-- Only one drum track per project; other track types appear with later phases
-  (files containing them keep them).
-- Opening a project does not stop playback first (the new pattern plays from
-  the next step).
-- One Synth track with one clip (looping from bar 1); several tracks and
-  clips come in Phase 7. No undo yet (Phase 7). Grid choice is not saved.
+- Clip positions snap to beats, loop points to bars; no free/fine snapping yet.
+  No pause: Stop returns to where playback started (set it by clicking the ruler).
+- No arrangement zoom or horizontal scroll yet: the view shows at least 16 bars
+  and grows with the song. Tracks cannot be reordered yet. At most 16 tracks.
+- Drum clips hold one 16-step pattern (a 4/4 bar of 16ths) that repeats every bar
+  of the clip; in other time signatures it still repeats every 16 sixteenths.
+  No per-clip pattern variations, step velocity/accent or swing yet.
+- A clip overlapping a later clip on the same track is cut where the later one starts.
+- Opening a project does not stop playback first.
+- Grid choice in the piano roll is not saved. Selection is not part of undo.
 - Instruments: one oscillator per voice, low-pass only, no LFO/modulation
   matrix/effects/presets yet (the Nebula reference shows these as future).
 - In Debug builds, if the ALSA MIDI sequencer cannot be opened JUCE raises a
   debug assertion (`juce_Midi_linux.cpp`). Seen only with ALSA deliberately broken.
 
-## Next up: Phase 7
+## Next up: Phase 8
 
-Arrangement view: multiple tracks (drums, synth/bass), clips on a timeline
-(move, duplicate, length), track volume and pan, loop regions, and undo/redo
-for editing. The Nebula arrangement layout becomes the main screen.
+MIDI device input (play instruments from a keyboard), recording into clips,
+and MIDI file export.
