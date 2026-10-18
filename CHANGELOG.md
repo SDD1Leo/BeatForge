@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.10.0] — Phase 10: MCP server (awaiting user test)
+## [0.10.0] — Phase 10: MCP server (approved 2026-10-18)
 
 ### Added
 - Command API (core): 38 named operations with validated JSON arguments and
