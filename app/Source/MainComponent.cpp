@@ -26,6 +26,7 @@ namespace beatforge
         {
             juce::PopupMenu menu;
             menu.addSectionHeader ("Help");
+            menu.addItem ("Studio Tour", [this] { showStudioTour(); });
             menu.addItem ("User Guide", [this] { showGuide(); });
             juce::PopupMenu::Item keys ("Keyboard Shortcuts");
             keys.shortcutKeyDescription = "F1";
@@ -328,6 +329,83 @@ namespace beatforge
         settingsWindow = options.launchAsync();
     }
 
+    //==============================================================================
+    void MainComponent::showStudioTourIfFirstRun()
+    {
+        if (! appSettings.getBoolValue ("studioTourShown", false))
+            showStudioTour();
+    }
+
+    void MainComponent::showStudioTour()
+    {
+        if (tour != nullptr)
+            return;
+
+        computerKeys.releaseAll();
+        auto inParent = [] (juce::Component& c, juce::Rectangle<int> r) { return r + c.getPosition(); };
+        std::vector<StudioTour::Step> steps {
+            { "Welcome to BeatForge",
+              "A quick look around the studio: where to play, build a song, shape sounds and mix. "
+              "It takes about a minute; replay it any time from Help (?) > Studio Tour.", {} },
+            { "Transport",
+              "Play and Stop (Space), Record (R) into the selected synth track, and Loop (L) the "
+              "region marked on the ruler.",
+              [this, inParent] { return inParent (transportBar, transportBar.getTransportArea()); } },
+            { "Tempo, meter and position",
+              "Drag the BPM up or down (Shift for fine steps) or double-click it to type. Click SIG to "
+              "change the time signature. The cyan readout is bar.beat.tick; TIME is minutes and seconds.",
+              [this, inParent] { return inParent (transportBar, transportBar.getReadoutArea()); } },
+            { "Click, keys and help",
+              "The beat dots follow the bar. Toggle the metronome (M) and the computer keyboard (K: Q to ] "
+              "and the number row play notes, Z/X change octave), and open help, shortcuts or this tour.",
+              [this, inParent] { return inParent (transportBar, transportBar.getTogglesArea()); } },
+            { "Your project",
+              "The menu button has New, Open, Save and Export. Double-click the name to rename the "
+              "project. The pill shows whether your work is saved; undo and redo name each step.",
+              [this, inParent] { return inParent (transportBar, transportBar.getProjectArea()); } },
+            { "Tracks",
+              "Add drum or synth tracks here. Each track has mute (M), solo (S), volume and pan. Drag a "
+              "track to reorder it, double-click its name to rename, right-click for more.",
+              [this, inParent] { return inParent (arrangement, arrangement.getTrackListBounds()); } },
+            { "Arrangement",
+              "Double-click a lane to make a clip; drag clips to move them, or their right edge to resize. "
+              "Drag along the top of the ruler to set the loop; click below it to move the playhead.",
+              [this, inParent] { return inParent (arrangement, arrangement.getTimelineBounds()); } },
+            { "Editor",
+              "Edits the selected track: the step sequencer (drums) or piano roll (synths), the instrument "
+              "with presets, and the mixer. Ctrl+1, Ctrl+2 and Ctrl+3 switch tabs.",
+              [this] { return editorCard; } },
+            { "Master",
+              "The output level of the whole song, with clip lights and the loudest peak. Click the meter "
+              "to reset them. Keep the peak below 0 dB.",
+              [this] { return outputCard; } },
+            { "Status",
+              "The audio device and buffer, MIDI inputs and computer keys, and whether AI assistants can "
+              "connect over MCP.",
+              [this] { return statusBar.getBounds(); } },
+            { "You're ready",
+              "Add a drum track, click a few steps, press Space and build from there. Your work is saved "
+              "every minute in case of a crash.", {} },
+        };
+
+        tour = std::make_unique<StudioTour> (std::move (steps));
+        tour->onClose = [this]
+        {
+            appSettings.setValue ("studioTourShown", true);
+            appSettings.saveIfNeeded();
+            juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)]
+            {
+                if (safe == nullptr) return;
+                safe->tour = nullptr;
+                safe->grabKeyboardFocus();
+            });
+        };
+        addAndMakeVisible (*tour);
+        tour->setBounds (getLocalBounds());
+        tour->showStep (0);
+        tour->grabKeyboardFocus();
+    }
+
     void MainComponent::showGuide()
     {
         if (guideWindow != nullptr)
@@ -430,6 +508,8 @@ namespace beatforge
 
     bool MainComponent::keyStateChanged (bool)
     {
+        if (tour != nullptr)
+            return false;
         computerKeys.keyStateChanged();
         return false;
     }
@@ -437,6 +517,10 @@ namespace beatforge
     bool MainComponent::handleShortcut (const juce::KeyPress& key)
     {
         const auto ctrl = juce::ModifierKeys::commandModifier;
+
+        // The tour takes every key while it is open (window-level keys arrive here too).
+        if (tour != nullptr)
+            return tour->keyPressed (key);
 
         // Computer keyboard notes win over single-key shortcuts while it is on.
         if (computerKeys.keyPressed (key))
@@ -530,6 +614,8 @@ namespace beatforge
         instrumentPanel.setBounds (editorCard.reduced (1));
         instrumentPanel.setHeaderStart (workspaceTabs.getRight() - instrumentPanel.getX() + 10);
         workspaceTabs.toFront (false);
+        if (tour != nullptr)
+            tour->toFront (false);   // the tour always stays on top
         mixer.setBounds (editor);
         drumPanel.setBounds (editor.removeFromTop (DrumMachinePanel::preferredHeight));
         outputMeter.setBounds (outputCard.reduced (12, 0).withTrimmedTop (40).withTrimmedBottom (14));

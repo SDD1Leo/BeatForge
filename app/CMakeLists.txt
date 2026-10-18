@@ -27,6 +27,7 @@ target_sources(BeatForge
         Source/ui/ShortcutsDialog.cpp
         Source/ui/SignatureField.cpp
         Source/ui/StatusBar.cpp
+        Source/ui/StudioTour.cpp
         Source/ui/TabBar.cpp
         Source/ui/TempoField.cpp
         Source/ui/TransportBar.cpp

@@ -1,6 +1,25 @@
 # Changelog
 
-## [Unreleased] — Phase 11b: UI revamp from the Figma spec (in progress)
+## [1.0.0] — First release: UI revamp and studio tour (approved 2026-10-18)
+
+### Added
+- **Studio tour:** a guided overlay that spotlights the transport, readouts,
+  toggles, project controls, tracks, arrangement, editor, master meter and status
+  bar in turn, each with a short card (Back / Next / Skip; arrow keys, Enter,
+  Escape). It opens once on the first launch; replay it from Help (?) → Studio
+  Tour. The studio does not react to keys or clicks while it is open.
+
+### Fixed
+- Menu section headers ("HELP") no longer trip a JUCE font assertion with the
+  embedded fonts (Debug builds).
+- The header's logo no longer drifts right and cuts off "BeatForge" after
+  repeated repaints.
+
+### Not restyled yet
+- The Step Sequencer, Piano Roll and Mixer tabs work as before but keep their
+  previous styling inside the new editor panel.
+
+## Phase 11b: UI revamp from the Figma spec
 
 ### Changed
 - New visual design from the Figma file "BeatForge UI Revamp"

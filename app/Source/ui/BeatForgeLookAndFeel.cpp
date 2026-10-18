@@ -159,6 +159,18 @@ namespace beatforge
         return juce::Font (theme::font (13.0f));
     }
 
+    // JUCE's version boldens the menu font, which looks the embedded Inter up by
+    // family and style and trips a FreeType assertion for static (non-variable)
+    // fonts. Use the Semi Bold face directly instead.
+    void BeatForgeLookAndFeel::drawPopupMenuSectionHeader (juce::Graphics& g, const juce::Rectangle<int>& area,
+                                                           const juce::String& sectionName)
+    {
+        g.setFont (theme::captionFont (10.0f));
+        g.setColour (theme::textMuted);
+        g.drawFittedText (sectionName.toUpperCase(), area.getX() + 12, area.getY(), area.getWidth() - 16,
+                          (int) ((float) area.getHeight() * 0.8f), juce::Justification::bottomLeft, 1);
+    }
+
     //==============================================================================
     int BeatForgeLookAndFeel::getSliderThumbRadius (juce::Slider& slider)
     {

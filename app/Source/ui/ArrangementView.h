@@ -55,6 +55,10 @@ namespace beatforge
         void resized() override;
         void paintOverChildren (juce::Graphics&) override;
 
+        // Areas the studio tour points at.
+        juce::Rectangle<int> getTrackListBounds() const { return getLocalBounds().withWidth (headerWidth); }
+        juce::Rectangle<int> getTimelineBounds() const  { return getLocalBounds().withTrimmedLeft (headerWidth); }
+
         static constexpr int headerWidth = 264, rowHeight = 70, rulerHeight = 40, footerHeight = 40;
         static constexpr double minBarsVisible = 1.0, maxBarsVisible = 256.0;
 

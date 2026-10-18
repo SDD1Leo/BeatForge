@@ -1,6 +1,6 @@
 {
   "name": "beatforge-mcp",
-  "version": "0.10.0",
+  "version": "1.0.0",
   "description": "MCP server for BeatForge: lets an AI assistant inspect and edit the running DAW through its command API (local socket only).",
   "private": true,
   "type": "module",

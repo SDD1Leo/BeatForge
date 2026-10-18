@@ -55,6 +55,12 @@ namespace beatforge
 
         static constexpr int height = 68;
 
+        // Areas the studio tour points at (in this component's coordinates).
+        juce::Rectangle<int> getProjectArea() const    { return menuButton.getBounds().getUnion (redoButton.getBounds()); }
+        juce::Rectangle<int> getTransportArea() const  { return groupArea; }
+        juce::Rectangle<int> getReadoutArea() const    { return stripArea; }
+        juce::Rectangle<int> getTogglesArea() const    { return beatArea.getUnion (helpButton.getBounds()); }
+
     private:
         void timerCallback() override;
         void refreshPosition();

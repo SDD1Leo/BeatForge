@@ -8,7 +8,7 @@ import { BeatForgeClient } from "./ipc.js";
 import { registerTools } from "./tools.js";
 
 const server = new McpServer(
-  { name: "beatforge", version: "0.10.0" },
+  { name: "beatforge", version: "1.0.0" },
   {
     instructions:
       "BeatForge is a desktop DAW running on this computer. Use get_project_state first. Bars and beats are 1-based "

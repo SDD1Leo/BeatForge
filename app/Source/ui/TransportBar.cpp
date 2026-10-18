@@ -227,7 +227,8 @@ namespace beatforge
 
         // Logo: six bars alternating purple and pink, then the wordmark.
         {
-            auto logo = brandArea.removeFromLeft (28).withSizeKeepingCentre (28, 26).toFloat();
+            auto brand = brandArea;   // a copy: paint must not change the layout
+            auto logo = brand.removeFromLeft (28).withSizeKeepingCentre (28, 26).toFloat();
             const float heights[] { 8.0f, 16.0f, 26.0f, 14.0f, 22.0f, 10.0f };
             for (int i = 0; i < 6; ++i)
             {
@@ -236,10 +237,10 @@ namespace beatforge
             }
             if (showWordmark)
             {
-                brandArea.removeFromLeft (10);
+                brand.removeFromLeft (10);
                 g.setColour (theme::textPrimary);
                 g.setFont (theme::heavyFont (18.0f));
-                g.drawText ("BeatForge", brandArea, juce::Justification::centredLeft, false);
+                g.drawText ("BeatForge", brand, juce::Justification::centredLeft, false);
             }
         }
 

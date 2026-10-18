@@ -95,9 +95,10 @@ with a text label; it is never the only signal.
 | 1 | Foundation: tokens, embedded fonts, LookAndFeel controls (knob 12.1, linear slider 12.7, button styles, combo box, menus, tooltips) | done |
 | 2 | Shared chrome: 68 px header, arrangement panel (track headers 12.6, ruler, lanes, clips, playhead), master meter with peak readout, status bar | done |
 | 3 | Instrument tab: editor shell header, three module cards, waveform / filter / envelope displays, wave selector, knob controls | done |
-| 4 | Step Sequencer tab | next |
-| 5 | Piano Roll tab | planned |
-| 6 | Mixer tab restyle | planned |
+| 3b | Studio tour overlay (spotlight + card, same tokens) | done (1.0.0) |
+| 4 | Step Sequencer tab | after 1.0.0 |
+| 5 | Piano Roll tab | after 1.0.0 |
+| 6 | Mixer tab restyle | after 1.0.0 |
 
 Earlier NEBULA steps (0.3–0.11) built the screens this pass restyles; see the
 CHANGELOG for their history.

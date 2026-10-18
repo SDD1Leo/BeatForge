@@ -15,6 +15,7 @@
 #include "ui/PianoRollPanel.h"
 #include "ui/TabBar.h"
 #include "ui/StatusBar.h"
+#include "ui/StudioTour.h"
 #include "ui/TransportBar.h"
 
 #include <beatforge/audio/AudioEngine.h>
@@ -55,6 +56,9 @@ namespace beatforge
         bool startAiBridge (std::string& error);
         // Offers to restore work left by a crash, then starts autosaving.
         void startAutosave();
+        // The guided tour (Help > Studio Tour); shown once on the first launch.
+        void showStudioTour();
+        void showStudioTourIfFirstRun();
         ComputerKeyboard& getComputerKeys() noexcept { return computerKeys; }
         ProjectActions& getProjectActions() noexcept { return actions; }
 
@@ -70,6 +74,7 @@ namespace beatforge
         void showShortcuts();
         void showGuide();
         juce::Component::SafePointer<juce::DialogWindow> guideWindow;
+        std::unique_ptr<StudioTour> tour;
         juce::Component::SafePointer<juce::DialogWindow> browserWindow;
         juce::Component::SafePointer<juce::DialogWindow> exportWindow;
 

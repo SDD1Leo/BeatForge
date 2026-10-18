@@ -23,6 +23,7 @@ namespace beatforge
                            int buttonX, int buttonY, int buttonW, int buttonH, juce::ComboBox&) override;
 
         juce::Font getPopupMenuFont() override;
+        void drawPopupMenuSectionHeader (juce::Graphics&, const juce::Rectangle<int>&, const juce::String&) override;
 
         void drawLinearSlider (juce::Graphics&, int x, int y, int width, int height,
                                float sliderPos, float minSliderPos, float maxSliderPos,

@@ -3,7 +3,9 @@
 This walks you through a four-bar electronic track: drums, bass and chords,
 mixed, saved and exported. It takes about ten minutes. Every step can be
 undone with **Ctrl+Z**; **F1** shows all keyboard shortcuts. This guide is also
-in the app: the **?** button at the top right → User Guide.
+in the app: the **?** button at the top right → User Guide. For a one-minute
+look around first, take the **Studio Tour** (it opens on the first launch; replay
+it from **?** → Studio Tour).
 
 ## The screen
 

@@ -321,7 +321,10 @@ namespace beatforge
 
             // Crash recovery, then autosave (not in smoke tests: they must never touch user work).
             if (! (args.contains ("--smoke-test") || smokePlay))
+            {
                 mainWindow->getMainComponent().startAutosave();
+                mainWindow->getMainComponent().showStudioTourIfFirstRun();
+            }
 
             // The MCP bridge: always in normal use; in smoke tests only with --ipc.
             if (! (args.contains ("--smoke-test") || smokePlay) || args.contains ("--ipc"))

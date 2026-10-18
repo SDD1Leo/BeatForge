@@ -3,7 +3,7 @@
 A native desktop DAW for electronic music, built in C++ with JUCE.
 Small feature set, reliable audio, pleasant workflow.
 
-**Status:** Phase 11 (polish and creative workflow) approved; next: a UI polishing pass (11b), then Phase 12 features. New here? Start with the [user guide](USER_GUIDE.md).
+**Status:** v1.0.0: Phases 0–11 and the UI revamp (11b) are done; next, Phase 12 features. New here? Start with the [user guide](USER_GUIDE.md), or take the studio tour in the app (it opens on first launch; replay it from **?** → Studio Tour).
 Arrange drum and synth tracks (Nebula Poly or Nebula Bass) as clips on a
 timeline, with per-track volume, pan, mute and solo, a loop region, seek and
 undo/redo. Play synth tracks from a MIDI keyboard, record takes, and export
@@ -17,6 +17,7 @@ as versioned `.beatforge` project files.
 
 | Action | How |
 |---|---|
+| Studio tour | Opens on the first launch; replay it any time from **?** → **Studio Tour**. **→** / Enter next, **←** back, **Esc** closes |
 | Play from a MIDI keyboard | Plug it in (it is enabled automatically; see Audio Settings → Active MIDI inputs) and select a synth track. The status bar shows the inputs and flashes on MIDI |
 | Record | Select a synth track, press **Record** or **R**: playback starts and what you play goes into the track (into the clip under the playhead, or a new clip). **R** again stops recording, **Stop**/Space ends it. **Ctrl+Z** removes the whole take |
 | Computer keyboard as a MIDI keyboard | Press **K** (or the keyboard button in the transport). **Q W E R T Y U I O P [ ]** are the white keys from C4, **2 3 5 6 7 9 0 =** the black keys; **Z / X** octave down / up, **C / V** velocity down / up. The status bar shows the range and velocity. While it is on, R and Q play notes: record with **Ctrl+R** or the Record button, quantize with its button. **K** again turns it off |
