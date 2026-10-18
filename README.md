@@ -41,13 +41,14 @@ as versioned `.beatforge` project files.
 | Instrument presets | Instrument tab → preset menu (Pluck, Soft Pad, Bright Lead, Keys, Warm Sine; Sub, Acid, Punchy, Smooth Saw) |
 | Copy / cut / paste a clip | **Ctrl+C** / **Ctrl+X**; select a track, click the ruler where it should go, **Ctrl+V** |
 | All shortcuts | **F1** |
-| User guide | Project menu → Help → **User Guide** |
+| Help | **?** button (top right): User Guide, Keyboard Shortcuts |
 | Build a beat | Click steps in the step grid; click-drag along a row to paint several. While stopped, a newly set step is auditioned. The pattern repeats every bar of the clip |
 | Hear a drum | Click its name |
 | Drum level / mute / solo | Row slider (double-click = 0 dB), **M**, **S** buttons |
 | Clear the pattern | **Clear** |
 | Rename a drum | Double-click its name |
-| Project menu | Click the project name (top left): New, Open, Open Recent, Save, Save As, Rename, Undo, Redo, Export Audio, Export MIDI |
+| Project menu | The menu button (top left): New, Open, Open Recent, Save, Save As, Rename, Undo, Redo, Export Audio, Export MIDI |
+| Rename the project | Double-click its name next to the menu button |
 | New / Open / Save / Save As | **Ctrl+N** / **Ctrl+O** (project browser) / **Ctrl+S** / **Ctrl+Shift+S**. Unsaved work is autosaved every minute and offered back after a crash |
 | Choose a synth track's instrument | Select the track → Instrument tab → **Nebula Poly** (chords, leads) or **Nebula Bass** (mono, glide) |
 | Shape the sound | Instrument tab: wave buttons; knobs (drag up/down or scroll, Shift = fine, double-click = default); **Reset** restores defaults |

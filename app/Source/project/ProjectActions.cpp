@@ -315,9 +315,6 @@ namespace beatforge
         menu.addSeparator();
         menu.addItem (item (9, "Export Audio...", "Ctrl+Shift+E"));
         menu.addItem (item (8, "Export MIDI...", "Ctrl+E"));
-        menu.addSectionHeader ("Help");
-        menu.addItem (item (11, "User Guide", {}));
-        menu.addItem (item (10, "Keyboard Shortcuts", "F1"));
 
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&anchor).withMinimumWidth (anchor.getWidth()),
                              [this] (int id)
@@ -334,8 +331,6 @@ namespace beatforge
                 case 7: session.redo(); break;
                 case 8: exportMidiWithChooser(); break;
                 case 9: if (onExportAudio) onExportAudio(); break;
-                case 10: if (onShowShortcuts) onShowShortcuts(); break;
-                case 11: if (onShowGuide) onShowGuide(); break;
                 default:
                     if (id >= recentBase)
                         openFile (recent.getFile (id - recentBase));

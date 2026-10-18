@@ -23,7 +23,7 @@ target_sources(BeatForge
         Source/ui/MixerPanel.cpp
         Source/ui/PianoRollPanel.cpp
         Source/ui/ProjectBrowser.cpp
-        Source/ui/ProjectButton.cpp
+        Source/ui/ProjectNameField.cpp
         Source/ui/ShortcutsDialog.cpp
         Source/ui/SignatureField.cpp
         Source/ui/StatusBar.cpp

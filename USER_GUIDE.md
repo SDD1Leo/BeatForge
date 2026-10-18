@@ -3,13 +3,13 @@
 This walks you through a four-bar electronic track: drums, bass and chords,
 mixed, saved and exported. It takes about ten minutes. Every step can be
 undone with **Ctrl+Z**; **F1** shows all keyboard shortcuts. This guide is also
-in the app: project menu → Help → User Guide.
+in the app: the **?** button at the top right → User Guide.
 
 ## The screen
 
-- **Top:** project menu (name, saved state), undo/redo, transport (Play, Stop,
-  Record, Loop), tempo / time signature / position, metronome, computer
-  keyboard, audio settings.
+- **Top:** project menu button, project name (double-click to rename), saved
+  state, undo/redo, transport (Play, Stop, Record, Loop), tempo / time
+  signature / position, metronome, computer keyboard, help (?), audio settings.
 - **Middle:** the arrangement: one row per track, clips on a timeline, the ruler
   (loop region on its thin top strip, playhead below).
 - **Bottom:** the editor for what you selected: **Step Sequencer** (drum clips) or

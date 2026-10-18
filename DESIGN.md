@@ -94,6 +94,7 @@ Colour always comes with a text label; it is never the only signal.
 | 6c | Export Audio dialog (captioned options, violet→magenta progress bar, summary) | done (0.9.0) |
 | 6d | Mixer tab (channel strips: colour bar, name, pan, fader + slim meter, dB, M/S; master strip) | done (0.11.0) |
 | 6e | Project browser, shortcuts overview, restore prompt, named undo/redo buttons, multi-line tooltips | done (0.11.0) |
+| 6f | Transport row: separate menu button and project name (double-click renames), Help (?) button with User Guide window | done (0.11.0) |
 
 Record (transport, red when recording) and the status-bar MIDI light arrived
 with Phase 8; the status bar's right side also shows the MCP bridge (MCP ready /

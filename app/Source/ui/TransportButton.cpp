@@ -105,6 +105,23 @@ namespace beatforge
                 break;
             }
 
+            case Icon::menu:
+            {
+                // Three bars, like a list of commands.
+                for (int i = 0; i < 3; ++i)
+                    g.fillRoundedRectangle (iconArea.getX() + 1.0f, iconArea.getY() + 2.0f + (float) i * 4.5f, iconArea.getWidth() - 2.0f, 2.0f, 1.0f);
+                break;
+            }
+
+            case Icon::help:
+            {
+                // A question mark in a ring.
+                g.drawEllipse (iconArea.expanded (1.5f), 1.6f);
+                g.setFont (theme::font (12.5f, juce::Font::bold));
+                g.drawText ("?", iconArea.expanded (2.0f).translated (0.5f, 0.0f), juce::Justification::centred);
+                break;
+            }
+
             case Icon::keyboard:
             {
                 // A computer keyboard: outline with two rows of keys and a space bar.

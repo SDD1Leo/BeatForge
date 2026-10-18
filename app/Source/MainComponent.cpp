@@ -23,6 +23,17 @@ namespace beatforge
     {
         transportBar.onOpenAudioSettings = [this] { openAudioSettings(); };
         transportBar.onProjectMenu = [this] (juce::Component& anchor) { actions.showMenu (anchor); };
+        transportBar.onHelpMenu = [this] (juce::Component& anchor)
+        {
+            juce::PopupMenu menu;
+            menu.addSectionHeader ("Help");
+            menu.addItem ("User Guide", [this] { showGuide(); });
+            juce::PopupMenu::Item keys ("Keyboard Shortcuts");
+            keys.shortcutKeyDescription = "F1";
+            keys.action = [this] { showShortcuts(); };
+            menu.addItem (keys);
+            menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&anchor).withMinimumWidth (200));
+        };
         transportBar.onTextEditFinished = [this] { grabKeyboardFocus(); };
         drumPanel.onTextEditFinished = [this] { grabKeyboardFocus(); };
         arrangement.onTextEditFinished = [this] { grabKeyboardFocus(); };
@@ -42,8 +53,6 @@ namespace beatforge
         transportBar.onRecord = [this] { toggleRecord(); };
         actions.onExportAudio = [this] { openExportAudio(); };
         actions.onOpenBrowser = [this] { openProjectBrowser(); };
-        actions.onShowShortcuts = [this] { showShortcuts(); };
-        actions.onShowGuide = [this] { showGuide(); };
         arrangement.onMessage = [this] (const juce::String& text) { statusBar.showNotice (text); };
         transportBar.onComputerKeys = [this] { toggleComputerKeys(); };
         pianoRoll.keyFilter = [this] (const juce::KeyPress& key) { return computerKeys.keyPressed (key); };

@@ -23,6 +23,8 @@ namespace beatforge
 
     TransportBar::TransportBar (audio::AudioEngine& e, project::Session& s)
         : engine (e), session (s),
+          menuButton ("Project menu", TransportButton::Icon::menu, theme::accent),
+          helpButton ("Help", TransportButton::Icon::help, theme::accent),
           undoButton ("Undo", TransportButton::Icon::undo, theme::accent),
           redoButton ("Redo", TransportButton::Icon::redo, theme::accent),
           playButton ("Play", TransportButton::Icon::play, theme::accent),
@@ -39,7 +41,12 @@ namespace beatforge
         metronomeButton.setTooltip ("Metronome on/off (M)");
         settingsButton.setTooltip ("Audio settings: output device, sample rate, buffer size");
 
-        projectButton.onClick = [this] { if (onProjectMenu) onProjectMenu (projectButton); };
+        menuButton.setTooltip ("Project menu: New, Open, Save, Save As, Rename, Undo/Redo, Export Audio/MIDI");
+        menuButton.onClick = [this] { if (onProjectMenu) onProjectMenu (menuButton); };
+        helpButton.setTooltip ("Help: User Guide, Keyboard Shortcuts (F1)");
+        helpButton.onClick = [this] { if (onHelpMenu) onHelpMenu (helpButton); };
+        projectName.onRename = [this] (const juce::String& name) { return session.renameProject (name.toStdString()); };
+        projectName.onEditFinished = [this] { if (onTextEditFinished) onTextEditFinished(); };
         playButton.onClick = [this] { engine.play(); refreshPosition(); };
         stopButton.onClick = [this] { engine.setRecording (false); engine.stop(); refreshPosition(); };
         recordButton.onClick = [this] { if (onRecord) onRecord(); };
@@ -54,7 +61,7 @@ namespace beatforge
         tempoField.onEditFinished = [this] { if (onTextEditFinished) onTextEditFinished(); };
         signatureField.onChange = [this] (time::TimeSignature sig) { session.setTimeSignature (sig); };
 
-        for (auto* c : std::initializer_list<juce::Component*> { &projectButton, &undoButton, &redoButton, &playButton, &stopButton, &recordButton, &loopButton,
+        for (auto* c : std::initializer_list<juce::Component*> { &menuButton, &projectName, &helpButton, &undoButton, &redoButton, &playButton, &stopButton, &recordButton, &loopButton,
                                                                   &tempoField, &signatureField, &metronomeButton, &keysButton,
                                                                   &settingsButton })
             addAndMakeVisible (c);
@@ -81,7 +88,7 @@ namespace beatforge
     void TransportBar::refreshFromSession()
     {
         const auto& p = session.getProject();
-        projectButton.setProjectName (juce::String::fromUTF8 (p.name.c_str()));
+        projectName.setProjectName (juce::String::fromUTF8 (p.name.c_str()));
         tempoField.setTempo (p.tempo, juce::dontSendNotification);
         signatureField.setSignature (p.timeSignature);
         loopButton.setLit (p.loopEnabled);
@@ -260,9 +267,11 @@ namespace beatforge
         showTime = getWidth() >= minimumWidthForTime;
         auto area = getLocalBounds().reduced (16, 9);
 
-        projectButton.setBounds (area.removeFromLeft (184).reduced (0, 4));
+        menuButton.setBounds (area.removeFromLeft (40).reduced (0, 3));
+        area.removeFromLeft (8);
+        projectName.setBounds (area.removeFromLeft (130));
         area.removeFromLeft (10);
-        savedArea = area.removeFromLeft (84);
+        savedArea = area.removeFromLeft (76);
         area.removeFromLeft (6);
         undoButton.setBounds (area.removeFromLeft (36).reduced (0, 5));
         area.removeFromLeft (4);
@@ -284,11 +293,13 @@ namespace beatforge
         timeArea = showTime ? strip : juce::Rectangle<int>();
         area.removeFromLeft (12);
 
-        beatArea = area.removeFromLeft (84);
+        beatArea = area.removeFromLeft (76);
         area.removeFromLeft (12);
         metronomeButton.setBounds (area.removeFromLeft (40).reduced (0, 3));
         area.removeFromLeft (8);
         keysButton.setBounds (area.removeFromLeft (40).reduced (0, 3));
+        area.removeFromLeft (8);
+        helpButton.setBounds (area.removeFromLeft (40).reduced (0, 3));
 
         settingsButton.setBounds (area.removeFromRight (40).reduced (0, 3));
     }

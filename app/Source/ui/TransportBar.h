@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ui/ProjectButton.h"
+#include "ui/ProjectNameField.h"
 #include "ui/SignatureField.h"
 #include "ui/TempoField.h"
 #include "ui/TransportButton.h"
@@ -46,7 +46,7 @@ namespace beatforge
         juce::String getTooltip() override;   // explains the save indicator
 
         std::function<void()> onOpenAudioSettings;
-        std::function<void (juce::Component& anchor)> onProjectMenu;
+        std::function<void (juce::Component& anchor)> onProjectMenu, onHelpMenu;
         std::function<void()> onTextEditFinished;
 
         void paint (juce::Graphics&) override;
@@ -63,8 +63,8 @@ namespace beatforge
         project::Session& session;
         int listenerId = 0;
 
-        ProjectButton projectButton;
-        TransportButton undoButton, redoButton, playButton, stopButton, recordButton, loopButton, metronomeButton, keysButton, settingsButton;
+        ProjectNameField projectName;
+        TransportButton menuButton, helpButton, undoButton, redoButton, playButton, stopButton, recordButton, loopButton, metronomeButton, keysButton, settingsButton;
         void refreshUndo();
         bool autosaved = false;
         juce::Time autosaveTime;
