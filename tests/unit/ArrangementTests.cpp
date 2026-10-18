@@ -193,3 +193,42 @@ TEST_CASE ("Slot changes and schedules stay allocation-free on the audio thread"
         REQUIRE (allocations.count() == 0);
     }
 }
+
+TEST_CASE ("Track meters show each track after its fader; muted tracks read silence", "[arrangement][mix]")
+{
+    audio::AudioEngine e;
+    kicksAndPad (e);
+    e.play();
+    render (e, 48000);
+    REQUIRE (e.getSlotMeter (0).takePeak (0) > 0.05f);
+    REQUIRE (e.getSlotMeter (1).takePeak (0) > 0.01f);
+    REQUIRE (e.getSlotMeter (5).takePeak (0) == 0.0f);   // unused slot
+
+    e.setSlotMix (0, 0.0f, 0.0f, true, false);
+    render (e, 9600);                                     // ramp
+    e.getSlotMeter (0).takePeak (0);
+    render (e, 48000);
+    REQUIRE (e.getSlotMeter (0).takePeak (0) == 0.0f);
+    REQUIRE (e.getSlotMeter (1).takePeak (0) > 0.01f);
+}
+
+TEST_CASE ("Master volume scales the tracks, not the metronome", "[arrangement][mix]")
+{
+    auto renderWith = [] (float masterDb, bool tracks, bool click)
+    {
+        audio::AudioEngine e;
+        e.prepare (48000.0);
+        if (tracks)
+            test::playNotes (e, 0, { { 0, 57, 100, 0, 3840 * 4 } }, 3840 * 4, false);
+        e.setMetronomeEnabled (click);
+        e.setMasterVolume (masterDb);
+        e.play();
+        render (e, 9600);   // past the smoothing
+        return peakIn (render (e, 24000));
+    };
+
+    const auto full = renderWith (0.0f, true, false), half = renderWith (-6.0206f, true, false);
+    REQUIRE (half == Approx (full * 0.5f).epsilon (0.01));
+    REQUIRE (renderWith (-60.0f, true, false) == 0.0f);
+    REQUIRE (renderWith (-60.0f, false, true) == Approx (renderWith (0.0f, false, true)));   // the click stays
+}

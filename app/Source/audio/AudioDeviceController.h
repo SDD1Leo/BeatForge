@@ -34,6 +34,7 @@ namespace beatforge
             int bufferSize = 0;
             int outputLatencySamples = 0;
             int xruns = 0;
+            double cpuLoad = 0.0;           // share of the audio callback's time budget in use (0..1)
             juce::StringArray midiInputs;   // enabled MIDI inputs
             juce::String error;   // empty when everything is fine
         };

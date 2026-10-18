@@ -22,6 +22,7 @@ namespace beatforge
         const auto now = juce::Time::getMillisecondCounterHiRes();
         const auto elapsedSeconds = (float) ((now - lastTickMs) / 1000.0);
         lastTickMs = now;
+        const auto before = channels;
 
         for (int ch = 0; ch < (int) channels.size(); ++ch)
         {
@@ -41,7 +42,13 @@ namespace beatforge
                 c.clipped = true;
         }
 
-        repaint();
+        // Repaint only what can be seen and has changed (an idle meter costs nothing).
+        auto changed = [] (const Channel& a, const Channel& b)
+        {
+            return std::abs (a.displayDb - b.displayDb) > 0.05f || std::abs (a.holdDb - b.holdDb) > 0.05f || a.clipped != b.clipped;
+        };
+        if (isShowing() && (changed (channels[0], before[0]) || changed (channels[1], before[1])))
+            repaint();
     }
 
     float LevelMeterComponent::dbToY (float db, juce::Rectangle<float> bar) const
@@ -55,16 +62,19 @@ namespace beatforge
         auto area = getLocalBounds().toFloat();
         auto clipRow = area.removeFromTop (10.0f);
         area.removeFromTop (4.0f);
-        area.removeFromBottom (6.0f);   // room for the bottom scale label
-        auto scale = area.removeFromLeft ((float) scaleWidth);
+        if (showScale)
+            area.removeFromBottom (6.0f);   // room for the bottom scale label
+        auto scale = area.removeFromLeft (showScale ? (float) scaleWidth : 0.0f);
 
-        const float gap = 4.0f;
+        const float gap = showScale ? 4.0f : 2.0f;
         const float barWidth = (area.getWidth() - gap) / 2.0f;
 
         // Scale ticks.
         g.setFont (theme::font (10.0f));
         for (float db : { 0.0f, -6.0f, -12.0f, -18.0f, -24.0f, -36.0f, -48.0f, -60.0f })
         {
+            if (! showScale)
+                break;
             const auto y = dbToY (db, area);
             g.setColour (theme::textSecondary);
             g.drawText (juce::String ((int) db), scale.withY (y - 6.0f).withHeight (12.0f).withTrimmedRight (4.0f),

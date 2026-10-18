@@ -97,6 +97,15 @@ namespace beatforge
         });
     }
 
+    juce::Array<juce::File> ProjectActions::getRecentFiles()
+    {
+        recent.removeNonExistentFiles();
+        juce::Array<juce::File> files;
+        for (int i = 0; i < recent.getNumFiles(); ++i)
+            files.add (recent.getFile (i));
+        return files;
+    }
+
     void ProjectActions::openFile (const juce::File& file)
     {
         confirmDiscardChanges ([this, file] { loadFile (file); });
@@ -299,9 +308,11 @@ namespace beatforge
         menu.addItem (item (9, "Export Audio...", "Ctrl+Shift+E"));
         menu.addItem (item (8, "Export MIDI...", "Ctrl+E"));
         menu.addSeparator();
-        auto undoItem = item (6, "Undo", "Ctrl+Z");
+        menu.addItem (item (10, "Keyboard Shortcuts", "F1"));
+        menu.addSeparator();
+        auto undoItem = item (6, session.canUndo() ? "Undo " + toJuce (session.undoLabel()) : juce::String ("Undo"), "Ctrl+Z");
         undoItem.isEnabled = session.canUndo();
-        auto redoItem = item (7, "Redo", "Ctrl+Shift+Z");
+        auto redoItem = item (7, session.canRedo() ? "Redo " + toJuce (session.redoLabel()) : juce::String ("Redo"), "Ctrl+Shift+Z");
         redoItem.isEnabled = session.canRedo();
         menu.addItem (undoItem);
         menu.addItem (redoItem);
@@ -313,7 +324,7 @@ namespace beatforge
             {
                 case 0: break;
                 case 1: newProject(); break;
-                case 2: openWithChooser(); break;
+                case 2: if (onOpenBrowser) onOpenBrowser(); else openWithChooser(); break;
                 case 3: save(); break;
                 case 4: saveAs(); break;
                 case 5: renameProject(); break;
@@ -321,6 +332,7 @@ namespace beatforge
                 case 7: session.redo(); break;
                 case 8: exportMidiWithChooser(); break;
                 case 9: if (onExportAudio) onExportAudio(); break;
+                case 10: if (onShowShortcuts) onShowShortcuts(); break;
                 default:
                     if (id >= recentBase)
                         openFile (recent.getFile (id - recentBase));

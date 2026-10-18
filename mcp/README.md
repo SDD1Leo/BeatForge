@@ -26,9 +26,9 @@ project?"*. Remove with `claude mcp remove beatforge -s user`.
 | Connection | `get_connection_status` |
 | Project | `get_project_state`, `create_project`*, `save_project`, `open_project`*, `undo`, `redo` |
 | Transport | `get_transport_state`, `get_tempo`, `set_tempo`, `set_time_signature`, `set_loop`, `set_metronome`, `play`, `stop`, `seek` |
-| Tracks | `list_tracks`, `create_track`, `rename_track`, `delete_track`*, `set_track_volume`, `set_track_pan`, `set_track_mute`, `set_track_solo` |
+| Tracks & mix | `list_tracks`, `create_track`, `rename_track`, `delete_track`*, `set_track_volume`, `set_track_pan`, `set_track_mute`, `set_track_solo`, `set_master_volume` |
 | Clips & notes | `create_clip`, `delete_clip`*, `set_drum_pattern`, `get_clip_notes`, `add_midi_notes`, `remove_midi_notes`*, `quantize_clip` |
-| Instruments | `list_instruments`, `set_instrument`, `set_instrument_param` |
+| Instruments | `list_instruments` (with presets), `set_instrument`, `set_instrument_preset`, `set_instrument_param` |
 | Export | `export_wav` (→ job id), `get_export_status`, `cancel_export`, `export_midi` |
 
 \* destructive: fails with `confirmation_required` unless called with

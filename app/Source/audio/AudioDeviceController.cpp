@@ -95,6 +95,7 @@ namespace beatforge
             status.bufferSize = device->getCurrentBufferSizeSamples();
             status.outputLatencySamples = device->getOutputLatencyInSamples();
             status.xruns = deviceManager.getXRunCount();
+            status.cpuLoad = deviceManager.getCpuUsage();
         }
 
         for (const auto& device : juce::MidiInput::getAvailableDevices())

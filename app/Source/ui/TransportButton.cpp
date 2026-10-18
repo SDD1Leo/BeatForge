@@ -87,6 +87,24 @@ namespace beatforge
                 break;
             }
 
+            case Icon::undo:
+            case Icon::redo:
+            {
+                // A half-circle arc over the top; the arrow head points down at the
+                // left end (undo) or the right end (redo).
+                const bool left = icon == Icon::undo;
+                const auto c = iconArea.getCentre().translated (0.0f, 2.5f);
+                const float r = 5.5f;
+                juce::Path arc;
+                arc.addCentredArc (c.x, c.y, r, r, 0.0f, -juce::MathConstants<float>::halfPi, juce::MathConstants<float>::halfPi, true);
+                g.strokePath (arc, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                const float hx = left ? c.x - r : c.x + r;
+                juce::Path head;
+                head.addTriangle (hx - 3.5f, c.y - 0.5f, hx + 3.5f, c.y - 0.5f, hx, c.y + 4.0f);
+                g.fillPath (head);
+                break;
+            }
+
             case Icon::keyboard:
             {
                 // A computer keyboard: outline with two rows of keys and a space bar.

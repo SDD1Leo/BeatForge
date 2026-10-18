@@ -13,6 +13,7 @@ add_library(beatforge_core STATIC
     src/audio/DrumMachine.cpp
     src/audio/LevelMeter.cpp
     src/audio/Metronome.cpp
+    src/audio/InstrumentPresets.cpp
     src/audio/Instruments.cpp
     src/audio/WavFile.cpp
     src/dsp/Biquad.cpp

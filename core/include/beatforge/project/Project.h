@@ -92,6 +92,7 @@ namespace beatforge::project
         double tempo = time::defaultTempo;
         time::TimeSignature timeSignature;
         bool metronomeEnabled = false;
+        float masterVolumeDb = 0.0f;      // applied to the sum of the tracks (not the metronome)
         bool loopEnabled = false;
         time::Tick loopStart = 0, loopEnd = 4 * patternTicks;
 

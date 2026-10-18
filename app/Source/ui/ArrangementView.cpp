@@ -919,14 +919,55 @@ namespace beatforge
             setView (std::floor (position / perBar) * perBar, viewBars);
         }
 
-        lanes->setPlayhead (position);
-        ruler->repaint();
+        if (moved)
+        {
+            lanes->setPlayhead (position);
+            ruler->repaint();
+        }
     }
 
     void ArrangementView::duplicateSelectedClip()
     {
         if (const auto copy = session.duplicateClip (selection.getClip()))
             selection.selectClip (copy);
+    }
+
+    bool ArrangementView::copySelectedClip()
+    {
+        const auto* c = session.findClip (selection.getClip());
+        if (c == nullptr)
+            return false;
+        clipboard = *c;
+        clipboardType = session.findTrack (session.trackOfClip (c->id))->type;
+        if (onMessage) onMessage ("Clip copied - select a track and press Ctrl+V to paste it at the playhead");
+        return true;
+    }
+
+    void ArrangementView::cutSelectedClip()
+    {
+        if (copySelectedClip())
+            session.deleteClip (selection.getClip());
+    }
+
+    bool ArrangementView::pasteClip()
+    {
+        if (! clipboard)
+            return false;
+        const auto* t = session.findTrack (selection.getTrack());
+        if (t == nullptr || t->type != clipboardType)
+        {
+            if (onMessage) onMessage (clipboardType == TrackType::drums ? "Select a drum track to paste this pattern"
+                                                                        : "Select a synth track to paste this clip");
+            return false;
+        }
+        const auto perBeat = (double) session.getProject().timeSignature.ticksPerBeat();
+        const auto at = (time::Tick) (std::round (engine.getPlayStart() / perBeat) * perBeat);
+        if (const auto id = session.pasteClip (t->id, *clipboard, clipboardType, at))
+        {
+            selection.selectClip (id);
+            return true;
+        }
+        return false;
     }
 
     void ArrangementView::deleteSelectedClip()

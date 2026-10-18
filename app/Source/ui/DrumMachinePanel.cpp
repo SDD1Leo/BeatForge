@@ -387,6 +387,9 @@ namespace beatforge
 
     void DrumMachinePanel::timerCallback()
     {
+        if (! isShowing())
+            return;
+
         // Playing step, from the musical position (display only).
         // Playing step: only while the playhead is inside the edited clip.
         int step = -1;

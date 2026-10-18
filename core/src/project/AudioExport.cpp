@@ -29,7 +29,8 @@ namespace beatforge::project
         const auto end = song ? songEnd (project) : project.loopEnd;
         if (end <= start)
         {
-            result.error = song ? "Nothing to export: the song has no clips yet." : "The loop region is empty.";
+            result.error = song ? "Nothing to export: the song has no clips yet. Create a clip first (double-click a track lane)."
+                                : "The loop region is empty. Drag across the ruler's top strip to set one.";
             return result;
         }
         if (options.sampleRate < 8000.0 || options.sampleRate > 192000.0)
@@ -132,17 +133,24 @@ namespace beatforge::project
         if (! writer.commit (result.error))
             return result;
 
-        // Validation: read the file back.
+        // Validation: read the file back. A file that fails is removed, never left half-right.
+        auto rejected = [&] (const std::string& why)
+        {
+            std::error_code ignored;
+            std::filesystem::remove (path, ignored);
+            result.error = why + " The file was removed; please export again (or try another folder or format).";
+            return result;
+        };
         audio::WavReader reader;
         std::string error;
         if (! reader.open (path, error))
-            return result.error = "The exported file could not be read back: " + error, result;
+            return rejected ("The exported file could not be read back (" + error + ").");
 
         const auto& info = reader.info();
         const bool isFloat = options.format == audio::SampleFormat::float32;
         if (info.formatTag != (isFloat ? 3 : 1) || info.numChannels != 2 || info.sampleRate != (int) std::lround (options.sampleRate)
             || info.bitsPerSample != audio::bitsOf (options.format) || info.numFrames != result.frames)
-            return result.error = "The exported file does not match the chosen format or length.", result;
+            return rejected ("The exported file did not match the chosen format or length.");
 
         // Peak read back = peak rendered (within the dither and rounding of integer formats).
         std::vector<float> block (2048 * 2);
@@ -154,7 +162,7 @@ namespace beatforge::project
         const float expected = isFloat ? result.peak : std::min (result.peak, 1.0f);
         const float tolerance = isFloat ? 0.0f : 3.0f / (options.format == audio::SampleFormat::int16 ? 32768.0f : 8388608.0f);
         if (std::abs (peak - expected) > tolerance)
-            return result.error = "The exported audio does not match what was rendered.", result;
+            return rejected ("The exported audio did not match what was rendered.");
 
         return result;
     }

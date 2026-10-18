@@ -7,7 +7,8 @@
 namespace beatforge
 {
     // NEBULA tab strip: text tabs, the active one bright with a violet underline.
-    class TabBar final : public juce::Component
+    class TabBar final : public juce::Component,
+                         public juce::TooltipClient
     {
     public:
         explicit TabBar (juce::StringArray tabNames);
@@ -25,11 +26,14 @@ namespace beatforge
 
         int getPreferredWidth() const;
 
+        void setTabTooltips (juce::StringArray tips) { tooltips = std::move (tips); }
+        juce::String getTooltip() override { const auto i = tabAt (getMouseXYRelative()); return i >= 0 ? tooltips[i] : juce::String(); }
+
     private:
         juce::Rectangle<int> tabBounds (int index) const;
         int tabAt (juce::Point<int>) const;
 
-        juce::StringArray names;
+        juce::StringArray names, tooltips;
         int current = 0, hovered = -1;
     };
 }

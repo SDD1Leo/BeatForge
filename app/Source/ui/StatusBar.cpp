@@ -24,6 +24,17 @@ namespace beatforge
         }
     }
 
+    void StatusBar::showNotice (const juce::String& message, int milliseconds)
+    {
+        notice = message;
+        noticeUntil = juce::Time::getMillisecondCounter() + (juce::uint32) milliseconds;
+        repaint();
+        juce::Timer::callAfterDelay (milliseconds + 50, [safe = juce::Component::SafePointer<StatusBar> (this)]
+        {
+            if (safe != nullptr) safe->repaint();
+        });
+    }
+
     void StatusBar::paint (juce::Graphics& g)
     {
         g.setColour (error ? theme::error.withAlpha (0.12f).overlaidWith (theme::panel.withAlpha (0.6f)) : theme::panel);
@@ -44,6 +55,17 @@ namespace beatforge
             g.setColour (theme::textSecondary);
             g.drawText (midiText, midi, juce::Justification::centredLeft, true);
             area.removeFromRight (16);
+        }
+
+        if (notice.isNotEmpty() && juce::Time::getMillisecondCounter() < noticeUntil)
+        {
+            g.setColour (theme::accent);
+            g.fillEllipse (area.removeFromLeft (8).withSizeKeepingCentre (8, 8).toFloat());
+            area.removeFromLeft (8);
+            g.setColour (theme::textPrimary);
+            g.setFont (theme::font (12.0f));
+            g.drawText (notice, area, juce::Justification::centredLeft, true);
+            return;
         }
 
         g.setColour (error ? theme::error : theme::ok);

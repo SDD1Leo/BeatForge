@@ -20,7 +20,7 @@ namespace beatforge
                                     private juce::Timer
     {
     public:
-        ExportAudioDialog (const project::Session&, juce::PropertiesFile& settings, juce::File defaultFolder, double deviceRate);
+        ExportAudioDialog (project::Session&, juce::PropertiesFile& settings, juce::File defaultFolder, double deviceRate);
         ~ExportAudioDialog() override;
 
         std::function<void()> onClose;
@@ -43,7 +43,10 @@ namespace beatforge
         project::AudioExportOptions currentOptions() const;
         void saveChoices();
 
-        const project::Session& session;
+        void refreshRanges();   // the range labels follow tempo and loop changes
+
+        project::Session& session;
+        int sessionListener = 0;
         juce::PropertiesFile& settings;
         juce::File folder;
 

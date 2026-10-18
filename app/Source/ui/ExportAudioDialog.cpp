@@ -37,18 +37,11 @@ namespace beatforge
         return o;
     }
 
-    ExportAudioDialog::ExportAudioDialog (const project::Session& s, juce::PropertiesFile& st, juce::File defaultFolder, double deviceRate)
+    ExportAudioDialog::ExportAudioDialog (project::Session& s, juce::PropertiesFile& st, juce::File defaultFolder, double deviceRate)
         : session (s), settings (st), folder (std::move (defaultFolder))
     {
-        const auto& p = session.getProject();
-        const auto perBar = p.timeSignature.ticksPerBar();
-        const auto secondsPerTick = 60.0 / (p.tempo * 960.0);
-        const auto end = project::songEnd (p);
-
-        rangeBox.addItem ("Whole song: bars 1-" + juce::String ((int) ((end + perBar - 1) / perBar))
-                              + " (" + clock ((double) end * secondsPerTick) + ") + tails", 1);
-        rangeBox.addItem ("Loop region: bars " + juce::String (p.loopStart / perBar + 1) + "-" + juce::String (p.loopEnd / perBar + 1)
-                              + " (" + clock ((double) (p.loopEnd - p.loopStart) * secondsPerTick) + "), loops seamlessly", 2);
+        refreshRanges();
+        sessionListener = session.addListener ([this] (project::Session::Change) { refreshRanges(); });
         for (int i = 0; i < 3; ++i)
         {
             rateBox.addItem (rateName (rates[i]), i + 1);
@@ -60,7 +53,7 @@ namespace beatforge
         if (! settings.containsKey ("exportRate"))
             for (double r : rates)
                 if (std::abs (r - deviceRate) < 1.0) o.sampleRate = r;
-        rangeBox.setSelectedId (o.range == Range::loop ? 2 : 1, juce::dontSendNotification);
+        rangeBox.setSelectedId (o.range == Range::loop || project::songEnd (session.getProject()) <= 0 ? 2 : 1, juce::dontSendNotification);
         for (int i = 0; i < 3; ++i)
         {
             if (std::abs (rates[i] - o.sampleRate) < 1.0) rateBox.setSelectedId (i + 1, juce::dontSendNotification);
@@ -87,17 +80,29 @@ namespace beatforge
         for (auto* c : std::initializer_list<juce::Component*> { &rangeBox, &rateBox, &bitsBox, &exportButton, &cancelButton })
             addAndMakeVisible (c);
 
-        if (end <= 0)
-        {
-            rangeBox.setSelectedId (2, juce::dontSendNotification);
-            rangeBox.setItemEnabled (1, false);
-        }
-
         setSize (560, 330);
+    }
+
+    void ExportAudioDialog::refreshRanges()
+    {
+        const auto& p = session.getProject();
+        const auto perBar = p.timeSignature.ticksPerBar();
+        const auto secondsPerTick = 60.0 / (p.tempo * 960.0);
+        const auto end = project::songEnd (p);
+        const auto selected = rangeBox.getSelectedId();
+
+        rangeBox.clear (juce::dontSendNotification);
+        rangeBox.addItem ("Whole song: bars 1-" + juce::String ((int) ((end + perBar - 1) / perBar))
+                              + " (" + clock ((double) end * secondsPerTick) + ") + tails", 1);
+        rangeBox.addItem ("Loop region: bars " + juce::String (p.loopStart / perBar + 1) + "-" + juce::String (p.loopEnd / perBar + 1)
+                              + " (" + clock ((double) (p.loopEnd - p.loopStart) * secondsPerTick) + "), loops seamlessly", 2);
+        rangeBox.setItemEnabled (1, end > 0);
+        rangeBox.setSelectedId (end <= 0 ? 2 : (selected != 0 ? selected : 1), juce::dontSendNotification);
     }
 
     ExportAudioDialog::~ExportAudioDialog()
     {
+        session.removeListener (sessionListener);
         progress.cancel = true;
         if (worker.joinable())
             worker.join();   // the render stops within one block

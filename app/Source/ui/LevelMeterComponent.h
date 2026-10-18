@@ -17,6 +17,9 @@ namespace beatforge
     public:
         explicit LevelMeterComponent (audio::LevelMeter&);
 
+        // Without the dB scale (narrow mixer strips).
+        void setShowScale (bool shouldShow) { showScale = shouldShow; repaint(); }
+
         void paint (juce::Graphics&) override;
         void mouseDown (const juce::MouseEvent&) override;
 
@@ -37,5 +40,6 @@ namespace beatforge
         audio::LevelMeter& meter;
         std::array<Channel, 2> channels;
         double lastTickMs = 0.0;
+        bool showScale = true;
     };
 }

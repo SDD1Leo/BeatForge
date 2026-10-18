@@ -42,6 +42,7 @@ namespace beatforge
         int listenerId = 0, targetListener = 0;
 
         juce::TextButton polyButton { "Nebula Poly" }, bassButton { "Nebula Bass" }, resetButton { "Reset" };
+        juce::ComboBox presetBox;
         std::array<std::unique_ptr<WaveButton>, 4> waveButtons;
         std::array<std::unique_ptr<Knob>, audio::numParams> knobs;
 

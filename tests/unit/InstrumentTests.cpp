@@ -465,3 +465,34 @@ TEST_CASE ("Default levels leave headroom for chords and a full beat", "[instrum
         REQUIRE (peak (out) < 1.0f);
     }
 }
+
+#include <beatforge/audio/InstrumentPresets.h>
+
+TEST_CASE ("Factory presets are in range, start with Init = defaults, and are recognised", "[instrument][presets]")
+{
+    for (auto type : { audio::InstrumentType::polySynth, audio::InstrumentType::monoBass })
+    {
+        const auto presets = audio::presetsFor (type);
+        REQUIRE (presets.size() >= 5);
+        REQUIRE (presets[0].id == "init");
+        for (int i = 0; i < audio::numParams; ++i)
+            REQUIRE (presets[0].values[(size_t) i] == audio::defaultValue (type, (audio::Param) i));
+        for (auto& p : presets)
+        {
+            INFO (p.name);
+            REQUIRE (p.type == type);
+            for (int i = 0; i < audio::numParams; ++i)
+            {
+                const auto& spec = audio::paramSpec ((audio::Param) i);
+                REQUIRE (p.values[(size_t) i] >= spec.min);
+                REQUIRE (p.values[(size_t) i] <= spec.max);
+            }
+            REQUIRE (p.values[(size_t) audio::Param::level] <= audio::defaultValue (type, audio::Param::level));
+            REQUIRE (audio::matchingPreset (type, p.values) == &p);
+            REQUIRE (audio::findPreset (type, p.id) == &p);
+        }
+        auto tweaked = presets[1].values;
+        tweaked[(size_t) audio::Param::cutoff] += 100.0f;
+        REQUIRE (audio::matchingPreset (type, tweaked) == nullptr);
+    }
+}

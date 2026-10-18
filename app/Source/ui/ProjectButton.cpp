@@ -6,7 +6,7 @@ namespace beatforge
     ProjectButton::ProjectButton() : juce::Button ("Project")
     {
         setWantsKeyboardFocus (false);
-        setTooltip ("Project: New, Open, Save, Save As, Rename");
+        setTooltip ("Project menu: New, Open, Save, Save As, Rename, Undo/Redo, Export Audio/MIDI, Keyboard Shortcuts (F1)");
         setMouseCursor (juce::MouseCursor::PointingHandCursor);
     }
 

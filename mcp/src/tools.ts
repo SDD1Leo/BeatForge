@@ -105,6 +105,7 @@ const tools: Record<string, ToolDef> = {
   set_track_volume: { title: "Set track volume", description: "Track volume in dB (-60 to +6; 0 = unity).", input: { track, db: z.number().min(-60).max(6) } },
   set_track_pan: { title: "Set track pan", description: "Track pan from -1 (left) to 1 (right); 0 = centre.", input: { track, pan: z.number().min(-1).max(1) } },
   set_track_mute: { title: "Mute track", description: "Mute or unmute a track.", input: { track, muted: z.boolean() } },
+  set_master_volume: { title: "Set master volume", description: "Master volume in dB (-60 to +6) for the sum of all tracks.", input: { db: z.number().min(-60).max(6) } },
   set_track_solo: { title: "Solo track", description: "Solo or unsolo a track.", input: { track, soloed: z.boolean() } },
 
   // --- clips and notes -------------------------------------------------------------
@@ -160,6 +161,12 @@ const tools: Record<string, ToolDef> = {
   // --- instruments ---------------------------------------------------------------------
   list_instruments: { title: "List instruments", description: "The built-in instruments and their parameters (ranges, units, defaults)." },
   set_instrument: { title: "Set instrument", description: "Choose a synth track's instrument.", input: { track, instrument: z.enum(["nebula_poly", "nebula_bass"]) } },
+  set_instrument_preset: {
+    title: "Load instrument preset",
+    description: "Load a factory sound into a synth track (ids from list_instruments, e.g. pluck, soft_pad, bright_lead, keys, "
+      + "warm_sine for nebula_poly; sub, acid, punchy, smooth_saw for nebula_bass). 'instrument' switches the instrument too.",
+    input: { track, preset: z.string().min(1).max(32), instrument: z.enum(["nebula_poly", "nebula_bass"]).optional() },
+  },
   set_instrument_param: {
     title: "Set instrument parameter",
     description: "Set one parameter of a synth track's current instrument (ids and ranges from list_instruments; wave also accepts sine/saw/square/triangle).",

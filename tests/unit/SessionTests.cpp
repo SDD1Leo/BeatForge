@@ -324,3 +324,118 @@ TEST_CASE ("A saved and reopened arrangement sounds bit-identical", "[session][f
     REQUIRE (render (engine, 48000 * 6) == original);
     std::filesystem::remove (file);
 }
+
+TEST_CASE ("Undo steps are named; gestures and AI calls name a whole step", "[session][undo]")
+{
+    audio::AudioEngine engine;
+    Session session (engine);
+    REQUIRE (session.undoLabel().empty());
+
+    session.setTempo (100.0);
+    REQUIRE (session.undoLabel() == "Change tempo");
+    const auto clip = session.createClip (firstOfType (session, TrackType::instrument), 0, 3840);
+    REQUIRE (session.undoLabel() == "Create clip");
+
+    session.beginGesture ("Record take");
+    session.addNote (clip, { 0, 60, 100, 0, 480 });
+    session.addNote (clip, { 0, 62, 100, 480, 480 });
+    session.endGesture();
+    REQUIRE (session.undoLabel() == "Record take");
+
+    session.undo();
+    REQUIRE (session.redoLabel() == "Record take");
+    REQUIRE (session.undoLabel() == "Create clip");
+    session.redo();
+    REQUIRE (session.undoLabel() == "Record take");
+    REQUIRE (session.redoLabel().empty());
+
+    // Without a gesture label the first edit names the step.
+    session.beginGesture();
+    session.moveClip (clip, 3840);
+    session.moveClip (clip, 7680);
+    session.endGesture();
+    REQUIRE (session.undoLabel() == "Move clip");
+}
+
+TEST_CASE ("Master volume is saved, loaded, undoable and limited", "[session][file]")
+{
+    audio::AudioEngine engine;
+    Session session (engine);
+    session.setMasterVolume (-4.5f);
+    REQUIRE (session.getProject().masterVolumeDb == -4.5f);
+    REQUIRE (session.undoLabel() == "Master volume");
+    session.setMasterVolume (40.0f);
+    REQUIRE (session.getProject().masterVolumeDb == project::Project::maxVolumeDb);
+
+    const auto loaded = project::fromJson (project::toJson (session.getProject(), "test"));
+    REQUIRE (loaded.project->masterVolumeDb == project::Project::maxVolumeDb);
+    REQUIRE (loaded.warnings.empty());
+
+    session.undo();
+    REQUIRE (session.getProject().masterVolumeDb == -4.5f);
+}
+
+TEST_CASE ("Presets load in one undo step and every combination keeps headroom", "[session][presets]")
+{
+    audio::AudioEngine engine;
+    engine.prepare (48000.0);
+    Session session (engine);
+    const auto synth = firstOfType (session, TrackType::instrument);
+    const auto bassTrack = session.addTrack (TrackType::instrument);
+
+    const auto& acid = *audio::findPreset (audio::InstrumentType::monoBass, "acid");
+    REQUIRE (session.applyPreset (bassTrack, acid));
+    REQUIRE (session.findTrack (bassTrack)->instrument == audio::InstrumentType::monoBass);
+    REQUIRE (session.getInstrumentParam (bassTrack, audio::InstrumentType::monoBass, audio::Param::resonance) == 0.8f);
+    REQUIRE (session.undoLabel() == "Preset: Acid");
+    REQUIRE_FALSE (session.applyPreset (firstOfType (session, TrackType::drums), acid));
+
+    // Busy beat + 4-note chords + bass: below 0 dBFS with every poly x bass preset.
+    const auto drumClip = firstClip (session, firstOfType (session, TrackType::drums));
+    for (int lane = 0; lane < 5; ++lane)
+        for (int s = 0; s < 16; s += lane == 2 ? 1 : 4)
+            session.setStep (drumClip, lane, s, true);
+    const auto chords = session.createClip (synth, 0, 3840);
+    for (int pitch : { 60, 64, 67, 71 })
+        session.addNote (chords, { 0, pitch, 127, 0, 3840 });
+    const auto line = session.createClip (bassTrack, 0, 3840);
+    for (int b = 0; b < 4; ++b)
+        session.addNote (line, { 0, 36 + b * 3, 127, b * 960, 900 });
+    session.setLoop (true, 0, 3840);
+
+    for (auto& poly : audio::presetsFor (audio::InstrumentType::polySynth))
+        for (auto& bass : audio::presetsFor (audio::InstrumentType::monoBass))
+        {
+            session.applyPreset (synth, poly);
+            session.applyPreset (bassTrack, bass);
+            engine.stop();
+            test::render (engine, 4800);
+            engine.play();
+            INFO (poly.name << " + " << bass.name);
+            REQUIRE (peakIn (render (engine, 96000)) < 1.0f);
+        }
+}
+
+TEST_CASE ("Clips paste onto tracks of the same kind with fresh ids", "[session][clips]")
+{
+    audio::AudioEngine engine;
+    Session session (engine);
+    const auto synth = firstOfType (session, TrackType::instrument);
+    const auto other = session.addTrack (TrackType::instrument);
+    const auto source = session.createClip (synth, 0, 3840);
+    session.addNote (source, { 0, 60, 100, 0, 480 });
+    const auto content = *session.findClip (source);
+
+    const auto pasted = session.pasteClip (other, content, TrackType::instrument, 7680);
+    REQUIRE (pasted != 0);
+    REQUIRE (pasted != source);
+    REQUIRE (session.findClip (pasted)->start == 7680);
+    REQUIRE (session.findClip (pasted)->notes.size() == 1);
+    REQUIRE (session.trackOfClip (pasted) == other);
+    REQUIRE (session.undoLabel() == "Paste clip");
+    REQUIRE (session.pasteClip (firstOfType (session, TrackType::drums), content, TrackType::instrument, 0) == 0);
+
+    // New notes in the pasted clip get ids that do not clash.
+    const auto id = session.addNote (pasted, { 0, 62, 100, 480, 480 });
+    REQUIRE (id != session.findClip (pasted)->notes[0].id);
+}

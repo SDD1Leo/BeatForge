@@ -11,6 +11,7 @@ target_sources(BeatForge
         Source/audio/AudioDeviceController.cpp
         Source/input/ComputerKeyboard.cpp
         Source/ipc/AiBridge.cpp
+        Source/project/Autosave.cpp
         Source/project/ProjectActions.cpp
         Source/ui/ArrangementView.cpp
         Source/ui/BeatForgeLookAndFeel.cpp
@@ -19,8 +20,11 @@ target_sources(BeatForge
         Source/ui/InstrumentPanel.cpp
         Source/ui/Knob.cpp
         Source/ui/LevelMeterComponent.cpp
+        Source/ui/MixerPanel.cpp
         Source/ui/PianoRollPanel.cpp
+        Source/ui/ProjectBrowser.cpp
         Source/ui/ProjectButton.cpp
+        Source/ui/ShortcutsDialog.cpp
         Source/ui/SignatureField.cpp
         Source/ui/StatusBar.cpp
         Source/ui/TabBar.cpp

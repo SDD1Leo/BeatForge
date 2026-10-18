@@ -615,7 +615,7 @@ namespace beatforge
 
         for (int bars : { 1, 2, 4, 8 })
             clipLengthBox.addItem (juce::String (bars) + (bars == 1 ? " bar" : " bars"), bars);
-        clipLengthBox.setTooltip ("Clip length (the clip loops from bar 1)");
+        clipLengthBox.setTooltip ("Clip length in bars (you can also drag the clip's right edge in the arrangement)");
         clipLengthBox.onChange = [this]
         {
             session.resizeClip (clipId(), (time::Tick) clipLengthBox.getSelectedId() * session.getProject().timeSignature.ticksPerBar());
@@ -730,6 +730,9 @@ namespace beatforge
 
     void PianoRollPanel::timerCallback()
     {
+        if (! isShowing())
+            return;
+
         // Playhead inside the edited clip only.
         const auto* clip = clipPtr();
         const bool playing = engine.getState() == audio::TransportState::playing;

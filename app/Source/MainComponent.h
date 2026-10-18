@@ -3,12 +3,15 @@
 #include "audio/AudioDeviceController.h"
 #include "input/ComputerKeyboard.h"
 #include "ipc/AiBridge.h"
+#include "project/Autosave.h"
 #include "project/ProjectActions.h"
 #include "ui/ArrangementView.h"
 #include "ui/DrumMachinePanel.h"
 #include "ui/ExportAudioDialog.h"
+#include "ui/ProjectBrowser.h"
 #include "ui/InstrumentPanel.h"
 #include "ui/LevelMeterComponent.h"
+#include "ui/MixerPanel.h"
 #include "ui/PianoRollPanel.h"
 #include "ui/TabBar.h"
 #include "ui/StatusBar.h"
@@ -50,6 +53,8 @@ namespace beatforge
         void toggleComputerKeys();
         // The MCP bridge (local socket). Returns false with a reason if it could not start.
         bool startAiBridge (std::string& error);
+        // Offers to restore work left by a crash, then starts autosaving.
+        void startAutosave();
         ComputerKeyboard& getComputerKeys() noexcept { return computerKeys; }
         ProjectActions& getProjectActions() noexcept { return actions; }
 
@@ -61,6 +66,9 @@ namespace beatforge
         void pollRecording();
         void openAudioSettings();
         void openExportAudio();
+        void openProjectBrowser();
+        void showShortcuts();
+        juce::Component::SafePointer<juce::DialogWindow> browserWindow;
         juce::Component::SafePointer<juce::DialogWindow> exportWindow;
 
 
@@ -70,6 +78,7 @@ namespace beatforge
         juce::PropertiesFile& appSettings;
         ProjectActions actions;
         ComputerKeyboard computerKeys { engine };
+        Autosave autosave { session, appSettings };
         std::unique_ptr<AiBridge> aiBridge;
         void refreshComputerKeys();
         int sessionListenerId = 0;
@@ -79,14 +88,15 @@ namespace beatforge
         DrumMachinePanel drumPanel;
         PianoRollPanel pianoRoll;
         InstrumentPanel instrumentPanel;
-        TabBar workspaceTabs { { "Step Sequencer", "Instrument" } };
+        MixerPanel mixer;
+        TabBar workspaceTabs { { "Step Sequencer", "Instrument", "Mixer" } };
         int selectionListenerId = 0;
         project::TakeRecorder recorder { session };
         bool deviceOpen = false, takeWasActive = false;
         juce::String midiInputsText, computerKeysText;
         std::uint32_t lastMidiCount = 0;
         int midiLightTicks = 0, slowTicks = 0;
-        void showTab (int index);           // 0 = clip editor (by track type), 1 = instrument
+        void showTab (int index);           // 0 = clip editor (by track type), 1 = instrument, 2 = mixer
         LevelMeterComponent outputMeter;
         StatusBar statusBar;
         juce::TooltipWindow tooltips { this, 600 };

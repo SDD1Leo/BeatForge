@@ -40,6 +40,9 @@ namespace beatforge
 
         void showMenu (juce::Component& anchor);
         void noteSaved (const juce::File& file) { rememberRecent (file); }   // saved elsewhere (MCP)
+        juce::Array<juce::File> getRecentFiles();
+        std::function<void()> onOpenBrowser;   // menu "Open...": the project browser
+        std::function<void()> onShowShortcuts;
 
         juce::File defaultFolder() const;
         static juce::String appVersion();

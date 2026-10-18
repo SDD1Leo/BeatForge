@@ -319,6 +319,10 @@ namespace beatforge
                 if (arg.startsWith ("--export-midi="))
                     actions.exportMidiTo (juce::File::getCurrentWorkingDirectory().getChildFile (arg.fromFirstOccurrenceOf ("=", false, false).unquoted()));
 
+            // Crash recovery, then autosave (not in smoke tests: they must never touch user work).
+            if (! (args.contains ("--smoke-test") || smokePlay))
+                mainWindow->getMainComponent().startAutosave();
+
             // The MCP bridge: always in normal use; in smoke tests only with --ipc.
             if (! (args.contains ("--smoke-test") || smokePlay) || args.contains ("--ipc"))
             {

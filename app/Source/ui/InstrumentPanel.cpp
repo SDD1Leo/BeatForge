@@ -122,6 +122,17 @@ namespace beatforge
         polyButton.onClick = [this] { session.setInstrument (trackId(), audio::InstrumentType::polySynth); };
         bassButton.onClick = [this] { session.setInstrument (trackId(), audio::InstrumentType::monoBass); };
 
+        presetBox.setTooltip ("Factory sounds for this instrument (loading one is a single undo step)");
+        presetBox.setWantsKeyboardFocus (false);
+        presetBox.onChange = [this]
+        {
+            const auto index = presetBox.getSelectedId() - 1;
+            const auto presets = audio::presetsFor (type());
+            if (index >= 0 && index < (int) presets.size())
+                session.applyPreset (trackId(), presets[(size_t) index]);
+        };
+        addAndMakeVisible (presetBox);
+
         resetButton.setTooltip ("Reset this instrument's controls to their defaults");
         resetButton.setWantsKeyboardFocus (false);
         resetButton.onClick = [this] { session.resetInstrumentParams (trackId(), type()); };
@@ -185,6 +196,21 @@ namespace beatforge
         const bool hasTrack = trackId() != 0;
         for (auto* b : { &polyButton, &bassButton, &resetButton })
             b->setVisible (hasTrack);
+        presetBox.setVisible (hasTrack);
+
+        // Presets of this instrument; the current sound's name, or "Custom" once tweaked.
+        presetBox.clear (juce::dontSendNotification);
+        const auto presets = audio::presetsFor (t);
+        for (size_t i = 0; i < presets.size(); ++i)
+            presetBox.addItem (juce::String (presets[i].name.data(), presets[i].name.size()), (int) i + 1);
+        if (const auto* track = session.findTrack (trackId()))
+        {
+            const auto* match = audio::matchingPreset (t, track->instrumentParams[(size_t) t]);
+            if (match != nullptr)
+                presetBox.setSelectedId ((int) (match - presets.data()) + 1, juce::dontSendNotification);
+            else
+                presetBox.setText ("Custom", juce::dontSendNotification);
+        }
         for (auto& b : waveButtons)
             b->setVisible (hasTrack);
 
@@ -378,6 +404,8 @@ namespace beatforge
 
         auto controls = headerArea;
         resetButton.setBounds (controls.removeFromRight (70).reduced (0, 5));
+        controls.removeFromRight (16);
+        presetBox.setBounds (controls.removeFromRight (150).reduced (0, 5));
         controls.removeFromRight (16);
         bassButton.setBounds (controls.removeFromRight (110).reduced (0, 5));
         controls.removeFromRight (4);

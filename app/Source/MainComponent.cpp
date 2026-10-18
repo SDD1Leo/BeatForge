@@ -1,4 +1,5 @@
 #include "MainComponent.h"
+#include "ui/ShortcutsDialog.h"
 #include "ui/Theme.h"
 
 #include <beatforge/BuildInfo.h>
@@ -17,7 +18,7 @@ namespace beatforge
                                   project::Session& s, juce::PropertiesFile& settings)
         : devices (d), engine (e), session (s), appSettings (settings), actions (s, settings, *this),
           transportBar (e, s), selection (s), arrangement (e, s, selection), drumPanel (e, s, selection),
-          pianoRoll (e, s, selection), instrumentPanel (s, selection), outputMeter (e.getOutputMeter())
+          pianoRoll (e, s, selection), instrumentPanel (s, selection), mixer (e, s, selection), outputMeter (e.getOutputMeter())
     {
         transportBar.onOpenAudioSettings = [this] { openAudioSettings(); };
         transportBar.onProjectMenu = [this] (juce::Component& anchor) { actions.showMenu (anchor); };
@@ -39,6 +40,9 @@ namespace beatforge
         });
         transportBar.onRecord = [this] { toggleRecord(); };
         actions.onExportAudio = [this] { openExportAudio(); };
+        actions.onOpenBrowser = [this] { openProjectBrowser(); };
+        actions.onShowShortcuts = [this] { showShortcuts(); };
+        arrangement.onMessage = [this] (const juce::String& text) { statusBar.showNotice (text); };
         transportBar.onComputerKeys = [this] { toggleComputerKeys(); };
         pianoRoll.keyFilter = [this] (const juce::KeyPress& key) { return computerKeys.keyPressed (key); };
         computerKeys.onChange = [this] { refreshComputerKeys(); };
@@ -50,8 +54,12 @@ namespace beatforge
         addChildComponent (drumPanel);
         addChildComponent (pianoRoll);
         addChildComponent (instrumentPanel);
+        addChildComponent (mixer);
         addAndMakeVisible (workspaceTabs);
         workspaceTabs.onChange = [this] (int index) { showTab (index); };
+        workspaceTabs.setTabTooltips ({ "Edit the selected clip: steps for drum tracks, notes for synth tracks (Ctrl+1)",
+                                        "Sound of the selected synth track: presets and controls (Ctrl+2)",
+                                        "Volume, pan, mute/solo and levels of every track, and the master volume (Ctrl+3)" });
         addAndMakeVisible (outputMeter);
         addAndMakeVisible (statusBar);
 
@@ -77,6 +85,8 @@ namespace beatforge
             delete settingsWindow.getComponent();
         if (exportWindow != nullptr)
             delete exportWindow.getComponent();   // cancels a running export
+        if (browserWindow != nullptr)
+            delete browserWindow.getComponent();
     }
 
     void MainComponent::changeListenerCallback (juce::ChangeBroadcaster*) { refreshDeviceStatus(); }
@@ -95,6 +105,7 @@ namespace beatforge
         {
             --midiLightTicks;
         }
+        transportBar.setAutosave (autosave.isCurrentAutosaved(), autosave.getLastAutosave());
         statusBar.setMidi (midiInputsText + computerKeysText + (aiBridge != nullptr ? dot + aiBridge->statusText() : juce::String()),
                            midiLightTicks > 0);
 
@@ -124,6 +135,38 @@ namespace beatforge
                                                        + " (R): play your MIDI keyboard or the piano roll keys");
         else
             transportBar.setRecordAvailable (false, "Select a synth track to record into it");
+    }
+
+    void MainComponent::startAutosave()
+    {
+        auto recovery = autosave.pendingRecovery();
+        if (! recovery)
+            return autosave.start();
+
+        const auto name = juce::String::fromUTF8 (recovery->project.name.c_str());
+        const auto shared = std::make_shared<Autosave::Recovery> (std::move (*recovery));
+        juce::AlertWindow::showAsync (juce::MessageBoxOptions()
+                                          .withIconType (juce::MessageBoxIconType::QuestionIcon)
+                                          .withTitle ("Restore unsaved work?")
+                                          .withMessage ("BeatForge did not close normally. Unsaved changes to \"" + name + "\" were kept from "
+                                                        + shared->savedAt.formatted ("%H:%M on %d %b") + ".\n\nRestore them? (Discard deletes this copy.)")
+                                          .withButton ("Restore")
+                                          .withButton ("Discard")
+                                          .withAssociatedComponent (this),
+                                      [this, shared] (int result)
+        {
+            if (result == 1)
+            {
+                session.openProject (shared->project, shared->originalFile);
+                session.markUnsaved();   // still needs saving (to the original file, if it had one)
+            }
+            else
+            {
+                autosave.discard();
+            }
+            autosave.start();
+            grabKeyboardFocus();
+        });
     }
 
     bool MainComponent::startAiBridge (std::string& error)
@@ -215,6 +258,7 @@ namespace beatforge
         drumPanel.setVisible (index == 0 && drums);
         pianoRoll.setVisible (index == 0 && ! drums);
         instrumentPanel.setVisible (index == 1);
+        mixer.setVisible (index == 2);
         resized();
         repaint (workspaceArea);
     }
@@ -240,7 +284,8 @@ namespace beatforge
         auto text = s.typeName + dot + s.deviceName
                   + dot + juce::String (s.sampleRate / 1000.0, 1) + " kHz"
                   + dot + juce::String (s.bufferSize) + " samples (" + juce::String (latencyMs, 1) + " ms)"
-                  + dot + juce::String (s.xruns) + (s.xruns == 1 ? " dropout" : " dropouts");
+                  + dot + juce::String (s.xruns) + (s.xruns == 1 ? " dropout" : " dropouts")
+                  + dot + "audio CPU " + juce::String (juce::roundToInt (s.cpuLoad * 100.0)) + "%";
 
         if (s.error.isNotEmpty())
             text = "Audio error: " + s.error + dot + text;
@@ -269,6 +314,49 @@ namespace beatforge
         options.resizable = true;
         options.escapeKeyTriggersCloseButton = true;
         settingsWindow = options.launchAsync();
+    }
+
+    void MainComponent::showShortcuts()
+    {
+        juce::DialogWindow::LaunchOptions options;
+        options.dialogTitle = "Keyboard Shortcuts";
+        options.dialogBackgroundColour = theme::panel;
+        options.content.setOwned (new ShortcutsDialog());
+        options.componentToCentreAround = this;
+        options.useNativeTitleBar = true;
+        options.resizable = false;
+        options.escapeKeyTriggersCloseButton = true;
+        options.launchAsync();
+    }
+
+    void MainComponent::openProjectBrowser()
+    {
+        if (browserWindow != nullptr)
+        {
+            browserWindow->toFront (true);
+            return;
+        }
+
+        const auto current = session.getFile() ? juce::File (juce::String (session.getFile()->string())) : juce::File();
+        auto browser = std::make_unique<ProjectBrowser> (actions.defaultFolder(), actions.getRecentFiles(), current);
+        auto close = [this]
+        {
+            juce::MessageManager::callAsync ([safe = browserWindow] { if (safe != nullptr) delete safe.getComponent(); });
+            grabKeyboardFocus();
+        };
+        browser->onCancel = close;
+        browser->onOpen = [this, close] (const juce::File& file) { close(); actions.openFile (file); };
+        browser->onBrowse = [this, close] { close(); actions.openWithChooser(); };
+
+        juce::DialogWindow::LaunchOptions options;
+        options.dialogTitle = "Open Project";
+        options.dialogBackgroundColour = theme::panel;
+        options.content.setOwned (browser.release());
+        options.componentToCentreAround = this;
+        options.useNativeTitleBar = true;
+        options.resizable = true;
+        options.escapeKeyTriggersCloseButton = true;
+        browserWindow = options.launchAsync();
     }
 
     void MainComponent::openExportAudio()
@@ -326,7 +414,7 @@ namespace beatforge
         if (key == juce::KeyPress ('k') || key == juce::KeyPress ('K')) { toggleComputerKeys(); return true; }
         if (key == juce::KeyPress ('r', ctrl, 0))  { toggleRecord(); return true; }
         if (key == juce::KeyPress ('n', ctrl, 0))  { actions.newProject();      return true; }
-        if (key == juce::KeyPress ('o', ctrl, 0))  { actions.openWithChooser(); return true; }
+        if (key == juce::KeyPress ('o', ctrl, 0))  { openProjectBrowser(); return true; }
         if (key == juce::KeyPress ('s', ctrl, 0))  { actions.save();            return true; }
         if (key == juce::KeyPress ('s', ctrl | juce::ModifierKeys::shiftModifier, 0)
             || key == juce::KeyPress ('S', ctrl | juce::ModifierKeys::shiftModifier, 0)) { actions.saveAs(); return true; }
@@ -336,6 +424,9 @@ namespace beatforge
             || key == juce::KeyPress ('z', ctrl | juce::ModifierKeys::shiftModifier, 0)
             || key == juce::KeyPress ('Z', ctrl | juce::ModifierKeys::shiftModifier, 0)) { session.redo(); return true; }
         if (key == juce::KeyPress ('d', ctrl, 0))  { arrangement.duplicateSelectedClip(); return true; }
+        if (key == juce::KeyPress ('c', ctrl, 0))  { arrangement.copySelectedClip(); return true; }
+        if (key == juce::KeyPress ('x', ctrl, 0))  { arrangement.cutSelectedClip(); return true; }
+        if (key == juce::KeyPress ('v', ctrl, 0))  { arrangement.pasteClip(); return true; }
         if (key == juce::KeyPress ('e', ctrl, 0))  { actions.exportMidiWithChooser(); return true; }
         if (key == juce::KeyPress ('e', ctrl | juce::ModifierKeys::shiftModifier, 0)
             || key == juce::KeyPress ('E', ctrl | juce::ModifierKeys::shiftModifier, 0)) { openExportAudio(); return true; }
@@ -343,8 +434,10 @@ namespace beatforge
             || key == juce::KeyPress ('+', ctrl | juce::ModifierKeys::shiftModifier, 0)) { arrangement.zoomIn(); return true; }
         if (key == juce::KeyPress ('-', ctrl, 0))  { arrangement.zoomOut(); return true; }
 
+        if (key == juce::KeyPress (juce::KeyPress::F1Key)) { showShortcuts(); return true; }
         if (key == juce::KeyPress ('1', ctrl, 0))  { showTab (0); return true; }
         if (key == juce::KeyPress ('2', ctrl, 0))  { showTab (1); return true; }
+        if (key == juce::KeyPress ('3', ctrl, 0))  { showTab (2); return true; }
 
         if (key == juce::KeyPress::spaceKey)      { transportBar.togglePlayStop();  return true; }
         // Single-letter shortcuts only without modifiers (Ctrl+L etc. stay free).
@@ -416,6 +509,7 @@ namespace beatforge
         editor.removeFromTop (8);
         pianoRoll.setBounds (editor);
         instrumentPanel.setBounds (editor);
+        mixer.setBounds (editor);
         drumPanel.setBounds (editor.removeFromTop (DrumMachinePanel::preferredHeight));
         outputMeter.setBounds (outputCard.reduced (16, 0).withTrimmedTop (36).withTrimmedBottom (16));
     }

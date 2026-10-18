@@ -3,7 +3,7 @@
 A native desktop DAW for electronic music, built in C++ with JUCE.
 Small feature set, reliable audio, pleasant workflow.
 
-**Status:** Phase 10 (MCP server) approved; Phase 11 (polish and creative workflow) next.
+**Status:** Phase 11 (polish and creative workflow) built — awaiting hands-on test. New here? Start with the [user guide](USER_GUIDE.md).
 Arrange drum and synth tracks (Nebula Poly or Nebula Bass) as clips on a
 timeline, with per-track volume, pan, mute and solo, a loop region, seek and
 undo/redo. Play synth tracks from a MIDI keyboard, record takes, and export
@@ -36,14 +36,18 @@ as versioned `.beatforge` project files.
 | Loop region | Drag across the ruler's thin top strip (snaps to bar lines; a click loops one bar). Loop button or **L** turns looping on/off |
 | Move the playhead | Click or drag the ruler below the strip. Play starts there; Stop returns there |
 | Undo / redo | **Ctrl+Z** / **Ctrl+Shift+Z** or **Ctrl+Y**, also in the project menu |
-| Switch editor / instrument | Tabs below the arrangement, or **Ctrl+1** / **Ctrl+2**. The editor follows the selected track: Step Sequencer for drums, Piano Roll for synths |
+| Switch editor / instrument / mixer | Tabs below the arrangement, or **Ctrl+1** / **Ctrl+2** / **Ctrl+3**. The editor follows the selected track: Step Sequencer for drums, Piano Roll for synths |
+| Mix | **Mixer** tab: per track fader, pan, mute/solo and level meter; master volume on the right |
+| Instrument presets | Instrument tab → preset menu (Pluck, Soft Pad, Bright Lead, Keys, Warm Sine; Sub, Acid, Punchy, Smooth Saw) |
+| Copy / cut / paste a clip | **Ctrl+C** / **Ctrl+X**; select a track, click the ruler where it should go, **Ctrl+V** |
+| All shortcuts | **F1** |
 | Build a beat | Click steps in the step grid; click-drag along a row to paint several. While stopped, a newly set step is auditioned. The pattern repeats every bar of the clip |
 | Hear a drum | Click its name |
 | Drum level / mute / solo | Row slider (double-click = 0 dB), **M**, **S** buttons |
 | Clear the pattern | **Clear** |
 | Rename a drum | Double-click its name |
 | Project menu | Click the project name (top left): New, Open, Open Recent, Save, Save As, Rename, Undo, Redo, Export Audio, Export MIDI |
-| New / Open / Save / Save As | **Ctrl+N** / **Ctrl+O** / **Ctrl+S** / **Ctrl+Shift+S** |
+| New / Open / Save / Save As | **Ctrl+N** / **Ctrl+O** (project browser) / **Ctrl+S** / **Ctrl+Shift+S**. Unsaved work is autosaved every minute and offered back after a crash |
 | Choose a synth track's instrument | Select the track → Instrument tab → **Nebula Poly** (chords, leads) or **Nebula Bass** (mono, glide) |
 | Shape the sound | Instrument tab: wave buttons; knobs (drag up/down or scroll, Shift = fine, double-click = default); **Reset** restores defaults |
 | Clip length | Drag the clip's edge, or the bars dropdown in the piano roll header |
@@ -139,6 +143,7 @@ Details: [mcp/README.md](mcp/README.md).
 
 ## Documentation
 
+- [USER_GUIDE.md](USER_GUIDE.md) — make your first track, step by step
 - [ARCHITECTURE.md](ARCHITECTURE.md) — components and threading rules
 - [DESIGN.md](DESIGN.md) — NEBULA visual design system (tokens, conventions, redesign plan)
 - [ROADMAP.md](ROADMAP.md) — phases and their status

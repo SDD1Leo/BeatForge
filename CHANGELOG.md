@@ -1,5 +1,46 @@
 # Changelog
 
+## [0.11.0] — Phase 11: polish and creative workflow (awaiting user test)
+
+### Added
+- **Mixer** tab (Ctrl+3): a channel strip per track (fader, pan, mute/solo,
+  post-fader level meter) and a master strip with a new **master volume**
+  (saved in projects, applied to exports, not to the metronome).
+- **Instrument presets:** Nebula Poly (Init, Pluck, Soft Pad, Bright Lead, Keys,
+  Warm Sine) and Nebula Bass (Init, Sub, Acid, Punchy, Smooth Saw); the menu
+  shows the current preset or "Custom". Every combination keeps the mix below
+  0 dBFS (tested). Also via MCP (`set_instrument_preset`).
+- **Project browser** (Ctrl+O): projects in ~/Music/BeatForge and recent files,
+  newest first, with tempo, length, track count and date; search; files that
+  cannot be opened are shown with the reason; Browse... for other folders.
+- **Autosave and crash recovery:** a safety copy every minute while there are
+  unsaved changes; after a crash BeatForge offers to restore it. The indicator
+  shows Saved / Unsaved / Autosaved, with details in its tooltip.
+- **Named undo:** Undo/Redo buttons; tooltips and the menu name the step
+  ("Undo Move clip"); a take is "Record take", an MCP call "AI: ...".
+- **Clip copy / cut / paste** (Ctrl+C / Ctrl+X / Ctrl+V: onto the selected
+  track at the playhead).
+- **Keyboard Shortcuts** overview (F1, project menu).
+- Status bar: audio CPU load; short notices (e.g. after copying a clip).
+- MCP: `set_master_volume`; project state includes the master volume.
+- USER_GUIDE.md: making your first four-bar track.
+- 9 new test cases (177 ctest in total).
+
+### Changed
+- Idle CPU use roughly halved (4.6% → 2.1% of a core, Release): meters and
+  rulers repaint only when something changes, hidden editors skip their timers.
+- Tooltips wrap and show several lines; tabs and controls got clearer
+  tooltips; stale ones fixed.
+- Export errors say what to do next; a file that fails the read-back check is
+  removed.
+- The export dialog's range labels follow tempo/loop changes while it is open.
+- Undo/redo icons redrawn.
+
+### Fixed
+- **Recording:** a note played right as recording started inside a loop was
+  moved to the end of the loop (or into a new 1-bar clip after it). Found while
+  making the test track; a regression test covers it.
+
 ## [0.10.0] — Phase 10: MCP server (approved 2026-10-18)
 
 ### Added

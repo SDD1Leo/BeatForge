@@ -18,7 +18,7 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 | 8 | MIDI device input, recording, MIDI file export (+ arrangement zoom/scroll/reorder) | ✅ |
 | 9 | Offline render & WAV export | ✅ |
 | 10 | MCP server (TypeScript, local IPC) | ✅ |
-| 11 | Polish & creative workflow | ⏳ |
+| 11 | Polish & creative workflow | 🧪 |
 | 11b | UI work and polishing pass (your list, after Phase 11) | ⏳ |
 | 12 | Advanced features (one at a time) | ⏳ |
 
@@ -38,7 +38,12 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 - A clip overlapping a later clip on the same track is cut where the later one starts.
 - Opening a project does not stop playback first.
 - Grid choice in the piano roll is not saved. Selection and the arrangement view
-  (zoom/scroll) are not saved.
+  (zoom/scroll) are not saved. The clipboard holds one clip and lives inside
+  BeatForge only.
+- No effects yet (delay, reverb, EQ come with Phase 12); presets are factory
+  only (no saving your own yet).
+- Under Xvfb (no window manager/compositor) the area a closed dialog covered is
+  repainted only on the next UI event; not seen on a normal desktop.
 - Instruments: one oscillator per voice, low-pass only, no LFO/modulation
   matrix/effects/presets yet (the Nebula reference shows these as future).
 - MIDI input: all channels are merged; sustain pedal (CC64), pitch bend,
@@ -56,9 +61,7 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 - In Debug builds, if the ALSA MIDI sequencer cannot be opened JUCE raises a
   debug assertion (`juce_Midi_linux.cpp`). Seen only with ALSA deliberately broken.
 
-## Next up: Phase 11
+## Next up: Phase 11b
 
-Polish and creative workflow: interface consistency, shortcuts, project
-browser, instrument controls, mixer, error messages, save indicators,
-undo/redo, tooltips, performance, documentation — tested by making a four-bar
-track entirely in BeatForge and then changing it through MCP.
+UI work and polishing driven by your list after using Phase 11; then Phase 12
+features one at a time.

@@ -84,6 +84,29 @@ Rules that hold from day one:
 - **Gain staging:** sources are calibrated so drums (−7.5 dBFS typical),
   four-note chords (−7.3) and bass sum below 0 dBFS at defaults (tested).
 
+## Workflow features (Phase 11)
+
+- **Undo labels:** each Session edit names its step; a gesture can name the
+  whole step (`beginGesture ("Record take")`); every command-API call is one
+  gesture named "AI: <operation>". UI shows `undoLabel()` / `redoLabel()`.
+- **Mixer:** each engine slot has a post-fader `LevelMeter` (the slot buffer is
+  scaled in place, so the mix is bit-identical to before); master volume is a
+  smoothed gain on the tracks' sum (exactly 1 at 0 dB), applied before the
+  metronome is added. Saved as `masterVolumeDb`.
+- **Presets** (`audio/InstrumentPresets`): complete parameter sets per
+  instrument; `Session::applyPreset` loads one as a single undo step; the UI
+  shows the matching preset or "Custom".
+- **Autosave** (app): writes `~/.config/BeatForge/recovery/unsaved-work.beatforge`
+  at most once a minute while dirty; removed when the project becomes clean and
+  on normal shutdown, so only a crash leaves it. The recovery offer runs before
+  autosave starts (opening a project would otherwise clear it).
+- **Clipboard:** `Session::pasteClip` inserts a copy of a clip's content on a
+  track of the same type (fresh clip id, note ids re-reserved).
+- **Recording fix:** the engine remembers where a take started and whether the
+  loop has wrapped since; only after a wrap is a press heard "before the loop
+  start" moved to the loop end.
+- **Repaint discipline:** timers repaint only on change; hidden components skip work.
+
 ## MCP integration (Phase 10)
 
 ```

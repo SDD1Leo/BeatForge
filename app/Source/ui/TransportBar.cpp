@@ -23,6 +23,8 @@ namespace beatforge
 
     TransportBar::TransportBar (audio::AudioEngine& e, project::Session& s)
         : engine (e), session (s),
+          undoButton ("Undo", TransportButton::Icon::undo, theme::accent),
+          redoButton ("Redo", TransportButton::Icon::redo, theme::accent),
           playButton ("Play", TransportButton::Icon::play, theme::accent),
           stopButton ("Stop", TransportButton::Icon::stop, theme::textPrimary),
           recordButton ("Record", TransportButton::Icon::record, theme::record),
@@ -41,6 +43,8 @@ namespace beatforge
         playButton.onClick = [this] { engine.play(); refreshPosition(); };
         stopButton.onClick = [this] { engine.setRecording (false); engine.stop(); refreshPosition(); };
         recordButton.onClick = [this] { if (onRecord) onRecord(); };
+        undoButton.onClick = [this] { session.undo(); };
+        redoButton.onClick = [this] { session.redo(); };
         keysButton.onClick = [this] { if (onComputerKeys) onComputerKeys(); };
         loopButton.onClick = [this] { toggleLoop(); };
         metronomeButton.onClick = [this] { toggleMetronome(); };
@@ -50,7 +54,7 @@ namespace beatforge
         tempoField.onEditFinished = [this] { if (onTextEditFinished) onTextEditFinished(); };
         signatureField.onChange = [this] (time::TimeSignature sig) { session.setTimeSignature (sig); };
 
-        for (auto* c : std::initializer_list<juce::Component*> { &projectButton, &playButton, &stopButton, &recordButton, &loopButton,
+        for (auto* c : std::initializer_list<juce::Component*> { &projectButton, &undoButton, &redoButton, &playButton, &stopButton, &recordButton, &loopButton,
                                                                   &tempoField, &signatureField, &metronomeButton, &keysButton,
                                                                   &settingsButton })
             addAndMakeVisible (c);
@@ -60,6 +64,8 @@ namespace beatforge
             using Change = project::Session::Change;
             if (change == Change::replaced || change == Change::transport || change == Change::metadata)
                 refreshFromSession();
+            else
+                refreshUndo();   // every edit renames the undo step
         });
 
         refreshFromSession();
@@ -79,8 +85,44 @@ namespace beatforge
         tempoField.setTempo (p.tempo, juce::dontSendNotification);
         signatureField.setSignature (p.timeSignature);
         loopButton.setLit (p.loopEnabled);
+        refreshUndo();
         metronomeButton.setLit (p.metronomeEnabled);
         repaint (savedArea);
+    }
+
+    void TransportBar::setAutosave (bool currentIsAutosaved, juce::Time when)
+    {
+        if (currentIsAutosaved != autosaved || when != autosaveTime)
+        {
+            autosaved = currentIsAutosaved;
+            autosaveTime = when;
+            repaint (savedArea);
+        }
+    }
+
+    juce::String TransportBar::getTooltip()
+    {
+        if (! savedArea.contains (getMouseXYRelative()))
+            return {};
+        const auto file = session.getFile() ? juce::String (session.getFile()->string()) : juce::String();
+        if (! session.isDirty())
+            return file.isEmpty() ? "New project, not saved yet (Ctrl+S)" : "All changes saved in " + file;
+        auto text = juce::String ("Unsaved changes - Ctrl+S to save") + (file.isNotEmpty() ? " to " + file : juce::String());
+        if (autosaveTime != juce::Time())
+            text += autosaved ? "\nA safety copy was made at " + autosaveTime.formatted ("%H:%M:%S") + " (restored if BeatForge crashes)"
+                              : "\nLast safety copy " + autosaveTime.formatted ("%H:%M:%S") + "; the next one follows within a minute";
+        else
+            text += "\nA safety copy is made every minute while there are unsaved changes";
+        return text;
+    }
+
+    void TransportBar::refreshUndo()
+    {
+        const auto u = juce::String::fromUTF8 (session.undoLabel().c_str()), r = juce::String::fromUTF8 (session.redoLabel().c_str());
+        undoButton.setEnabled (u.isNotEmpty());
+        redoButton.setEnabled (r.isNotEmpty());
+        undoButton.setTooltip (u.isNotEmpty() ? "Undo " + u + " (Ctrl+Z)" : "Nothing to undo");
+        redoButton.setTooltip (r.isNotEmpty() ? "Redo " + r + " (Ctrl+Shift+Z)" : "Nothing to redo");
     }
 
     void TransportBar::setDeviceAvailable (bool available)
@@ -172,7 +214,7 @@ namespace beatforge
             const bool dirty = session.isDirty();
             const bool neverSaved = ! session.getFile().has_value();
             const auto colour = dirty ? theme::amber : (neverSaved ? theme::textMuted : theme::ok);
-            const auto label = dirty ? "Unsaved" : (neverSaved ? "Not saved" : "Saved");
+            const auto label = dirty ? (autosaved ? "Autosaved" : "Unsaved") : (neverSaved ? "Not saved" : "Saved");
 
             auto area = savedArea;
             g.setColour (colour);
@@ -221,7 +263,11 @@ namespace beatforge
         projectButton.setBounds (area.removeFromLeft (184).reduced (0, 4));
         area.removeFromLeft (10);
         savedArea = area.removeFromLeft (84);
-        area.removeFromLeft (12);
+        area.removeFromLeft (6);
+        undoButton.setBounds (area.removeFromLeft (36).reduced (0, 5));
+        area.removeFromLeft (4);
+        redoButton.setBounds (area.removeFromLeft (36).reduced (0, 5));
+        area.removeFromLeft (16);
 
         for (auto* b : { &playButton, &stopButton, &recordButton, &loopButton })
         {

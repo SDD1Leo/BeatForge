@@ -137,10 +137,10 @@ namespace beatforge::api
             "get_transport_state", "get_tempo", "set_tempo", "set_time_signature", "set_loop", "set_metronome",
             "play", "stop", "seek",
             "list_tracks", "create_track", "rename_track", "delete_track", "set_track_volume", "set_track_pan",
-            "set_track_mute", "set_track_solo",
+            "set_track_mute", "set_track_solo", "set_master_volume",
             "create_clip", "delete_clip", "set_drum_pattern", "get_clip_notes", "add_midi_notes", "remove_midi_notes",
             "quantize_clip",
-            "list_instruments", "set_instrument", "set_instrument_param",
+            "list_instruments", "set_instrument", "set_instrument_param", "set_instrument_preset",
             "export_wav", "get_export_status", "cancel_export", "export_midi" };
         return ops;
     }
@@ -178,6 +178,20 @@ namespace beatforge::api
         {
             if (! args.is_object() && ! args.is_null())
                 invalid ("arguments must be an object");
+
+            // Whatever a call changes is one undo step, named after it ("AI: add midi notes").
+            struct Gesture
+            {
+                project::Session& s;
+                Gesture (project::Session& session, const std::string& op) : s (session)
+                {
+                    auto words = op;
+                    std::replace (words.begin(), words.end(), '_', ' ');
+                    s.beginGesture ("AI: " + words);
+                }
+                ~Gesture() { s.endGesture(); }
+            } gesture (session, op);
+
             return { { "ok", true }, { "result", run (op, args.is_null() ? Json::object() : args) } };
         }
         catch (const Error& e)
@@ -331,6 +345,7 @@ namespace beatforge::api
                  { "song_bars", (double) project::songEnd (p) / (double) perBar },
                  { "loop", { { "enabled", p.loopEnabled }, { "start_bar", p.loopStart / perBar + 1 }, { "bars", (p.loopEnd - p.loopStart) / perBar } } },
                  { "metronome", p.metronomeEnabled },
+                 { "master_volume_db", p.masterVolumeDb },
                  { "can_undo", session.canUndo() }, { "can_redo", session.canRedo() },
                  { "tracks", tracks } };
     }
@@ -539,6 +554,12 @@ namespace beatforge::api
             return trackJson (*session.findTrack (id));
         }
 
+        if (op == "set_master_volume")
+        {
+            session.setMasterVolume ((float) number (a, "db", project::Project::minVolumeDb, project::Project::maxVolumeDb));
+            return { { "master_volume_db", session.getProject().masterVolumeDb } };
+        }
+
         // --- clips ------------------------------------------------------------------
         if (op == "create_clip")
         {
@@ -715,7 +736,11 @@ namespace beatforge::api
                     if (param == audio::Param::wave) j["values"] = { "sine", "saw", "square", "triangle" };
                     params.push_back (j);
                 }
+                Json presets = Json::array();
+                for (auto& preset : audio::presetsFor (type))
+                    presets.push_back ({ { "id", std::string (preset.id) }, { "name", std::string (preset.name) } });
                 list.push_back ({ { "id", toolInstrumentId (type) }, { "name", std::string (audio::instrumentName (type)) },
+                                  { "presets", presets },
                                   { "voices", type == audio::InstrumentType::monoBass ? "mono (last note wins, glide)" : "16-voice polyphonic" },
                                   { "params", params } });
             }
@@ -729,6 +754,26 @@ namespace beatforge::api
             if (t.type != TrackType::instrument) invalid ("track \"" + t.name + "\" is a drum track");
             session.setInstrument (id, instrumentArg (a, "instrument"));
             return trackJson (*session.findTrack (id));
+        }
+
+        if (op == "set_instrument_preset")
+        {
+            const auto& t = trackArg (a);
+            const auto id = t.id;
+            if (t.type != TrackType::instrument) invalid ("track \"" + t.name + "\" is a drum track");
+            const auto type = find (a, "instrument") != nullptr ? instrumentArg (a, "instrument") : t.instrument;
+            const auto presetId = lower (text (a, "preset", 32));
+            const auto* preset = audio::findPreset (type, presetId);
+            if (preset == nullptr)
+            {
+                std::string names;
+                for (auto& p2 : audio::presetsFor (type)) names += (names.empty() ? "" : ", ") + std::string (p2.id);
+                invalid ("unknown preset '" + presetId + "' for " + std::string (audio::instrumentName (type)) + " (" + names + ")");
+            }
+            session.applyPreset (id, *preset);
+            auto j = trackJson (*session.findTrack (id));
+            j["preset"] = std::string (preset->name);
+            return j;
         }
 
         if (op == "set_instrument_param")

@@ -324,3 +324,28 @@ TEST_CASE ("Live input and recording are allocation-free on the audio thread", "
     }
     REQUIRE (allocations.count() == 0);
 }
+
+TEST_CASE ("A key pressed as the take starts lands on its first beat, not at the loop end", "[live][record]")
+{
+    // The bug: with a loop, a press just ahead of the first beat was moved back
+    // by the output latency and wrapped to the end of the loop (or past it).
+    LiveRig rig;
+    rig.engine.setLoop (true, 0, 3840);
+    rig.engine.setOutputLatency (2400);
+    rig.engine.setRecording (true);
+    rig.engine.play();
+    rig.key (0.0, 57, 100);                      // together with the start of recording
+    rig.key (0.9, 57, 0);
+    rig.key (2.0 + 0.010, 60, 100);              // early in the second pass: wraps, as it should
+    rig.key (2.3, 60, 0);
+    rig.renderTo (130000);
+
+    const auto events = rig.recorded();
+    REQUIRE (events.size() == 4);
+    REQUIRE (events[0].pitch == 57);
+    REQUIRE (events[0].tick == Approx (0.0).margin (0.05));
+    REQUIRE (events[1].tick < 3840.0);
+    // Second pass: pressed 10 ms after the wrap, heard 50 ms earlier = before the wrap.
+    REQUIRE (events[2].tick > 3700.0);
+    REQUIRE (events[2].tick < 3840.0);
+}

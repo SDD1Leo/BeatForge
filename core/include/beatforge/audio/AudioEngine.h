@@ -85,6 +85,7 @@ namespace beatforge::audio
         void setSlotType (int slot, SlotType) noexcept;
         SlotType getSlotType (int slot) const noexcept;
         void setSlotMix (int slot, float volumeDb, float pan, bool muted, bool soloed) noexcept;
+        void setMasterVolume (float db) noexcept { masterVolumeDb.store (db, std::memory_order_release); }
         // Replaces what the slot plays (nullptr = nothing).
         void setSlotSchedule (int slot, std::unique_ptr<TrackSchedule>);
         // Frees schedules the audio thread has finished with. Call regularly.
@@ -93,6 +94,8 @@ namespace beatforge::audio
         DrumMachine& drums (int slot) noexcept;
         InstrumentRack& instruments (int slot) noexcept;
         int getActiveVoices (int slot) const noexcept;
+        // Post-fader (volume, pan, mute/solo) peak meter of one track slot.
+        LevelMeter& getSlotMeter (int slot) noexcept;
 
         // Editor auditions (not on the audio thread): note on until note off.
         void previewNoteOn (int slot, int pitch, int velocity) noexcept  { previews.push ({ slot, pitch, velocity }); }
@@ -188,6 +191,8 @@ namespace beatforge::audio
         std::array<bool, 128> liveHeld {};
         int liveSlot = -1;                                            // slot the held notes play on
         bool recordingActive = false;                                 // recording && playing
+        double takeStartTick = 0.0;                                   // where recording started
+        bool wrappedInTake = false;                                   // a loop wrap happened since
         double lastPlayingTick = 0.0, lastSamplesPerTick = 1.0;
         Clock clock = &AudioEngine::now;
         std::atomic<int> liveTarget { -1 };
@@ -205,6 +210,8 @@ namespace beatforge::audio
         std::atomic<double> tempo { time::defaultTempo };
         std::atomic<std::uint32_t> packedSignature;
         std::atomic<bool> metronomeEnabled { false };
+        std::atomic<float> masterVolumeDb { 0.0f };
+        float masterGain = 1.0f;   // audio thread, smoothed
         std::atomic<bool> loopEnabled { false };
         std::atomic<time::Tick> loopStart { 0 }, loopEnd { 0 };
         std::atomic<double> playStart { 0.0 };

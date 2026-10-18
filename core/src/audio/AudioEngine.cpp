@@ -29,6 +29,7 @@ namespace beatforge::audio
         std::atomic<int> activeVoices { 0 };
 
         std::vector<float> left, right;            // render buffers (sized in prepare)
+        LevelMeter meter;                          // post-fader
         float gainL = 1.0f, gainR = 1.0f;          // smoothed mix gains
 
         SlotType getType() const noexcept { return (SlotType) type.load (std::memory_order_acquire); }
@@ -160,6 +161,8 @@ namespace beatforge::audio
 
     DrumMachine& AudioEngine::drums (int slot) noexcept          { return slots[(size_t) clampSlot (slot)]->drums; }
     InstrumentRack& AudioEngine::instruments (int slot) noexcept { return slots[(size_t) clampSlot (slot)]->instruments; }
+
+    LevelMeter& AudioEngine::getSlotMeter (int slot) noexcept { return slots[(size_t) clampSlot (slot)]->meter; }
 
     int AudioEngine::getActiveVoices (int slot) const noexcept
     {
@@ -301,10 +304,20 @@ namespace beatforge::audio
         const double heardDelay = delaySamples + (double) outputLatency.load (std::memory_order_acquire);
         double at = tick - heardDelay / std::max (1e-9, samplesPerTick);
 
-        // Heard before a loop wrap: belongs at the end of the loop, not before its start.
+        // Heard before a loop wrap: belongs at the end of the loop, not before its start -
+        // but only once the take has wrapped; before that, a press just ahead of
+        // the take counts as played on its first beat.
         const auto ls = (double) loopStart.load (std::memory_order_acquire), le = (double) loopEnd.load (std::memory_order_acquire);
-        if (loopEnabled.load (std::memory_order_acquire) && ls < le && tick >= ls && tick < le && at < ls)
+        if (! wrappedInTake)
+        {
+            at = std::max (at, takeStartTick);
+        }
+        else if (loopEnabled.load (std::memory_order_acquire) && ls < le && tick >= ls && tick < le && at < ls)
+        {
             at += le - ls;
+            if (at >= le)   // rounding right at the wrap: the start of the next pass
+                at = ls;
+        }
 
         recorded.push ({ std::max (0.0, at), pitch, velocity });
     }
@@ -407,6 +420,12 @@ namespace beatforge::audio
             const bool recordNow = recording.load (std::memory_order_acquire);
             if (recordingActive && ! recordNow)
                 recordEvent (transport.getPositionTicks(), 0.0, lastSamplesPerTick, RecordedEvent::endOfTake, 0);
+            const bool takeStarts = recordNow && ! recordingActive;
+            if (takeStarts)
+            {
+                takeStartTick = transport.getPositionTicks();
+                wrappedInTake = false;
+            }
             recordingActive = recordNow;
 
             // Everything that happens in this chunk, in sample order.
@@ -512,6 +531,8 @@ namespace beatforge::audio
                     case jump:
                         for (auto& s : slots)
                             releaseNotesNotCovering (*s, e.tick);
+                        if (! (takeStarts && e.offset == 0))   // not the jump to the play start
+                            wrappedInTake = true;
                         break;
                     case gridLine:
                         ++beats;
@@ -563,11 +584,6 @@ namespace beatforge::audio
 
     void AudioEngine::mixSlots (float* const* pair, int numPair, int numSamples) noexcept
     {
-        // Metronome straight to the output (both channels).
-        for (int ch = 0; ch < numPair; ++ch)
-            for (int i = 0; i < numSamples; ++i)
-                pair[ch][i] += metronomeBuffer[(size_t) i];
-
         bool anySolo = false;
         for (auto& s : slots)
             anySolo |= s->getType() != SlotType::none && s->soloed.load (std::memory_order_acquire);
@@ -592,11 +608,31 @@ namespace beatforge::audio
                 // Land exactly on the target (a muted track is truly silent).
                 if (std::abs (targetL - s->gainL) < 1e-5f) s->gainL = targetL;
                 if (std::abs (targetR - s->gainR) < 1e-5f) s->gainR = targetR;
-                if (numPair > 0) pair[0][i] += s->left[(size_t) i] * s->gainL;
-                if (numPair > 1) pair[1][i] += s->right[(size_t) i] * s->gainR;
+                s->left[(size_t) i] *= s->gainL;    // post-fader, for the track meter
+                s->right[(size_t) i] *= s->gainR;
+                if (numPair > 0) pair[0][i] += s->left[(size_t) i];
+                if (numPair > 1) pair[1][i] += s->right[(size_t) i];
             }
+            const float* lr[] { s->left.data(), s->right.data() };
+            s->meter.process (lr, 2, numSamples);
 
             s->activeVoices.store (s->instruments.activeVoices(), std::memory_order_relaxed);
         }
+
+        // Master volume on the tracks' sum (smoothed like the track gains; exactly 1 at 0 dB).
+        const float masterTarget = dbToGain (masterVolumeDb.load (std::memory_order_acquire));
+        if (masterGain != masterTarget || masterTarget != 1.0f)
+            for (int i = 0; i < numSamples; ++i)
+            {
+                masterGain += smoothing * (masterTarget - masterGain);
+                if (std::abs (masterTarget - masterGain) < 1e-5f) masterGain = masterTarget;
+                for (int ch = 0; ch < numPair; ++ch)
+                    pair[ch][i] *= masterGain;
+            }
+
+        // Metronome straight to the output (both channels), not affected by the master volume.
+        for (int ch = 0; ch < numPair; ++ch)
+            for (int i = 0; i < numSamples; ++i)
+                pair[ch][i] += metronomeBuffer[(size_t) i];
     }
 }

@@ -19,6 +19,7 @@ namespace beatforge
     // loop on/off (the region is set on the arrangement ruler) and audio settings. Settings go through the Session; the
     // playing position is read from the engine for display only.
     class TransportBar final : public juce::Component,
+                               public juce::TooltipClient,
                                private juce::Timer
     {
     public:
@@ -40,6 +41,10 @@ namespace beatforge
         std::function<void()> onComputerKeys;
         void setComputerKeysLit (bool lit, const juce::String& tooltip);
 
+        // Save indicator: whether the current unsaved changes are in the recovery file.
+        void setAutosave (bool currentIsAutosaved, juce::Time when);
+        juce::String getTooltip() override;   // explains the save indicator
+
         std::function<void()> onOpenAudioSettings;
         std::function<void (juce::Component& anchor)> onProjectMenu;
         std::function<void()> onTextEditFinished;
@@ -47,7 +52,7 @@ namespace beatforge
         void paint (juce::Graphics&) override;
         void resized() override;
 
-        static constexpr int minimumWidthForTime = 1226;
+        static constexpr int minimumWidthForTime = 1270;
 
     private:
         void timerCallback() override;
@@ -59,7 +64,10 @@ namespace beatforge
         int listenerId = 0;
 
         ProjectButton projectButton;
-        TransportButton playButton, stopButton, recordButton, loopButton, metronomeButton, keysButton, settingsButton;
+        TransportButton undoButton, redoButton, playButton, stopButton, recordButton, loopButton, metronomeButton, keysButton, settingsButton;
+        void refreshUndo();
+        bool autosaved = false;
+        juce::Time autosaveTime;
         TempoField tempoField;
         SignatureField signatureField;
 

@@ -197,12 +197,31 @@ namespace beatforge
     }
 
     //==============================================================================
+    namespace
+    {
+        // Tooltips wrap at this width and grow to fit (several lines are fine).
+        constexpr float tooltipWrap = 420.0f;
+
+        juce::TextLayout tooltipLayout (const juce::String& text)
+        {
+            juce::AttributedString as;
+            as.append (text, juce::Font (theme::font (13.0f)), theme::textPrimary);
+            as.setWordWrap (juce::AttributedString::byWord);
+            juce::TextLayout layout;
+            layout.createLayout (as, tooltipWrap);
+            return layout;
+        }
+    }
+
     juce::Rectangle<int> BeatForgeLookAndFeel::getTooltipBounds (const juce::String& text, juce::Point<int> screenPos,
                                                                juce::Rectangle<int> parentArea)
     {
-        const auto font = juce::Font (theme::font (13.0f));
-        const int w = juce::jmin (360, juce::GlyphArrangement::getStringWidthInt (font, text) + 20);
-        const int h = 26;
+        const auto layout = tooltipLayout (text);
+        float widest = 0.0f;
+        for (int i = 0; i < layout.getNumLines(); ++i)
+            widest = juce::jmax (widest, layout.getLine (i).getLineBoundsX().getLength());
+        const int w = (int) std::ceil (widest) + 22;
+        const int h = (int) std::ceil (layout.getHeight()) + 12;
 
         return juce::Rectangle<int> (screenPos.x > parentArea.getCentreX() ? screenPos.x - (w + 12) : screenPos.x + 24,
                                      screenPos.y > parentArea.getCentreY() ? screenPos.y - (h + 6) : screenPos.y + 6,
@@ -216,9 +235,7 @@ namespace beatforge
         g.fillRoundedRectangle (bounds, theme::controlRadius);
         g.setColour (theme::borderStrong);
         g.drawRoundedRectangle (bounds.reduced (0.5f), theme::controlRadius, theme::borderWidth);
-        g.setColour (theme::textPrimary);
-        g.setFont (theme::font (13.0f));
-        g.drawFittedText (text, bounds.toNearestInt().reduced (10, 2), juce::Justification::centredLeft, 1);
+        tooltipLayout (text).draw (g, bounds.reduced (11.0f, 6.0f));
     }
 
     //==============================================================================

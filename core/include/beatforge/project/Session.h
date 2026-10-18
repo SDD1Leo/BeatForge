@@ -1,6 +1,7 @@
 #pragma once
 
 #include "beatforge/audio/AudioEngine.h"
+#include "beatforge/audio/InstrumentPresets.h"
 #include "beatforge/project/Project.h"
 
 #include <array>
@@ -45,6 +46,7 @@ namespace beatforge::project
         void setTempo (double bpm);
         void setTimeSignature (time::TimeSignature);
         void setMetronomeEnabled (bool);
+        void setMasterVolume (float db);
         void setLoop (bool enabled, time::Tick start, time::Tick end);   // ignored unless start < end
         bool renameProject (const std::string&);
 
@@ -68,6 +70,8 @@ namespace beatforge::project
         void setInstrumentParam (TrackId, audio::InstrumentType, audio::Param, float value);
         float getInstrumentParam (TrackId, audio::InstrumentType, audio::Param) const noexcept;
         void resetInstrumentParams (TrackId, audio::InstrumentType);
+        // Loads a factory sound into the track's instrument (one undo step, "Preset: <name>").
+        bool applyPreset (TrackId, const audio::InstrumentPreset&);
 
         // --- Clips --------------------------------------------------------------------
         ClipId createClip (TrackId, time::Tick start, time::Tick length);   // 0 if invalid
@@ -76,6 +80,8 @@ namespace beatforge::project
         void moveClip (ClipId, time::Tick newStart, TrackId toTrack = 0);
         void resizeClip (ClipId, time::Tick newLength);
         ClipId duplicateClip (ClipId);           // copy placed right after the original
+        // A copy of `content` (from a track of `contentType`) on another track at `start`; 0 if the types differ.
+        ClipId pasteClip (TrackId, const Clip& content, TrackType contentType, time::Tick start);
 
         void setStep (ClipId, int lane, int step, bool on);
         void clearPattern (ClipId);
@@ -86,18 +92,24 @@ namespace beatforge::project
         void quantizeNotes (ClipId, const std::vector<midi::NoteId>& ids, time::Tick grid);   // empty ids = all
 
         // --- Undo -----------------------------------------------------------------------
-        // Edits between begin and end (e.g. a drag) become one undo step.
-        void beginGesture();
+        // Edits between begin and end (e.g. a drag) become one undo step,
+        // named `label` (else after its first edit).
+        void beginGesture (std::string label = {});
         void endGesture();
         bool canUndo() const noexcept { return ! undoStack.empty(); }
         bool canRedo() const noexcept { return ! redoStack.empty(); }
         void undo();
         void redo();
+        // What Undo / Redo would do, e.g. "Move clip" (empty if nothing).
+        std::string undoLabel() const { return undoStack.empty() ? std::string() : undoStack.back().label; }
+        std::string redoLabel() const { return redoStack.empty() ? std::string() : redoStack.back().label; }
 
         // --- Lifecycle --------------------------------------------------------------------
         void newProject();
         void openProject (Project, std::optional<std::filesystem::path> file);
         void markSaved (const std::filesystem::path& file);
+        // The open project counts as unsaved (e.g. restored after a crash).
+        void markUnsaved();
         bool isDirty() const noexcept { return ! (project == savedProject); }
         const std::optional<std::filesystem::path>& getFile() const noexcept { return file; }
 
@@ -115,7 +127,7 @@ namespace beatforge::project
 
         // Applies `mutate` (returns false = nothing changed) as one undoable edit.
         template <typename Mutate>
-        bool edit (Change, Mutate&& mutate);
+        bool edit (Change, const char* label, Mutate&& mutate);
 
         void replaceProject (Project);
         void syncEngine (Change);
@@ -127,7 +139,13 @@ namespace beatforge::project
         Project project, savedProject;
         std::optional<std::filesystem::path> file;
 
-        std::deque<Project> undoStack, redoStack;
+        struct UndoStep
+        {
+            Project project;
+            std::string label;
+        };
+        std::deque<UndoStep> undoStack, redoStack;
+        std::string gestureLabel;
         int gestureDepth = 0;
         bool gestureRecorded = false;
 

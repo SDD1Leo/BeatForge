@@ -10,6 +10,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 
 namespace beatforge
 {
@@ -40,6 +41,11 @@ namespace beatforge
 
         void duplicateSelectedClip();
         void deleteSelectedClip();
+        // Clipboard (inside BeatForge): paste goes onto the selected track, at the playhead.
+        bool copySelectedClip();
+        void cutSelectedClip();
+        bool pasteClip();
+        std::function<void (const juce::String&)> onMessage;   // short feedback for the status bar
 
         void zoomIn();
         void zoomOut();
@@ -86,6 +92,8 @@ namespace beatforge
         juce::TextButton zoomOutButton { "-" }, zoomInButton { "+" }, fitButton { "Fit" };
         double viewStart = 0.0, viewBars = 16.0;
         double lastPosition = 0.0;
+        std::optional<project::Clip> clipboard;
+        project::TrackType clipboardType = project::TrackType::drums;
         std::vector<project::TrackId> shownTracks;
     };
 }

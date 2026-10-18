@@ -680,6 +680,7 @@ namespace beatforge::project
         j["tempo"] = p.tempo;
         j["timeSignature"] = { { "numerator", p.timeSignature.numerator }, { "denominator", p.timeSignature.denominator } };
         j["metronome"] = p.metronomeEnabled;
+        j["masterVolumeDb"] = p.masterVolumeDb;
         j["loop"] = { { "enabled", p.loopEnabled }, { "start", p.loopStart }, { "end", p.loopEnd } };
 
         json tracks = json::array();
@@ -758,6 +759,7 @@ namespace beatforge::project
             warnings.push_back ("Time signature was missing or invalid; using 4/4.");
 
         p.metronomeEnabled = r.boolean (j, "metronome", false, "Metronome setting");
+        p.masterVolumeDb = r.number (j, "masterVolumeDb", 0.0f, Project::minVolumeDb, Project::maxVolumeDb, "Master volume");
 
         if (version == 1)
         {
@@ -785,7 +787,7 @@ namespace beatforge::project
         }
 
         p.extraTopLevel = extrasOf (j, { "format", "version", "savedBy", "name", "tempo", "timeSignature",
-                                         "metronome", "loop", "tracks" });
+                                         "metronome", "masterVolumeDb", "loop", "tracks" });
         result.project = std::move (p);
         return result;
     }

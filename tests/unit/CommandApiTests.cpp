@@ -223,6 +223,7 @@ TEST_CASE ("Each call is one undo step; save and open stay in the allowed folder
         { { "pitch", 60 }, { "start_beat", 0 }, { "length_beats", 1 } },
         { { "pitch", 62 }, { "start_beat", 1 }, { "length_beats", 1 } },
         { { "pitch", 64 }, { "start_beat", 2 }, { "length_beats", 1 } } } } });
+    REQUIRE (rig.session.undoLabel() == "AI: add midi notes");
     rig.ok ("undo");
     REQUIRE (rig.session.findClip (clip.get<project::ClipId>())->notes.empty());   // all three at once
     rig.ok ("redo");
@@ -271,4 +272,18 @@ TEST_CASE ("Note names", "[api]")
     REQUIRE (api::parseNoteName ("C") == -1);
     REQUIRE (api::parseNoteName ("C4x") == -1);
     REQUIRE (api::noteName (61) == "C#4");
+}
+
+TEST_CASE ("Presets and master volume through the API", "[api]")
+{
+    Rig rig;
+    const auto instruments = rig.ok ("list_instruments");
+    REQUIRE (instruments[0]["presets"].size() >= 5);
+    const auto t = rig.ok ("set_instrument_preset", { { "track", 2 }, { "preset", "acid" }, { "instrument", "nebula_bass" } });
+    REQUIRE (t["instrument"] == "nebula_bass");
+    REQUIRE (t["preset"] == "Acid");
+    REQUIRE (rig.error ("set_instrument_preset", { { "track", 2 }, { "preset", "dubstep" } }) == "invalid_argument");
+    REQUIRE (rig.ok ("set_master_volume", { { "db", -3 } })["master_volume_db"] == -3.0);
+    REQUIRE (rig.ok ("get_project_state")["master_volume_db"] == -3.0);
+    REQUIRE (rig.error ("set_master_volume", { { "db", 20 } }) == "invalid_argument");
 }

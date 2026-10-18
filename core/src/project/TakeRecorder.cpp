@@ -21,7 +21,7 @@ namespace beatforge::project
         takeClips.clear();
         lastClip = 0;
         notesRecorded = 0;
-        session.beginGesture();
+        session.beginGesture ("Record take");
         return true;
     }
 

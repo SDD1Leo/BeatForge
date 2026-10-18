@@ -88,7 +88,7 @@ namespace beatforge::project
 
     //==============================================================================
     template <typename Mutate>
-    bool Session::edit (Change change, Mutate&& mutate)
+    bool Session::edit (Change change, const char* label, Mutate&& mutate)
     {
         const bool wasDirty = isDirty(), couldUndo = canUndo(), couldRedo = canRedo();
         Project before = project;
@@ -98,7 +98,7 @@ namespace beatforge::project
 
         if (gestureDepth == 0 || ! gestureRecorded)
         {
-            undoStack.push_back (std::move (before));
+            undoStack.push_back ({ std::move (before), gestureDepth > 0 && ! gestureLabel.empty() ? gestureLabel : std::string (label) });
             if (undoStack.size() > maxUndoSteps)
                 undoStack.pop_front();
             gestureRecorded = gestureDepth > 0;
@@ -143,6 +143,7 @@ namespace beatforge::project
         engine.setTempo (project.tempo);
         engine.setTimeSignature (project.timeSignature);
         engine.setMetronomeEnabled (project.metronomeEnabled);
+        engine.setMasterVolume (project.masterVolumeDb);
         engine.setLoop (project.loopEnabled, project.loopStart, project.loopEnd);
 
         if (change == Change::transport || change == Change::metadata)
@@ -228,28 +229,34 @@ namespace beatforge::project
     }
 
     //==============================================================================
+    void Session::setMasterVolume (float db)
+    {
+        db = std::clamp (db, Project::minVolumeDb, Project::maxVolumeDb);
+        edit (Change::tracks, "Master volume", [&] (Project& p) { return assign (p.masterVolumeDb, db); });
+    }
+
     void Session::setTempo (double bpm)
     {
         bpm = time::clampTempo (bpm);
-        edit (Change::transport, [&] (Project& p) { return assign (p.tempo, bpm); });
+        edit (Change::transport, "Change tempo", [&] (Project& p) { return assign (p.tempo, bpm); });
     }
 
     void Session::setTimeSignature (time::TimeSignature sig)
     {
         if (sig.isValid())
-            edit (Change::transport, [&] (Project& p) { return assign (p.timeSignature, sig); });
+            edit (Change::transport, "Change time signature", [&] (Project& p) { return assign (p.timeSignature, sig); });
     }
 
     void Session::setMetronomeEnabled (bool enabled)
     {
-        edit (Change::transport, [&] (Project& p) { return assign (p.metronomeEnabled, enabled); });
+        edit (Change::transport, "Metronome on/off", [&] (Project& p) { return assign (p.metronomeEnabled, enabled); });
     }
 
     void Session::setLoop (bool enabled, time::Tick start, time::Tick end)
     {
         if (start < 0 || end <= start)
             return;
-        edit (Change::transport, [&] (Project& p)
+        edit (Change::transport, "Change loop", [&] (Project& p)
         {
             const bool a = assign (p.loopEnabled, enabled);
             const bool b = assign (p.loopStart, start);
@@ -262,7 +269,7 @@ namespace beatforge::project
     {
         if (name.empty() || name.size() > (size_t) Project::maxNameLength)
             return false;
-        edit (Change::metadata, [&] (Project& p) { return assign (p.name, name); });
+        edit (Change::metadata, "Rename project", [&] (Project& p) { return assign (p.name, name); });
         return true;
     }
 
@@ -273,7 +280,7 @@ namespace beatforge::project
             return 0;
 
         const auto id = nextTrackId;
-        edit (Change::tracks, [&] (Project& p)
+        edit (Change::tracks, "Add track", [&] (Project& p)
         {
             Track t;
             t.id = id;
@@ -295,7 +302,7 @@ namespace beatforge::project
 
     bool Session::removeTrack (TrackId id)
     {
-        return edit (Change::clips, [&] (Project& p)
+        return edit (Change::clips, "Delete track", [&] (Project& p)
         {
             return std::erase_if (p.tracks, [&] (const Track& t) { return t.id == id; }) > 0;
         });
@@ -303,7 +310,7 @@ namespace beatforge::project
 
     bool Session::moveTrack (TrackId id, int newIndex)
     {
-        return edit (Change::tracks, [&] (Project& p)
+        return edit (Change::tracks, "Move track", [&] (Project& p)
         {
             const auto it = std::find_if (p.tracks.begin(), p.tracks.end(), [&] (const Track& t) { return t.id == id; });
             if (it == p.tracks.end())
@@ -323,7 +330,7 @@ namespace beatforge::project
     {
         if (name.empty() || name.size() > (size_t) Project::maxNameLength || findTrack (id) == nullptr)
             return false;
-        edit (Change::tracks, [&] (Project&) { return assign (track (id)->name, name); });
+        edit (Change::tracks, "Rename track", [&] (Project&) { return assign (track (id)->name, name); });
         return true;
     }
 
@@ -331,24 +338,24 @@ namespace beatforge::project
     {
         if (findTrack (id) == nullptr || ! std::isfinite (db)) return;
         db = std::clamp (db, Project::minVolumeDb, Project::maxVolumeDb);
-        edit (Change::tracks, [&] (Project&) { return assign (track (id)->volumeDb, db); });
+        edit (Change::tracks, "Track volume", [&] (Project&) { return assign (track (id)->volumeDb, db); });
     }
 
     void Session::setTrackPan (TrackId id, float pan)
     {
         if (findTrack (id) == nullptr || ! std::isfinite (pan)) return;
         pan = std::clamp (pan, -1.0f, 1.0f);
-        edit (Change::tracks, [&] (Project&) { return assign (track (id)->pan, pan); });
+        edit (Change::tracks, "Track pan", [&] (Project&) { return assign (track (id)->pan, pan); });
     }
 
     void Session::setTrackMuted (TrackId id, bool m)
     {
-        if (findTrack (id) != nullptr) edit (Change::tracks, [&] (Project&) { return assign (track (id)->muted, m); });
+        if (findTrack (id) != nullptr) edit (Change::tracks, "Mute track", [&] (Project&) { return assign (track (id)->muted, m); });
     }
 
     void Session::setTrackSoloed (TrackId id, bool s)
     {
-        if (findTrack (id) != nullptr) edit (Change::tracks, [&] (Project&) { return assign (track (id)->soloed, s); });
+        if (findTrack (id) != nullptr) edit (Change::tracks, "Solo track", [&] (Project&) { return assign (track (id)->soloed, s); });
     }
 
     void Session::setLaneGainDb (TrackId id, int lane, float db)
@@ -356,21 +363,21 @@ namespace beatforge::project
         auto* t = findTrack (id);
         if (t == nullptr || t->type != TrackType::drums || ! validLane (lane) || ! std::isfinite (db)) return;
         db = std::clamp (db, audio::DrumMachine::minGainDb, audio::DrumMachine::maxGainDb);
-        edit (Change::tracks, [&] (Project&) { return assign (track (id)->lanes[(size_t) lane].gainDb, db); });
+        edit (Change::tracks, "Drum level", [&] (Project&) { return assign (track (id)->lanes[(size_t) lane].gainDb, db); });
     }
 
     void Session::setLaneMuted (TrackId id, int lane, bool m)
     {
         auto* t = findTrack (id);
         if (t != nullptr && t->type == TrackType::drums && validLane (lane))
-            edit (Change::tracks, [&] (Project&) { return assign (track (id)->lanes[(size_t) lane].muted, m); });
+            edit (Change::tracks, "Mute drum", [&] (Project&) { return assign (track (id)->lanes[(size_t) lane].muted, m); });
     }
 
     void Session::setLaneSoloed (TrackId id, int lane, bool s)
     {
         auto* t = findTrack (id);
         if (t != nullptr && t->type == TrackType::drums && validLane (lane))
-            edit (Change::tracks, [&] (Project&) { return assign (track (id)->lanes[(size_t) lane].soloed, s); });
+            edit (Change::tracks, "Solo drum", [&] (Project&) { return assign (track (id)->lanes[(size_t) lane].soloed, s); });
     }
 
     bool Session::renameLane (TrackId id, int lane, const std::string& name)
@@ -379,7 +386,7 @@ namespace beatforge::project
         if (t == nullptr || t->type != TrackType::drums || ! validLane (lane)
             || name.empty() || name.size() > (size_t) Project::maxLaneNameLength)
             return false;
-        edit (Change::tracks, [&] (Project&) { return assign (track (id)->lanes[(size_t) lane].name, name); });
+        edit (Change::tracks, "Rename drum", [&] (Project&) { return assign (track (id)->lanes[(size_t) lane].name, name); });
         return true;
     }
 
@@ -387,7 +394,7 @@ namespace beatforge::project
     {
         auto* t = findTrack (id);
         if (t != nullptr && t->type == TrackType::instrument)
-            edit (Change::instrument, [&] (Project&) { return assign (track (id)->instrument, type); });
+            edit (Change::instrument, "Change instrument", [&] (Project&) { return assign (track (id)->instrument, type); });
     }
 
     void Session::setInstrumentParam (TrackId id, audio::InstrumentType type, audio::Param param, float value)
@@ -400,7 +407,7 @@ namespace beatforge::project
         if (param == audio::Param::wave)
             value = std::round (value);
         value = std::clamp (value, spec.min, spec.max);
-        edit (Change::instrument, [&] (Project&) { return assign (track (id)->instrumentParams[(size_t) type][(size_t) param], value); });
+        edit (Change::instrument, "Change sound", [&] (Project&) { return assign (track (id)->instrumentParams[(size_t) type][(size_t) param], value); });
     }
 
     float Session::getInstrumentParam (TrackId id, audio::InstrumentType type, audio::Param param) const noexcept
@@ -416,7 +423,24 @@ namespace beatforge::project
         if (t == nullptr || t->type != TrackType::instrument)
             return;
         const auto defaults = Track::defaultInstrumentParams()[(size_t) type];
-        edit (Change::instrument, [&] (Project&) { return assign (track (id)->instrumentParams[(size_t) type], defaults); });
+        edit (Change::instrument, "Reset sound", [&] (Project&) { return assign (track (id)->instrumentParams[(size_t) type], defaults); });
+    }
+
+    bool Session::applyPreset (TrackId id, const audio::InstrumentPreset& preset)
+    {
+        auto* t = findTrack (id);
+        if (t == nullptr || t->type != TrackType::instrument)
+            return false;
+        beginGesture ("Preset: " + std::string (preset.name));
+        edit (Change::instrument, "Preset", [&] (Project&)
+        {
+            auto* tr = track (id);
+            const bool a = assign (tr->instrument, preset.type);
+            const bool b = assign (tr->instrumentParams[(size_t) preset.type], preset.values);
+            return a || b;
+        });
+        endGesture();
+        return true;
     }
 
     //==============================================================================
@@ -426,7 +450,7 @@ namespace beatforge::project
             return 0;
 
         const auto id = nextClipId;
-        edit (Change::clips, [&] (Project&)
+        edit (Change::clips, "Create clip", [&] (Project&)
         {
             Clip c;
             c.id = id;
@@ -443,7 +467,7 @@ namespace beatforge::project
 
     bool Session::deleteClip (ClipId id)
     {
-        return edit (Change::clips, [&] (Project&)
+        return edit (Change::clips, "Delete clip", [&] (Project&)
         {
             auto* t = trackWithClip (id);
             return t != nullptr && std::erase_if (t->clips, [&] (const Clip& c) { return c.id == id; }) > 0;
@@ -461,7 +485,7 @@ namespace beatforge::project
         if (to == nullptr || to->type != from->type)
             return;
 
-        edit (Change::clips, [&] (Project&)
+        edit (Change::clips, "Move clip", [&] (Project&)
         {
             auto* src = trackWithClip (id);
             auto it = std::find_if (src->clips.begin(), src->clips.end(), [&] (const Clip& c) { return c.id == id; });
@@ -483,7 +507,7 @@ namespace beatforge::project
     {
         if (newLength < 1 || newLength > Project::maxClipLength || findClip (id) == nullptr)
             return;
-        edit (Change::clips, [&] (Project&) { return assign (clip (id)->length, newLength); });
+        edit (Change::clips, "Resize clip", [&] (Project&) { return assign (clip (id)->length, newLength); });
     }
 
     ClipId Session::duplicateClip (ClipId id)
@@ -492,7 +516,7 @@ namespace beatforge::project
             return 0;
 
         const auto newId = nextClipId;
-        edit (Change::clips, [&] (Project&)
+        edit (Change::clips, "Duplicate clip", [&] (Project&)
         {
             auto* t = trackWithClip (id);
             Clip copy = *clip (id);
@@ -506,13 +530,35 @@ namespace beatforge::project
         return newId;
     }
 
+    ClipId Session::pasteClip (TrackId trackId, const Clip& content, TrackType contentType, time::Tick start)
+    {
+        const auto* t = findTrack (trackId);
+        if (t == nullptr || t->type != contentType || start < 0)
+            return 0;
+
+        const auto newId = nextClipId;
+        edit (Change::clips, "Paste clip", [&] (Project&)
+        {
+            Clip copy = content;
+            copy.id = newId;
+            copy.start = start;
+            auto* target = track (trackId);
+            target->clips.push_back (copy);
+            sortClips (*target);
+            return true;
+        });
+        ++nextClipId;
+        refreshIds();   // pasted note ids must not be reused by later notes
+        return newId;
+    }
+
     //==============================================================================
     void Session::setStep (ClipId id, int lane, int step, bool on)
     {
         auto* t = trackWithClip (id);
         if (t == nullptr || t->type != TrackType::drums || ! validLane (lane) || step < 0 || step >= stepsPerPattern)
             return;
-        edit (Change::clips, [&] (Project&) { return assign (clip (id)->pattern[(size_t) lane][(size_t) step], on); });
+        edit (Change::clips, "Edit steps", [&] (Project&) { return assign (clip (id)->pattern[(size_t) lane][(size_t) step], on); });
     }
 
     void Session::clearPattern (ClipId id)
@@ -520,7 +566,7 @@ namespace beatforge::project
         auto* t = trackWithClip (id);
         if (t == nullptr || t->type != TrackType::drums)
             return;
-        edit (Change::clips, [&] (Project&) { return assign (clip (id)->pattern, DrumPattern {}); });
+        edit (Change::clips, "Clear pattern", [&] (Project&) { return assign (clip (id)->pattern, DrumPattern {}); });
     }
 
     midi::NoteId Session::addNote (ClipId id, midi::Note note)
@@ -530,7 +576,7 @@ namespace beatforge::project
             return 0;
 
         const auto noteId = nextNoteId;
-        edit (Change::clips, [&] (Project&)
+        edit (Change::clips, "Add note", [&] (Project&)
         {
             auto* c = clip (id);
             note = midi::constrained (note, c->length);
@@ -546,7 +592,7 @@ namespace beatforge::project
     {
         if (findClip (id) == nullptr)
             return;
-        edit (Change::clips, [&] (Project&)
+        edit (Change::clips, "Edit notes", [&] (Project&)
         {
             auto* c = clip (id);
             bool any = false;
@@ -566,7 +612,7 @@ namespace beatforge::project
     {
         if (findClip (id) == nullptr)
             return;
-        edit (Change::clips, [&] (Project&)
+        edit (Change::clips, "Delete notes", [&] (Project&)
         {
             auto* c = clip (id);
             const auto removed = std::erase_if (c->notes, [&] (const midi::Note& n)
@@ -583,7 +629,7 @@ namespace beatforge::project
     {
         if (findClip (id) == nullptr || ! midi::isValidGrid (grid))
             return;
-        edit (Change::clips, [&] (Project&)
+        edit (Change::clips, "Quantize", [&] (Project&)
         {
             auto* c = clip (id);
             const auto before = c->notes;
@@ -593,16 +639,22 @@ namespace beatforge::project
     }
 
     //==============================================================================
-    void Session::beginGesture()
+    void Session::beginGesture (std::string label)
     {
         if (gestureDepth++ == 0)
+        {
             gestureRecorded = false;
+            gestureLabel = std::move (label);
+        }
     }
 
     void Session::endGesture()
     {
         if (gestureDepth > 0 && --gestureDepth == 0)
+        {
             gestureRecorded = false;
+            gestureLabel.clear();
+        }
     }
 
     void Session::undo()
@@ -610,8 +662,8 @@ namespace beatforge::project
         if (undoStack.empty())
             return;
         const bool wasDirty = isDirty(), couldUndo = canUndo(), couldRedo = canRedo();
-        redoStack.push_back (project);
-        project = std::move (undoStack.back());
+        redoStack.push_back ({ project, undoStack.back().label });
+        project = std::move (undoStack.back().project);
         undoStack.pop_back();
         refreshIds();
         syncEngine (Change::replaced);
@@ -623,8 +675,8 @@ namespace beatforge::project
         if (redoStack.empty())
             return;
         const bool wasDirty = isDirty(), couldUndo = canUndo(), couldRedo = canRedo();
-        undoStack.push_back (project);
-        project = std::move (redoStack.back());
+        undoStack.push_back ({ project, redoStack.back().label });
+        project = std::move (redoStack.back().project);
         redoStack.pop_back();
         refreshIds();
         syncEngine (Change::replaced);
@@ -646,6 +698,14 @@ namespace beatforge::project
         undoStack.clear();
         redoStack.clear();
         notify (Change::replaced, wasDirty, couldUndo, couldRedo);
+    }
+
+    void Session::markUnsaved()
+    {
+        const bool wasDirty = isDirty(), couldUndo = canUndo(), couldRedo = canRedo();
+        savedProject = Project {};
+        savedProject.name = "\x01 not saved";   // never equal to a real project
+        notify (Change::metadata, wasDirty, couldUndo, couldRedo);
     }
 
     void Session::markSaved (const std::filesystem::path& f)

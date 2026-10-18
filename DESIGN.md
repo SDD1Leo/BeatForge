@@ -92,7 +92,8 @@ Colour always comes with a text label; it is never the only signal.
 | 6a | Piano roll (keyboard, grid, notes in track colour, velocity lane, header controls) + workspace tabs | done (0.5.0) |
 | 6b | Instrument editor (sections, wave buttons, live waveform/filter/envelope displays) | done (0.6.0) |
 | 6c | Export Audio dialog (captioned options, violet→magenta progress bar, summary) | done (0.9.0) |
-| 6 | Mixer in the same language when it lands (Phase 11) | planned |
+| 6d | Mixer tab (channel strips: colour bar, name, pan, fader + slim meter, dB, M/S; master strip) | done (0.11.0) |
+| 6e | Project browser, shortcuts overview, restore prompt, named undo/redo buttons, multi-line tooltips | done (0.11.0) |
 
 Record (transport, red when recording) and the status-bar MIDI light arrived
 with Phase 8; the status bar's right side also shows the MCP bridge (MCP ready /
