@@ -122,10 +122,45 @@ different device, sample rate or buffer size in **Audio Settings...**; the
 choice is saved in `~/.config/BeatForge/BeatForge.settings` (versions before
 0.4 used `~/BeatForge/`; the file is moved automatically).
 
+## Windows
+
+Windows 10 or 11, 64-bit. Each push to `main` builds and tests BeatForge on
+Windows (GitHub Actions, workflow **Windows**). The run's **BeatForge-windows**
+artifact holds:
+
+- `BeatForge-<version>-Setup.exe`: installs for your user (no admin needed; the
+  first page offers "all users" instead), adds a Start-menu entry, opens
+  `.beatforge` files on double-click, and can include the MCP server.
+- `BeatForge-<version>-portable.zip`: the same app; unzip and run `BeatForge.exe`.
+
+The installer is not code-signed, so Windows SmartScreen says "Windows protected
+your PC" the first time: **More info → Run anyway**.
+
+- **Audio:** Windows Audio (WASAPI) by default; pick the device, sample rate and
+  buffer size in **Audio Settings...**. ASIO is not included.
+- **Files:** projects in `Music\BeatForge`, settings and the crash-recovery copy
+  in `%APPDATA%\BeatForge`.
+- **MCP:** needs Node.js 20+. With the per-user install:
+  `claude mcp add --scope user beatforge -- node "%LOCALAPPDATA%\Programs\BeatForge\mcp\dist\index.js"`.
+  The app listens on the named pipe `\\.\pipe\beatforge-<your user name>`,
+  which only your Windows user can open.
+
+Build it yourself with Visual Studio 2022 (C++ workload) and CMake:
+
+```
+git clone --recurse-submodules https://github.com/SDD1Leo/BeatForge.git
+cd BeatForge
+cmake --preset windows
+cmake --build --preset windows-release
+ctest --preset windows-release
+```
+
+The app is `build\windows\app\BeatForge_artefacts\Release\BeatForge.exe`.
+
 ## Projects
 
 Projects are `.beatforge` files: readable, versioned JSON (see
-ARCHITECTURE.md). New projects are saved to `~/Music/BeatForge/` by default.
+ARCHITECTURE.md). New projects are saved to `~/Music/BeatForge/` (Windows: `Music\BeatForge`) by default.
 Saving writes a temporary file and renames it, so a failed save never damages
 the previous file. BeatForge asks before discarding unsaved changes (New,
 Open, Quit); the title shows `*` and the transport shows **Unsaved** until you

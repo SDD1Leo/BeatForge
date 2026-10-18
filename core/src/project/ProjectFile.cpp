@@ -840,6 +840,7 @@ namespace beatforge::project
             out.flush();
             if (! out)
             {
+                out.close();   // Windows cannot delete a file that is still open
                 std::error_code ignored;
                 std::filesystem::remove (temp, ignored);
                 return { "Writing the project failed (the disk may be full). The previous file was not changed." };

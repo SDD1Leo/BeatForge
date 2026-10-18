@@ -53,7 +53,9 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 - Audio export: WAV only (no MP3/FLAC yet), stereo, 44.1/48/96 kHz; no
   normalising or limiting; the tail stops at -100 dBFS or after 4 s. The
   metronome is never exported.
-- MCP: Linux only (Unix socket); one BeatForge instance serves at a time;
+- Windows: built and tested in CI; the installer is unsigned (SmartScreen asks
+  once); no ASIO; a second BeatForge window shares the crash-recovery file.
+- MCP: one BeatForge instance serves at a time;
   files only in ~/Music/BeatForge; no pause and no effects (not in the app
   yet); requests run one at a time on the app's main thread (10 s timeout).
 - MIDI export writes the whole song from bar 1 (what you hear: muted tracks and

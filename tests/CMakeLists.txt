@@ -100,7 +100,7 @@ set_tests_properties(app_export_wav PROPERTIES
 
 # The MCP server's own tests (TypeScript, against a fake app socket), when
 # Node.js and its packages are installed (cd mcp && npm ci).
-find_program(NPM_EXECUTABLE npm)
+find_program(NPM_EXECUTABLE NAMES npm.cmd npm)   # npm.cmd on Windows
 if(NPM_EXECUTABLE AND EXISTS "${PROJECT_SOURCE_DIR}/mcp/node_modules")
     add_test(NAME mcp_server
         COMMAND ${NPM_EXECUTABLE} test

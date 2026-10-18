@@ -210,6 +210,7 @@ TEST_CASE ("Cancel and errors leave no file behind", "[export]")
         REQUIRE (r.cancelled);
         REQUIRE (progress.fraction.load() > 0.1f);
         REQUIRE (progress.fraction.load() < 0.9f);
+        writer.abort();   // this test's own writer; Windows cannot delete a file still open
 
         // exportAudio aborts the writer on cancel:
         project::AudioExportProgress cancelNow;

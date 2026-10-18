@@ -1,4 +1,5 @@
 #include "EngineHelpers.h"
+#include <beatforge/util/Paths.h>
 
 #include <beatforge/api/CommandApi.h>
 #include <beatforge/audio/WavFile.h>
@@ -192,7 +193,8 @@ TEST_CASE ("Files stay inside the allowed folders", "[api][safety]")
     REQUIRE (rig.error ("export_midi", { { "file", "link/x.mid" } }) == "path_not_allowed");
 
     const auto r = rig.ok ("export_midi", { { "file", "songs/demo" } });   // subfolders are fine, extension added
-    REQUIRE (r["file"] == (rig.root / "Music" / "songs" / "demo.mid").string());
+    // The app reports the canonical path (on Windows the temp folder may be a short 8.3 name).
+    REQUIRE (r["file"] == pathToUtf8 (fs::weakly_canonical (rig.root / "Music" / "songs") / "demo.mid"));
     REQUIRE (fs::exists (rig.root / "Music" / "songs" / "demo.mid"));
     REQUIRE_FALSE (fs::exists (rig.root / "escape.mid"));
 }

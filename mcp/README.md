@@ -2,7 +2,7 @@
 
 Lets an AI assistant (e.g. Claude Code) inspect and edit the **running**
 BeatForge app. It is a small TypeScript program speaking MCP over stdio; it
-talks to BeatForge through a local Unix socket and never opens a network port
+talks to BeatForge through a local Unix socket (a named pipe on Windows) and never opens a network port
 or runs shell commands. Every operation goes through BeatForge's command API
 (`core/include/beatforge/api/CommandApi.h`), the same validated, undoable path
 as the UI.
@@ -56,8 +56,10 @@ numbers or names (`C4` = 60).
 
 ## Socket path and limits
 
-`$BEATFORGE_SOCKET`, else `$XDG_RUNTIME_DIR/beatforge/daw.sock`, else
-`/tmp/beatforge-<uid>/daw.sock`. Linux only (Unix domain sockets). One
+Linux: `$BEATFORGE_SOCKET`, else `$XDG_RUNTIME_DIR/beatforge/daw.sock`, else
+`/tmp/beatforge-<uid>/daw.sock` (a Unix domain socket). Windows:
+`$BEATFORGE_SOCKET`, else the named pipe `\\.\pipe\beatforge-<user name>`, which
+only your Windows user can open (remote clients are refused). One
 BeatForge instance serves at a time (a second one shows "MCP off"). Requests
 are handled one at a time on the app's main thread.
 

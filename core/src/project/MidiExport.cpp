@@ -128,6 +128,7 @@ namespace beatforge::project
             out.flush();
             if (! out)
             {
+                out.close();   // Windows cannot delete a file that is still open
                 std::error_code ignored;
                 std::filesystem::remove (temp, ignored);
                 return "Writing the MIDI file failed (the disk may be full).";

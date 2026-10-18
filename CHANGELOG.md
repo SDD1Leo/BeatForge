@@ -9,6 +9,15 @@
   Escape). It opens once on the first launch; replay it from Help (?) → Studio
   Tour. The studio does not react to keys or clicks while it is open.
 
+### Added (Windows)
+- **Windows 10/11 build** of the same code: `BeatForge-1.0.0-Setup.exe`
+  (per-user install, Start menu, `.beatforge` file association, optional MCP
+  server) and a portable zip, built and tested by GitHub Actions on every push.
+- MCP bridge on Windows over a named pipe only the current user can open; the
+  MCP server finds it automatically.
+- App icon.
+- File names with any characters (UTF-8 paths throughout).
+
 ### Fixed
 - Menu section headers ("HELP") no longer trip a JUCE font assertion with the
   embedded fonts (Debug builds).

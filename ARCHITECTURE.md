@@ -18,7 +18,7 @@ BeatForge/
 │       │                   Session (single mutation path, undo/redo)
 │       ├── util/           LockFreeExchange (audio-thread hand-over), SpscQueue
 │       ├── api/            CommandApi (named operations, JSON in/out; MCP + future assistant)
-│       ├── ipc/            IpcServer (Unix socket, line-delimited JSON)
+│       ├── ipc/            IpcServer (Unix socket on Linux, named pipe on Windows; line-delimited JSON)
 │       └── time/           MusicalTime (PPQ 960, bar/beat/tick), TempoMap, Transport
 ├── app/                  BeatForge GUI executable (JUCE)
 │   ├── Resources/fonts/  Inter + JetBrains Mono (OFL), embedded with BinaryData
@@ -35,7 +35,8 @@ BeatForge/
 ├── docs/ui-spec/         Figma export: SPEC.md, colour tokens, screen PNGs (the visual reference)
 ├── tools/                analyze_onsets.py (timing analysis of captured audio)
 ├── tests/                Catch2 unit tests + app launch test (CTest)
-└── mcp/                  TypeScript MCP server (stdio) → BeatForge over a Unix socket
+├── packaging/windows/    Inno Setup installer script + icon (built by .github/workflows/windows.yml)
+└── mcp/                  TypeScript MCP server (stdio) → BeatForge over a Unix socket / named pipe
 ```
 
 ## Components (target design)
@@ -124,9 +125,15 @@ Rules that hold from day one:
   Project or the engine directly. Multi-step calls are one Session gesture, so
   one undo step. It is plain C++ in core, unit-tested without sockets, and
   ready for an embedded assistant.
-- **IPC choice:** a Unix domain socket - local only, file-permission
-  protected, works for any local client. Limits: Linux only, one serving
-  instance, requests serialised on the main thread.
+- **IPC choice:** a Unix domain socket on Linux, a named pipe on Windows -
+  local only, protected by the OS (file mode 0600 in a 0700 folder plus a peer
+  uid check; or a security descriptor for the current user's SID, remote
+  clients rejected, plus a client-user check). The same line protocol runs over
+  both (`IpcServer.cpp` shared, `IpcServer_posix.cpp` / `IpcServer_windows.cpp`).
+  Limits: one serving instance, requests serialised on the main thread.
+- **Paths as UTF-8:** text <-> `std::filesystem::path` goes through
+  `beatforge/util/Paths.h` (and `toPath` / `toFile` in the app), so names
+  outside the ANSI code page survive on Windows.
 - **Safety rules** (in the app, so no client can bypass them): file paths are
   canonicalised and must stay inside `~/Music/BeatForge`; destructive steps
   return `confirmation_required` unless `confirm`/`overwrite` is set; arguments

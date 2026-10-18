@@ -238,8 +238,11 @@ TEST_CASE ("MIDI export writes a file atomically", "[midi][export]")
     const auto path = dir / "song.mid";
 
     REQUIRE (project::saveMidiFile (song(), path).empty());
-    std::ifstream in (path, std::ios::binary);
-    std::vector<std::uint8_t> bytes ((std::istreambuf_iterator<char> (in)), {});
+    std::vector<std::uint8_t> bytes;
+    {
+        std::ifstream in (path, std::ios::binary);   // closed before the folder is removed (Windows)
+        bytes.assign (std::istreambuf_iterator<char> (in), {});
+    }
     std::string error;
     REQUIRE (MidiFile::read (bytes, error).has_value());
     REQUIRE_FALSE (std::filesystem::exists (dir / "song.mid.tmp"));
