@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.8.0] — Phase 8: MIDI input, recording, MIDI export (awaiting user test)
+## [0.8.0] — Phase 8: MIDI input, recording, MIDI export (approved 2026-10-18)
 
 ### Added
 - MIDI keyboards: every MIDI input is enabled the first time it is seen (also
