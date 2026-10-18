@@ -12,17 +12,18 @@ BeatForge/
 │       ├── audio/          AudioEngine (16 track slots + mixer), TrackSchedule, DrumMachine, DrumKit,
 │       │                   Instruments (Poly, Bass, rack, params), Metronome, LevelMeter, PreviewQueue
 │       ├── dsp/            Biquad, Noise, Oscillator (PolyBLEP), StateVariableLowPass, Envelope (ADSR)
-│       ├── midi/           Note model, quantize
+│       ├── midi/           Note model, quantize, MidiFile (Standard MIDI File read/write)
 │       ├── project/        Project model (tracks, clips), ProjectFile (JSON), ScheduleBuilder,
+│       │                   TakeRecorder (recorded events → notes), MidiExport,
 │       │                   Session (single mutation path, undo/redo)
-│       ├── util/           LockFreeExchange (audio-thread hand-over)
+│       ├── util/           LockFreeExchange (audio-thread hand-over), SpscQueue
 │       └── time/           MusicalTime (PPQ 960, bar/beat/tick), TempoMap, Transport
 ├── app/                  BeatForge GUI executable (JUCE)
 │   └── Source/
 │       ├── Main.cpp        application, main window, smoke-test mode
 │       ├── MainComponent.* root content: header, transport, master meter, status
 │       ├── audio/          AudioDeviceController (JUCE AudioDeviceManager <-> engine)
-│       ├── project/        ProjectActions (file commands, dialogs, recent files)
+│       ├── project/        ProjectActions (file commands, dialogs, recent files, Export MIDI)
 │       └── ui/             theme, LookAndFeel, TransportBar, ProjectButton, SignatureField, TempoField,
 │                           ArrangementView, Selection, DrumMachinePanel, PianoRollPanel, InstrumentPanel, Knob, TabBar,
 │                           LevelMeterComponent, StatusBar
@@ -79,6 +80,54 @@ Rules that hold from day one:
 - **Gain staging:** sources are calibrated so drums (−7.5 dBFS typical),
   four-note chords (−7.3) and bass sum below 0 dBFS at defaults (tested).
 
+## MIDI input and recording (Phase 8)
+
+```
+ MIDI device ─(MIDI thread)─► AudioEngine::deviceNote ─┐  SPSC queues, each event
+ piano roll keys ─(message)─► AudioEngine::screenNote ─┘  stamped with now()
+                                     │
+                     audio thread: place on the audio clock, play on the live
+                     target slot (the selected synth track); while recording and
+                     playing, report {tick, pitch, velocity} ──► SPSC ──┐
+                                                                         ▼
+          MainComponent timer (30 Hz) ──► TakeRecorder ──► Session (one undo step)
+```
+
+- **Audio clock.** Callbacks can arrive in bursts (PipeWire pulls two 512-sample
+  blocks back to back), so the callback time is not the audio time. The engine
+  keeps the latest "deadline line" seen (`callback time − samples rendered / rate`;
+  a callback can be early but never late for its audio), drifting down 5 µs per
+  callback to follow clock drift. Each event plays a fixed delay after it arrived
+  (one block + the largest burst seen), so spacing between notes is exact
+  (tested with simulated bursts).
+- **Where a note is recorded.** Its press time mapped onto the timeline, moved
+  back by the output latency (buffer + device latency, set by the app), so it
+  lands where the player heard the beat. A press heard just after a loop wrap
+  but played for the end of the loop is placed at the loop end.
+- **Live voices** have their own id range and survive seeks, loop wraps, clip
+  edits and Stop (they belong to the player's hands); note-off, all-notes-off or
+  a change of target releases them.
+- **TakeRecorder** (message thread): pairs note on/off per pitch; puts a note into
+  the clip under its start (overdub), else into this take's clip (grown bar by
+  bar while nothing else is in the way), else a new clip (the loop region when
+  looping, else whole bars from the note's bar). The take is one Session gesture,
+  so one undo step. The engine sends an end-of-take marker when recording or
+  playback stops; held keys are closed there.
+- **Devices.** `AudioDeviceController` registers one callback for all enabled
+  inputs (JUCE serialises them). New inputs (startup or hot-plug via
+  `MidiDeviceListConnection`) are enabled once; afterwards the choice in Audio
+  Settings is kept in the saved device state.
+
+## MIDI file export (Phase 8)
+
+`exportMidi(Project)` builds a format 1 file at 960 PPQ from what plays:
+`buildSchedule` per audible track (same clip cutting and pattern repetition as
+playback). Track 1 holds name, tempo and time signature; synth tracks get a GM
+program and channels 1–9, 11–16; drums use GM notes on channel 10 (kick 36,
+snare 38, closed hat 42, open hat 46, clap 39). `MidiFile` writes/reads SMF
+(running status, meta events); the reader verifies exports in tests and is the
+base for import later.
+
 ## Arrangement (Phase 7)
 
 ```
@@ -105,6 +154,11 @@ Rules that hold from day one:
 - **Undo/redo:** every Session edit stores a snapshot of the whole Project
   (plain data, small) before changing it; 200 steps. `beginGesture`/`endGesture`
   make a whole drag one step. Undo replaces the project and re-syncs the engine.
+- **View** (Phase 8): a visible range (start tick + bars) shared by the ruler and
+  the lanes; zoom keeps the point under the pointer (or the playhead) in place;
+  when the playhead moves out of view the view pages to it. Track order is the
+  project's track list (`moveTrack`); engine slots follow track ids, so moving a
+  track never interrupts its sound. Track colours follow creation order.
 - **Selection** (app) holds the selected track/clip, repairs itself after
   deletes/undo/open, and drives the editors: Step Sequencer for drum clips,
   Piano Roll for synth clips, Instrument for synth tracks.

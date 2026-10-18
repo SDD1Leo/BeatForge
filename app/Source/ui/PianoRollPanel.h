@@ -33,6 +33,9 @@ namespace beatforge
         void paint (juce::Graphics&) override;
         void resized() override;
 
+        // Brings the shown clip's notes into view (done when another clip opens).
+        void scrollToNotes();
+
         static constexpr int lowestPitch = 24, highestPitch = 108;   // C1..C8
         static constexpr int rowHeight = 13, keyboardWidth = 58;
 
@@ -66,7 +69,7 @@ namespace beatforge
         std::unique_ptr<Editor> editor;
         std::unique_ptr<VelocityLane> velocityLane;
         juce::Rectangle<int> headerArea, emptyArea;
-        bool scrolledToMiddle = false;
+        bool scrolledToMiddle = false, scrollToNotesPending = false;
         double lastPlayhead = -1.0;
     };
 }

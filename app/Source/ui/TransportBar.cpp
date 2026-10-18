@@ -25,6 +25,7 @@ namespace beatforge
         : engine (e), session (s),
           playButton ("Play", TransportButton::Icon::play, theme::accent),
           stopButton ("Stop", TransportButton::Icon::stop, theme::textPrimary),
+          recordButton ("Record", TransportButton::Icon::record, theme::record),
           loopButton ("Loop", TransportButton::Icon::loop, theme::accent),
           metronomeButton ("Metronome", TransportButton::Icon::metronome, theme::accent),
           settingsButton ("Audio Settings", TransportButton::Icon::settings, theme::accent)
@@ -37,7 +38,8 @@ namespace beatforge
 
         projectButton.onClick = [this] { if (onProjectMenu) onProjectMenu (projectButton); };
         playButton.onClick = [this] { engine.play(); refreshPosition(); };
-        stopButton.onClick = [this] { engine.stop(); refreshPosition(); };
+        stopButton.onClick = [this] { engine.setRecording (false); engine.stop(); refreshPosition(); };
+        recordButton.onClick = [this] { if (onRecord) onRecord(); };
         loopButton.onClick = [this] { toggleLoop(); };
         metronomeButton.onClick = [this] { toggleMetronome(); };
         settingsButton.onClick = [this] { if (onOpenAudioSettings) onOpenAudioSettings(); };
@@ -46,7 +48,7 @@ namespace beatforge
         tempoField.onEditFinished = [this] { if (onTextEditFinished) onTextEditFinished(); };
         signatureField.onChange = [this] (time::TimeSignature sig) { session.setTimeSignature (sig); };
 
-        for (auto* c : std::initializer_list<juce::Component*> { &projectButton, &playButton, &stopButton, &loopButton,
+        for (auto* c : std::initializer_list<juce::Component*> { &projectButton, &playButton, &stopButton, &recordButton, &loopButton,
                                                                   &tempoField, &signatureField, &metronomeButton,
                                                                   &settingsButton })
             addAndMakeVisible (c);
@@ -87,10 +89,24 @@ namespace beatforge
         refreshPosition();
     }
 
+    void TransportBar::setRecordAvailable (bool available, const juce::String& tooltip)
+    {
+        recordButton.setEnabled (available);
+        recordButton.setTooltip (tooltip);
+    }
+
+    void TransportBar::setRecording (bool isRecording)
+    {
+        recordButton.setLit (isRecording);
+    }
+
     void TransportBar::togglePlayStop()
     {
         if (engine.isPlayRequested())
+        {
+            engine.setRecording (false);
             engine.stop();
+        }
         else if (deviceAvailable)
             engine.play();
 
@@ -199,7 +215,7 @@ namespace beatforge
         savedArea = area.removeFromLeft (84);
         area.removeFromLeft (12);
 
-        for (auto* b : { &playButton, &stopButton, &loopButton })
+        for (auto* b : { &playButton, &stopButton, &recordButton, &loopButton })
         {
             b->setBounds (area.removeFromLeft (40).reduced (0, 3));
             area.removeFromLeft (6);

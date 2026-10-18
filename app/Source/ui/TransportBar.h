@@ -31,6 +31,11 @@ namespace beatforge
         void toggleLoop();
         void toggleMetronome();
 
+        // Recording: the bar shows the button; the owner decides what recording means.
+        std::function<void()> onRecord;
+        void setRecordAvailable (bool available, const juce::String& tooltip);
+        void setRecording (bool isRecording);
+
         std::function<void()> onOpenAudioSettings;
         std::function<void (juce::Component& anchor)> onProjectMenu;
         std::function<void()> onTextEditFinished;
@@ -38,7 +43,7 @@ namespace beatforge
         void paint (juce::Graphics&) override;
         void resized() override;
 
-        static constexpr int minimumWidthForTime = 1180;
+        static constexpr int minimumWidthForTime = 1226;
 
     private:
         void timerCallback() override;
@@ -50,7 +55,7 @@ namespace beatforge
         int listenerId = 0;
 
         ProjectButton projectButton;
-        TransportButton playButton, stopButton, loopButton, metronomeButton, settingsButton;
+        TransportButton playButton, stopButton, recordButton, loopButton, metronomeButton, settingsButton;
         TempoField tempoField;
         SignatureField signatureField;
 

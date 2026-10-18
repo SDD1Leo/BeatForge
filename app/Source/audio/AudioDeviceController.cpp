@@ -10,6 +10,7 @@ namespace beatforge
     AudioDeviceController::~AudioDeviceController()
     {
         deviceManager.removeChangeListener (this);
+        deviceManager.removeMidiInputDeviceCallback ({}, this);
         deviceManager.removeAudioCallback (this);
         deviceManager.closeAudioDevice();
     }
@@ -24,9 +25,61 @@ namespace beatforge
             lastError = error;
         }
 
-        deviceManager.addAudioCallback (this);
+        // Listen first: JUCE only queues change messages while someone listens.
         deviceManager.addChangeListener (this);
+        deviceManager.addAudioCallback (this);
+        deviceManager.addMidiInputDeviceCallback ({}, this);   // all enabled inputs
+        enableNewMidiInputs();
+        midiDevicesChanged = juce::MidiDeviceListConnection::make ([this]
+        {
+            enableNewMidiInputs();
+            sendChangeMessage();
+        });
         sendChangeMessage();
+    }
+
+    void AudioDeviceController::saveDeviceState()
+    {
+        if (auto xml = deviceManager.createStateXml())
+            settings.setValue (settingsKey, xml.get());
+        else
+            settings.removeValue (settingsKey);   // using the system default
+
+        settings.saveIfNeeded();
+    }
+
+    void AudioDeviceController::enableNewMidiInputs()
+    {
+        auto known = juce::StringArray::fromLines (settings.getValue (knownMidiInputsKey));
+        known.removeEmptyStrings();
+        bool changed = false;
+
+        for (const auto& device : juce::MidiInput::getAvailableDevices())
+            if (! known.contains (device.identifier))
+            {
+                deviceManager.setMidiInputDeviceEnabled (device.identifier, true);
+                known.add (device.identifier);
+                changed = true;
+            }
+
+        if (changed)
+        {
+            settings.setValue (knownMidiInputsKey, known.joinIntoString ("\n"));
+            saveDeviceState();   // the enabled inputs are part of the device state
+        }
+    }
+
+    void AudioDeviceController::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMessage& m)
+    {
+        // MIDI thread (JUCE serialises the callbacks of all inputs). Any channel.
+        const auto now = audio::AudioEngine::now();
+        if (m.isNoteOn())
+            engine.deviceNote ({ now, m.getNoteNumber(), m.getVelocity() });
+        else if (m.isNoteOff())
+            engine.deviceNote ({ now, m.getNoteNumber(), 0 });
+        else if (m.isAllNotesOff() || m.isAllSoundOff())
+            engine.deviceNote ({ now, -1, 0 });
+        midiEventCount.fetch_add (1, std::memory_order_relaxed);
     }
 
     AudioDeviceController::Status AudioDeviceController::getStatus() const
@@ -43,6 +96,10 @@ namespace beatforge
             status.outputLatencySamples = device->getOutputLatencyInSamples();
             status.xruns = deviceManager.getXRunCount();
         }
+
+        for (const auto& device : juce::MidiInput::getAvailableDevices())
+            if (deviceManager.isMidiInputDeviceEnabled (device.identifier))
+                status.midiInputs.add (device.name);
 
         {
             std::scoped_lock lock (errorMutex);
@@ -74,6 +131,10 @@ namespace beatforge
     void AudioDeviceController::audioDeviceAboutToStart (juce::AudioIODevice* device)
     {
         engine.prepare (device->getCurrentSampleRate());
+
+        // What is rendered now is heard one buffer plus the device latency later;
+        // recording places notes where the player heard the beat.
+        engine.setOutputLatency (device->getCurrentBufferSizeSamples() + device->getOutputLatencyInSamples());
     }
 
     void AudioDeviceController::audioDeviceStopped()
@@ -100,12 +161,7 @@ namespace beatforge
             lastError.clear();
         }
 
-        if (auto xml = deviceManager.createStateXml())
-            settings.setValue (settingsKey, xml.get());
-        else
-            settings.removeValue (settingsKey);   // using the system default
-
-        settings.saveIfNeeded();
+        saveDeviceState();
         sendChangeMessage();
     }
 

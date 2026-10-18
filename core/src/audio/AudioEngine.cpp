@@ -1,6 +1,7 @@
 #include "beatforge/audio/AudioEngine.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 
@@ -59,6 +60,9 @@ namespace beatforge::audio
         }
 
         transport.seekTo (playStart.load());
+        renderedSamples = 0;
+        clockValid = false;
+        clockEarliness = 0.0;
         sampleRate.store (newSampleRate, std::memory_order_release);
         publishPosition();
     }
@@ -75,8 +79,25 @@ namespace beatforge::audio
             s->instruments.reset();
         }
         wasPlaying = false;
+        liveHeld.fill (false);
+        liveSlot = -1;
+        recordingActive = false;
+        numLiveEvents = 0;
+        renderedSamples = 0;
+        clockValid = false;
+        clockEarliness = 0.0;
         publishPosition();
         state.store (TransportState::stopped, std::memory_order_release);
+    }
+
+    double AudioEngine::now() noexcept
+    {
+        return std::chrono::duration<double> (std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+
+    void AudioEngine::setRecording (bool shouldRecord) noexcept
+    {
+        recording.store (shouldRecord, std::memory_order_release);
     }
 
     //==============================================================================
@@ -182,10 +203,110 @@ namespace beatforge::audio
 
     void AudioEngine::releaseNotesNotCovering (Slot& s, double tick) noexcept
     {
+        // Live notes belong to the player's hands, not the timeline.
         if (s.schedule == nullptr)
-            return s.instruments.releaseUnless ([] (VoiceId) { return false; });
+            return s.instruments.releaseUnless ([] (VoiceId v) { return isLiveVoice (v); });
 
-        s.instruments.releaseUnless ([&] (VoiceId v) { return s.schedule->covers (v, tick); });
+        s.instruments.releaseUnless ([&] (VoiceId v) { return isLiveVoice (v) || s.schedule->covers (v, tick); });
+    }
+
+    //==============================================================================
+    void AudioEngine::collectLiveEvents (int numSamples) noexcept
+    {
+        numLiveEvents = 0;
+        const double now = clock();
+        const double sr = sampleRate.load (std::memory_order_acquire);
+
+        // Follow the audio clock. A callback can come early (a burst) but never
+        // after its audio is due, so the latest "deadline line" seen is the
+        // clock; it drifts down slowly to follow clock drift and to recover
+        // from a one-off late callback.
+        constexpr double drift = 5.0e-6;   // seconds per callback: well above real clock drift (~1e-6), well below a sample
+        const double line = now - (double) renderedSamples / sr;
+        if (! clockValid || line > clockOffset)
+        {
+            clockOffset = line;
+            clockValid = true;
+        }
+        else
+        {
+            clockOffset -= drift;
+        }
+        clockEarliness = std::max (clockOffset - line, clockEarliness - drift);
+
+        // Every event plays this long after it arrived: one block plus the largest burst seen.
+        const double delay = (double) numSamples + clockEarliness * sr;
+
+        auto drain = [&] (auto& queue)
+        {
+            while (numLiveEvents < maxLivePerBlock)
+            {
+                const auto* next = queue.peek();
+                if (next == nullptr)
+                    break;
+                const double press = (next->time - clockOffset) * sr - (double) renderedSamples;
+                const double at = press + delay;
+                if (at >= (double) numSamples)   // due in a later block
+                    break;
+                liveEvents[(size_t) numLiveEvents++] = { std::clamp ((int) std::lround (at), 0, numSamples - 1), press, *next };
+                LiveNote done;
+                queue.pop (done);
+            }
+        };
+        drain (deviceInput);
+        drain (screenInput);
+
+        for (int i = 1; i < numLiveEvents; ++i)   // stable, by offset
+            for (int j = i; j > 0 && liveEvents[(size_t) j].offset < liveEvents[(size_t) j - 1].offset; --j)
+                std::swap (liveEvents[(size_t) j], liveEvents[(size_t) j - 1]);
+    }
+
+    // Plays one live event; true if it changed what sounds (and so is worth recording).
+    bool AudioEngine::applyLive (const LiveNote& n) noexcept
+    {
+        if (n.pitch < 0 || n.pitch > 127 || liveSlot < 0)
+            return false;
+
+        auto& rack = slots[(size_t) liveSlot]->instruments;
+        const auto voice = liveVoiceBase | (VoiceId) n.pitch;
+        if (n.velocity > 0)
+        {
+            if (liveHeld[(size_t) n.pitch])
+                rack.noteOff (voice);
+            rack.noteOn (voice, n.pitch, std::min (n.velocity, 127));
+            liveHeld[(size_t) n.pitch] = true;
+            return true;
+        }
+
+        if (! liveHeld[(size_t) n.pitch])
+            return false;
+        rack.noteOff (voice);
+        liveHeld[(size_t) n.pitch] = false;
+        return true;
+    }
+
+    void AudioEngine::releaseLive (double tick, double samplesPerTick) noexcept
+    {
+        for (int pitch = 0; pitch < 128; ++pitch)
+            if (liveHeld[(size_t) pitch])
+            {
+                applyLive ({ 0.0, pitch, 0 });
+                if (recordingActive)
+                    recordEvent (tick, 0.0, samplesPerTick, pitch, 0);
+            }
+    }
+
+    void AudioEngine::recordEvent (double tick, double delaySamples, double samplesPerTick, int pitch, int velocity) noexcept
+    {
+        const double heardDelay = delaySamples + (double) outputLatency.load (std::memory_order_acquire);
+        double at = tick - heardDelay / std::max (1e-9, samplesPerTick);
+
+        // Heard before a loop wrap: belongs at the end of the loop, not before its start.
+        const auto ls = (double) loopStart.load (std::memory_order_acquire), le = (double) loopEnd.load (std::memory_order_acquire);
+        if (loopEnabled.load (std::memory_order_acquire) && ls < le && tick >= ls && tick < le && at < ls)
+            at += le - ls;
+
+        recorded.push ({ std::max (0.0, at), pitch, velocity });
     }
 
     //==============================================================================
@@ -205,19 +326,33 @@ namespace beatforge::audio
         if (metronomeBuffer.empty())   // not prepared
             return;
 
+        collectLiveEvents (numSamples);
+
         for (int done = 0; done < numSamples; done += maxChunk)
         {
             const int n = std::min (maxChunk, numSamples - done);
             float* chunk[2] { pair[0] != nullptr ? pair[0] + done : nullptr, pair[1] != nullptr ? pair[1] + done : nullptr };
-            processChunk (chunk, numPair, n);
+            processChunk (chunk, numPair, n, done);
         }
+        renderedSamples += numSamples;
 
         outputMeter.process (outputs, std::min (numOutputs, LevelMeter::maxChannels), numSamples);
     }
 
-    void AudioEngine::processChunk (float* const* pair, int numPair, int numSamples) noexcept
+    void AudioEngine::processChunk (float* const* pair, int numPair, int numSamples, int blockOffset) noexcept
     {
         applySettings();
+
+        // Live events of this chunk (offsets relative to the chunk).
+        auto liveInChunk = [&] (auto&& use)
+        {
+            for (int i = 0; i < numLiveEvents; ++i)
+            {
+                const auto& e = liveEvents[(size_t) i];
+                if (e.offset >= blockOffset && e.offset < blockOffset + numSamples)
+                    use (e.offset - blockOffset, e);
+            }
+        };
         std::fill_n (metronomeBuffer.data(), numSamples, 0.0f);
 
         for (auto& s : slots)
@@ -230,7 +365,7 @@ namespace beatforge::audio
             s->schedule = s->exchange.acquire (s->scheduleChanged);
         }
 
-        PreviewQueue::Request preview;
+        PreviewRequest preview;
         while (previews.pop (preview))
         {
             auto& rack = slots[(size_t) clampSlot (preview.slot)]->instruments;
@@ -239,6 +374,17 @@ namespace beatforge::audio
         }
 
         const bool wantPlay = playRequested.load (std::memory_order_acquire);
+
+        // Live target: an instrument slot. Notes held on the previous target end there.
+        {
+            const int t = liveTarget.load (std::memory_order_acquire);
+            const int wanted = t >= 0 && t < maxTracks && slots[(size_t) t]->getType() == SlotType::instrument ? t : -1;
+            if (wanted != liveSlot)
+            {
+                releaseLive (transport.getPositionTicks(), lastSamplesPerTick);
+                liveSlot = wanted;
+            }
+        }
 
         if (seekPending.exchange (false, std::memory_order_acq_rel))
         {
@@ -257,8 +403,14 @@ namespace beatforge::audio
                     if (s->scheduleChanged)
                         releaseNotesNotCovering (*s, transport.getPositionTicks());
 
+            // Punching out while playing ends the take where the playhead is.
+            const bool recordNow = recording.load (std::memory_order_acquire);
+            if (recordingActive && ! recordNow)
+                recordEvent (transport.getPositionTicks(), 0.0, lastSamplesPerTick, RecordedEvent::endOfTake, 0);
+            recordingActive = recordNow;
+
             // Everything that happens in this chunk, in sample order.
-            enum Kind : std::uint8_t { noteOff, jump, gridLine, drumHit, noteOn };
+            enum Kind : std::uint8_t { liveOff, noteOff, jump, gridLine, drumHit, noteOn, liveOn };
             struct Event
             {
                 int offset;
@@ -267,22 +419,42 @@ namespace beatforge::audio
                 time::Transport::GridLine line;
                 const TrackSchedule::Event* event;
                 double tick;
+                LiveNote live;
+                double delay;   // live: samples from the key press to this event
             };
 
             std::array<Event, maxEventsPerChunk> events;
             int numEvents = 0;
             auto add = [&] (const Event& e) { if (numEvents < maxEventsPerChunk) events[(size_t) numEvents++] = e; };
 
+            // Segments of this chunk, to find the musical position of any sample.
+            struct SegmentInfo { int offset; double startTick, samplesPerTick; };
+            std::array<SegmentInfo, 32> segments {};
+            int numSegments = 0;
+            auto tickAt = [&] (int offset)
+            {
+                const SegmentInfo* seg = numSegments > 0 ? &segments[0] : nullptr;
+                for (int i = 1; i < numSegments; ++i)
+                    if (segments[(size_t) i].offset <= offset)
+                        seg = &segments[(size_t) i];
+                return seg == nullptr ? transport.getPositionTicks()
+                                      : seg->startTick + (double) (offset - seg->offset) / seg->samplesPerTick;
+            };
+
             transport.advance (numSamples,
                 [&] (const time::Transport::GridLine& line)
                 {
                     if (line.isBeat)
-                        add ({ line.sampleOffset, gridLine, -1, line, nullptr, 0.0 });
+                        add ({ line.sampleOffset, gridLine, -1, line, nullptr, 0.0, {}, 0.0 });
                 },
                 [&] (const time::Transport::Segment& seg)
                 {
+                    if (numSegments < (int) segments.size())
+                        segments[(size_t) numSegments++] = { seg.sampleOffset, seg.startTick, seg.samplesPerTick };
+                    lastSamplesPerTick = seg.samplesPerTick;
+
                     if (seg.afterJump)
-                        add ({ seg.sampleOffset, jump, -1, {}, nullptr, seg.startTick });
+                        add ({ seg.sampleOffset, jump, -1, {}, nullptr, seg.startTick, {}, 0.0 });
 
                     for (int i = 0; i < maxTracks; ++i)
                     {
@@ -297,10 +469,16 @@ namespace beatforge::audio
                         {
                             const Kind k = it->kind == TrackSchedule::Kind::noteOff ? noteOff
                                          : it->kind == TrackSchedule::Kind::drumHit ? drumHit : noteOn;
-                            add ({ seg.sampleFor ((double) it->tick), k, i, {}, &*it, 0.0 });
+                            add ({ seg.sampleFor ((double) it->tick), k, i, {}, &*it, 0.0, {}, 0.0 });
                         }
                     }
                 });
+
+            liveInChunk ([&] (int offset, const PlacedLive& p)
+            {
+                add ({ offset, p.note.velocity > 0 && p.note.pitch >= 0 ? liveOn : liveOff, -1, {}, nullptr, 0.0, p.note,
+                       (double) p.offset - p.pressOffset });
+            });
 
             // Stable insertion sort by (offset, kind): chunks hold few events.
             for (int i = 1; i < numEvents; ++i)
@@ -324,6 +502,13 @@ namespace beatforge::audio
                     case noteOff:  slots[(size_t) e.slot]->instruments.noteOff (e.event->voice); break;
                     case noteOn:   slots[(size_t) e.slot]->instruments.noteOn (e.event->voice, e.event->pitch, e.event->velocity); break;
                     case drumHit:  slots[(size_t) e.slot]->drums.triggerLanes (e.event->laneMask); break;
+                    case liveOn:
+                    case liveOff:
+                        if (e.live.pitch < 0)
+                            releaseLive (tickAt (e.offset), lastSamplesPerTick);
+                        else if (applyLive (e.live) && recordingActive)
+                            recordEvent (tickAt (e.offset), e.delay, lastSamplesPerTick, e.live.pitch, e.live.velocity);
+                        break;
                     case jump:
                         for (auto& s : slots)
                             releaseNotesNotCovering (*s, e.tick);
@@ -339,6 +524,7 @@ namespace beatforge::audio
             renderVoices (rendered, numSamples - rendered);
             beatCount.fetch_add (beats, std::memory_order_relaxed);
             publishPosition();
+            lastPlayingTick = transport.getPositionTicks();
             state.store (TransportState::playing, std::memory_order_release);
         }
         else
@@ -347,15 +533,28 @@ namespace beatforge::audio
             // the play start; auditions and ringing tails keep sounding.
             if (wasPlaying)
             {
+                // The take ends where playback stopped; keys still held are closed there.
+                if (recordingActive)
+                    recordEvent (lastPlayingTick, 0.0, lastSamplesPerTick, RecordedEvent::endOfTake, 0);
+                recordingActive = false;
+
                 for (auto& s : slots)
-                    s->instruments.releaseUnless ([] (VoiceId) { return false; });
+                    s->instruments.releaseUnless ([] (VoiceId v) { return isLiveVoice (v); });
                 transport.rewind();
                 transport.seekTo (playStart.load (std::memory_order_acquire));
                 publishPosition();
                 state.store (TransportState::stopped, std::memory_order_release);
             }
 
-            renderVoices (0, numSamples);
+            int rendered = 0;
+            liveInChunk ([&] (int offset, const PlacedLive& p)
+            {
+                renderVoices (rendered, offset - rendered);
+                rendered = offset;
+                if (p.note.pitch < 0) releaseLive (transport.getPositionTicks(), lastSamplesPerTick);
+                else                  applyLive (p.note);
+            });
+            renderVoices (rendered, numSamples - rendered);
         }
 
         wasPlaying = wantPlay;

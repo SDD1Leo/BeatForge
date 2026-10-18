@@ -9,7 +9,8 @@
 
 namespace beatforge
 {
-    // File-level project commands (New, Open, Save, Save As, Recent, Rename)
+    // File-level project commands (New, Open, Save, Save As, Recent, Rename,
+    // Export MIDI)
     // with their dialogs. All project changes still go through the Session;
     // this class only adds files, prompts and error reporting.
     class ProjectActions
@@ -26,6 +27,8 @@ namespace beatforge
         void save (std::function<void (bool saved)> done = {});
         void saveAs (std::function<void (bool saved)> done = {});
         void renameProject();
+        void exportMidiWithChooser();
+        bool exportMidiTo (const juce::File&);
 
         // Runs `proceed` once unsaved changes are saved or discarded; never if
         // the user cancels.

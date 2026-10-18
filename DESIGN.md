@@ -34,7 +34,7 @@ Rule: no `juce::Colour (0x…)` outside `Theme.h` (checked with
 | Primary accent (on, selected, playing) | `violet` = `accent` | `#8B5CFF` |
 | Playhead | `brightViolet` = `playhead` | `#B14CFF` |
 | Signal accents | `magenta`, `cyan`, `electricBlue`, `teal`, `amber` | `#F044C8`, `#20D9F2`, `#3987FF`, `#12D6B0`, `#FFAD42` |
-| Status | `ok` (green) / `error` (red: errors, clip, later record) | `#3DDC84` / `#FF5268` |
+| Status | `ok` (green) / `error` (red: errors, clip) / `record` (red: Record button, recording) | `#3DDC84` / `#FF5268` |
 | Mute on / Solo on | `muteOn` / `soloOn` | amber / cyan |
 | Meter | `meterLow` → `meterMid` → `meterHigh` → `error` at 0 dBFS | cyan → violet (−12) → magenta (−3) → red |
 
@@ -63,7 +63,8 @@ Fixed per musical role (`theme::track`), identical in every view:
 
 Arrangement tracks take colours by kind and order (`theme::track::forTrack`):
 drum tracks magenta → amber → teal → bright violet; synth tracks electric
-blue → cyan → green → violet, then repeating. The selected track/clip uses
+blue → cyan → green → violet, then repeating. Order is creation order, so a
+track keeps its colour when tracks are reordered. The selected track/clip uses
 that colour in the editor headers.
 Colour always comes with a text label; it is never the only signal.
 
@@ -92,5 +93,9 @@ Colour always comes with a text label; it is never the only signal.
 | 6b | Instrument editor (sections, wave buttons, live waveform/filter/envelope displays) | done (0.6.0) |
 | 6 | Mixer, export dialog in the same language as each feature lands (Phases 7, 9, 11) | planned |
 
-Not shown until implemented: record, menus (File/Edit…), browser, AI
+Record (transport, red when recording) and the status-bar MIDI light arrived
+with Phase 8; the arrangement footer holds zoom (- / + / Fit) and the
+horizontal scroll bar.
+
+Not shown until implemented: menus (File/Edit…), browser, AI
 co-producer, mixer, synth, export.

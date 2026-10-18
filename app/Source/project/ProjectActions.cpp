@@ -1,6 +1,7 @@
 #include "project/ProjectActions.h"
 
 #include <beatforge/BuildInfo.h>
+#include <beatforge/project/MidiExport.h>
 #include <beatforge/project/ProjectFile.h>
 
 #include <iostream>
@@ -163,6 +164,44 @@ namespace beatforge
         });
     }
 
+    void ProjectActions::exportMidiWithChooser()
+    {
+        // Next to the project file when there is one.
+        auto folder = session.getFile() ? juce::File (juce::String (session.getFile()->parent_path().string())) : defaultFolder();
+        folder.createDirectory();
+        const auto suggested = folder.getChildFile (juce::File::createLegalFileName (toJuce (session.getProject().name)))
+                                   .withFileExtension (".mid");
+
+        chooser = std::make_unique<juce::FileChooser> ("Export MIDI file", suggested, "*.mid", useNativeDialogs);
+        chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
+                                  | juce::FileBrowserComponent::warnAboutOverwriting,
+                              [this] (const juce::FileChooser& fc)
+        {
+            restoreFocus();
+            if (fc.getResult() != juce::File())
+                exportMidiTo (fc.getResult().hasFileExtension (".mid;.midi") ? fc.getResult() : fc.getResult().withFileExtension (".mid"));
+        });
+    }
+
+    bool ProjectActions::exportMidiTo (const juce::File& file)
+    {
+        const auto& p = session.getProject();
+        const auto error = project::saveMidiFile (p, file.getFullPathName().toStdString());
+        if (! error.empty())
+        {
+            showError ("Could not export MIDI", toJuce (error));
+            return false;
+        }
+
+        const auto e = project::exportMidi (p);
+        const auto perBar = p.timeSignature.ticksPerBar();
+        const auto bars = (double) e.length / (double) perBar;
+        showInfo ("MIDI exported", file.getFileName() + "\n" + juce::String (e.tracksWritten) + (e.tracksWritten == 1 ? " track, " : " tracks, ")
+                                       + juce::String (e.notes) + " notes, " + juce::String (bars, e.length % perBar == 0 ? 0 : 2) + " bars"
+                                       + "\nSaved in " + file.getParentDirectory().getFullPathName());
+        return true;
+    }
+
     void ProjectActions::saveTo (const juce::File& file, std::function<void (bool)> done)
     {
         // An untitled project takes its name from the file it is first saved as.
@@ -244,6 +283,7 @@ namespace beatforge
         menu.addItem (item (4, "Save As...", "Ctrl+Shift+S"));
         menu.addSeparator();
         menu.addItem (item (5, "Rename...", {}));
+        menu.addItem (item (8, "Export MIDI...", "Ctrl+E"));
         menu.addSeparator();
         auto undoItem = item (6, "Undo", "Ctrl+Z");
         undoItem.isEnabled = session.canUndo();
@@ -265,6 +305,7 @@ namespace beatforge
                 case 5: renameProject(); break;
                 case 6: session.undo(); break;
                 case 7: session.redo(); break;
+                case 8: exportMidiWithChooser(); break;
                 default:
                     if (id >= recentBase)
                         openFile (recent.getFile (id - recentBase));

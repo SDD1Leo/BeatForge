@@ -1,5 +1,46 @@
 # Changelog
 
+## [0.8.0] — Phase 8: MIDI input, recording, MIDI export (awaiting user test)
+
+### Added
+- MIDI keyboards: every MIDI input is enabled the first time it is seen (also
+  when plugged in while BeatForge runs); choose inputs in Audio Settings. The
+  status bar lists the inputs and flashes on incoming MIDI. Notes play the
+  selected synth track; all-notes-off is honoured.
+- Recording (Record button or **R**): records into the selected synth track,
+  starting playback if needed; **R** again punches out, Stop ends the take.
+  Notes go into the clip under them (overdub) or a new clip (the loop region
+  when looping, otherwise whole bars, extended as the take goes on). A take is
+  one undo step; keys held at Stop are closed there; a note held across a loop
+  wrap ends at the loop end. The finished take opens in the piano roll.
+- Timing: live notes follow the audio clock, so bursty audio callbacks (as
+  with PipeWire) no longer shift them; notes are recorded where the player
+  heard the beat (output latency compensated). Measured: a MIDI file played in
+  came back within 2 ticks (~1 ms) of its timing.
+- The piano roll keyboard is a live input too: click keys while recording.
+- Export MIDI... (project menu, **Ctrl+E**): Standard MIDI File, format 1, 960
+  PPQ, with tempo, time signature, track names, GM programs, drums on channel 10;
+  `--export-midi=<file>` from the command line.
+- Arrangement: zoom (**Ctrl+wheel**, wheel over the ruler, **-** / **+**,
+  **Ctrl+=** / **Ctrl+-**), **Fit** (whole song), horizontal scroll bar and
+  **Shift+wheel**; the view follows the playhead; clip labels stay readable when
+  scrolled.
+- Tracks can be reordered: drag a track header up/down, or right-click → Move
+  up / Move down (undoable).
+- The piano roll scrolls to a clip's notes when it opens.
+- 24 new tests (150 ctest in total): live input placement and recording
+  (incl. bursty callbacks, loop wraps, allocation-free), takes, track reorder,
+  MIDI file write/read, export, and an app-level export.
+
+### Changed
+- Track colours follow creation order, so a track keeps its colour when moved.
+- App tests (ctest) run with their own HOME and never touch your settings.
+
+### Fixed
+- Playhead trails: the arrangement's playhead glow was wider than the area
+  repainted around it (0.7.0 fix; it happens at any display scale, not only
+  scaled displays as first thought).
+
 ## [0.7.0] — Phase 7: arrangement view (approved 2026-10-18)
 
 ### Added

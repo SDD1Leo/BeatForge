@@ -35,7 +35,8 @@ namespace beatforge::theme
     inline const juce::Colour accent        = violet;         // toggles that are on, playing
     inline const juce::Colour playhead      = brightViolet;
     inline const juce::Colour ok            = green;          // healthy status
-    inline const juce::Colour error         = red;            // errors, clipping, (later) record
+    inline const juce::Colour error         = red;            // errors, clipping
+    inline const juce::Colour record        = red;            // record button, recording state
     inline const juce::Colour muteOn        = amber;
     inline const juce::Colour soloOn        = cyan;
 

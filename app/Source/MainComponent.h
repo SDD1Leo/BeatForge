@@ -13,6 +13,7 @@
 
 #include <beatforge/audio/AudioEngine.h>
 #include <beatforge/project/Session.h>
+#include <beatforge/project/TakeRecorder.h>
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -38,12 +39,18 @@ namespace beatforge
         bool handleShortcut (const juce::KeyPress&);
 
         TransportBar& getTransportBar() noexcept { return transportBar; }
+
+        // Starts recording into the selected synth track (starting playback if
+        // needed), or punches out while recording.
+        void toggleRecord();
         ProjectActions& getProjectActions() noexcept { return actions; }
 
     private:
         void changeListenerCallback (juce::ChangeBroadcaster*) override;
         void timerCallback() override;
         void refreshDeviceStatus();
+        void updateLiveInput();      // live MIDI plays the selected (or recording) synth track
+        void pollRecording();
         void openAudioSettings();
 
 
@@ -60,6 +67,11 @@ namespace beatforge
         InstrumentPanel instrumentPanel;
         TabBar workspaceTabs { { "Step Sequencer", "Instrument" } };
         int selectionListenerId = 0;
+        project::TakeRecorder recorder { session };
+        bool deviceOpen = false, takeWasActive = false;
+        juce::String midiInputsText;
+        std::uint32_t lastMidiCount = 0;
+        int midiLightTicks = 0, slowTicks = 0;
         void showTab (int index);           // 0 = clip editor (by track type), 1 = instrument
         LevelMeterComponent outputMeter;
         StatusBar statusBar;

@@ -290,6 +290,11 @@ namespace beatforge
                 if (! arg.startsWith ("--"))
                     actions.openFile (juce::File::getCurrentWorkingDirectory().getChildFile (arg.unquoted()));
 
+            // --export-midi=<file.mid>: export the (opened) project's MIDI at launch.
+            for (auto& arg : args)
+                if (arg.startsWith ("--export-midi="))
+                    actions.exportMidiTo (juce::File::getCurrentWorkingDirectory().getChildFile (arg.fromFirstOccurrenceOf ("=", false, false).unquoted()));
+
             if (args.contains ("--smoke-test") || smokePlay)
             {
                 juce::File screenshot;

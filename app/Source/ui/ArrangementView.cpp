@@ -13,14 +13,17 @@ namespace beatforge
     {
         juce::String toJuce (const std::string& s) { return juce::String::fromUTF8 (s.c_str()); }
 
-        // Shared timeline mapping for the ruler and the lanes.
+        // Shared timeline mapping for the ruler and the lanes: the visible
+        // range [start, start + ticks) drawn across `width` pixels from `left`.
         struct Timeline
         {
-            double ticksTotal = 1.0;
+            double start = 0.0, ticks = 1.0;
             float left = 0.0f, width = 1.0f;
 
-            float x (double tick) const      { return left + (float) (tick / ticksTotal) * width; }
-            double tick (float px) const     { return (double) (px - left) / width * ticksTotal; }
+            float x (double tick) const      { return left + (float) ((tick - start) / ticks) * width; }
+            double tick (float px) const     { return start + (double) (px - left) / width * ticks; }
+            float w (double length) const    { return (float) (length / ticks) * width; }
+            double end() const               { return start + ticks; }
         };
     }
 
@@ -36,8 +39,7 @@ namespace beatforge
 
         Timeline timeline() const
         {
-            const auto perBar = owner.session.getProject().timeSignature.ticksPerBar();
-            return { (double) owner.barsShown() * (double) perBar, 0.0f, (float) getWidth() };
+            return { owner.viewStart, owner.visibleTicks(), 0.0f, (float) getWidth() };
         }
 
         void paint (juce::Graphics& g) override
@@ -55,7 +57,7 @@ namespace beatforge
             g.setColour (p.loopEnabled ? theme::violet : theme::textMuted.withAlpha (0.5f));
             g.fillRoundedRectangle (loopArea, 2.0f);
 
-            for (int bar = 0; bar < owner.barsShown(); ++bar)
+            for (int bar = (int) (tl.start / perBar); bar <= (int) (tl.end() / perBar); ++bar)
             {
                 const auto x = tl.x ((double) bar * perBar);
                 g.setColour (theme::border);
@@ -111,12 +113,18 @@ namespace beatforge
             loopDrag = false;
         }
 
+        void mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override
+        {
+            // Over the ruler the plain wheel zooms (there is nothing to scroll vertically).
+            owner.handleWheel (e.getEventRelativeTo (&owner), wheel, true);
+        }
+
     private:
         // Nearest bar line, so the loop ends where the drag is released.
         int barLineAt (float x) const
         {
             const auto perBar = owner.session.getProject().timeSignature.ticksPerBar();
-            return juce::jlimit (0, owner.barsShown(), (int) std::round (timeline().tick (x) / (double) perBar));
+            return juce::jlimit (0, owner.totalBars(), (int) std::round (timeline().tick (x) / (double) perBar));
         }
 
         // Anchor to the bar line under the pointer; a click without a drag loops one bar.
@@ -262,8 +270,32 @@ namespace beatforge
         void mouseDown (const juce::MouseEvent& e) override
         {
             owner.selection.selectTrack (trackId);
+            draggingTrack = false;
             if (e.mods.isPopupMenu())
                 showMenu();
+        }
+
+        // Drag the header up or down to move the track.
+        void mouseDrag (const juce::MouseEvent& e) override
+        {
+            if (e.mods.isPopupMenu() || (! draggingTrack && std::abs (e.getDistanceFromDragStartY()) < 6))
+                return;
+            draggingTrack = true;
+            setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
+            const auto [target, current] = dropTarget (e);
+            owner.setTrackDropRow (target == current ? -1 : target > current ? target + 1 : target);
+        }
+
+        void mouseUp (const juce::MouseEvent& e) override
+        {
+            if (! draggingTrack)
+                return;
+            draggingTrack = false;
+            setMouseCursor (juce::MouseCursor::NormalCursor);
+            owner.setTrackDropRow (-1);
+            const auto [target, current] = dropTarget (e);
+            if (target != current)
+                owner.session.moveTrack (trackId, target);   // may delete this header
         }
 
         void mouseDoubleClick (const juce::MouseEvent& e) override
@@ -273,17 +305,40 @@ namespace beatforge
         }
 
     private:
+        int index() const
+        {
+            const auto& tracks = owner.session.getProject().tracks;
+            for (size_t i = 0; i < tracks.size(); ++i)
+                if (tracks[i].id == trackId) return (int) i;
+            return -1;
+        }
+
+        // {row the track would move to, its row now}
+        std::pair<int, int> dropTarget (const juce::MouseEvent& e) const
+        {
+            const auto rows = (int) owner.session.getProject().tracks.size();
+            const auto y = (float) getY() + e.position.y;   // in the lanes, where the headers sit
+            return { juce::jlimit (0, rows - 1, (int) std::floor (y / (float) rowHeight)), index() };
+        }
+
         void showMenu()
         {
+            const auto i = index();
+            const auto rows = (int) owner.session.getProject().tracks.size();
             juce::PopupMenu menu;
             menu.addItem (1, "Rename...");
+            menu.addItem (3, "Move up", i > 0);
+            menu.addItem (4, "Move down", i < rows - 1);
+            menu.addSeparator();
             menu.addItem (2, "Delete track");
             menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
-                                [safe = juce::Component::SafePointer<TrackHeader> (this)] (int r)
+                                [safe = juce::Component::SafePointer<TrackHeader> (this), i] (int r)
             {
                 if (safe == nullptr) return;
                 if (r == 1) safe->showEditor();
                 if (r == 2) safe->owner.session.removeTrack (safe->trackId);
+                if (r == 3) safe->owner.session.moveTrack (safe->trackId, i - 1);
+                if (r == 4) safe->owner.session.moveTrack (safe->trackId, i + 1);
             });
         }
 
@@ -329,6 +384,7 @@ namespace beatforge
         juce::Slider volume, pan;
         juce::Rectangle<int> nameArea;
         std::unique_ptr<juce::TextEditor> editor;
+        bool draggingTrack = false;
     };
 
     //==============================================================================
@@ -346,8 +402,7 @@ namespace beatforge
 
         Timeline timeline() const
         {
-            const auto perBar = owner.session.getProject().timeSignature.ticksPerBar();
-            return { (double) owner.barsShown() * (double) perBar, (float) headerWidth, (float) (getWidth() - headerWidth) };
+            return { owner.viewStart, owner.visibleTicks(), (float) headerWidth, (float) (getWidth() - headerWidth) };
         }
 
         int rowOf (project::TrackId id) const
@@ -386,8 +441,8 @@ namespace beatforge
         void setPlayhead (double tick)
         {
             const auto tl = timeline();
-            // Wider than the 6 px glow: at fractional display scales (e.g. 125 %) its
-            // anti-aliased edges reach further pixels, which would otherwise never be cleared.
+            // Covers the whole 6 px glow (x - 3 .. x + 3) and its anti-aliased edges;
+            // anything narrower leaves a trail of glow behind the moving playhead.
             auto strip = [&] (double t) { return juce::Rectangle<int> ((int) std::floor (tl.x (t)) - 6, 0, 13, getHeight()); };
             repaint (strip (playhead));
             playhead = tick;
@@ -401,6 +456,8 @@ namespace beatforge
             const auto perBar = p.timeSignature.ticksPerBar(), perBeat = p.timeSignature.ticksPerBeat();
 
             g.fillAll (theme::background);
+            g.saveState();
+            g.reduceClipRegion (getLocalBounds().withTrimmedLeft (headerWidth));   // scrolled content stays right of the headers
 
             // Rows.
             for (size_t i = 0; i < p.tracks.size(); ++i)
@@ -417,7 +474,7 @@ namespace beatforge
                 g.fillRect (juce::Rectangle<float> (tl.x ((double) p.loopStart), 0.0f,
                                                     tl.x ((double) p.loopEnd) - tl.x ((double) p.loopStart), (float) getHeight()));
             }
-            for (time::Tick t = 0; t <= (time::Tick) tl.ticksTotal; t += perBeat)
+            for (auto t = (time::Tick) (tl.start / (double) perBeat) * perBeat; (double) t <= tl.end(); t += perBeat)
             {
                 g.setColour (t % perBar == 0 ? theme::border : theme::border.withAlpha (0.35f));
                 g.drawVerticalLine ((int) tl.x ((double) t), 0.0f, (float) getHeight());
@@ -437,9 +494,17 @@ namespace beatforge
             g.fillRect (x - 3.0f, 0.0f, 6.0f, (float) getHeight());
             g.setColour (theme::playhead);
             g.fillRect (x - 1.0f, 0.0f, 2.0f, (float) getHeight());
+            g.restoreState();
 
             g.setColour (theme::border);
             g.drawVerticalLine (headerWidth - 1, 0.0f, (float) getHeight());
+
+            // Where a dragged track header will land.
+            if (dropRow >= 0)
+            {
+                g.setColour (theme::accent);
+                g.fillRect (0, juce::jlimit (0, getHeight() - 3, dropRow * rowHeight - 1), getWidth(), 3);
+            }
         }
 
         void paintClip (juce::Graphics& g, const Track& t, const Clip& c, juce::Colour colour)
@@ -457,9 +522,12 @@ namespace beatforge
             const auto perBar = owner.session.getProject().timeSignature.ticksPerBar();
             const bool wholeBars = c.length % perBar == 0;
             const auto bars = (double) c.length / (double) perBar;
+            // The label stays readable when the clip starts left of the view.
+            auto label = r.withHeight (14.0f);
+            label.setLeft (juce::jmax (label.getX(), (float) headerWidth));
             g.drawText ((t.type == TrackType::drums ? "Pattern  " : "Clip  ") + juce::String (bars, wholeBars ? 0 : 2)
                             + (c.length == perBar ? " bar" : " bars"),
-                        r.withHeight (14.0f).reduced (6.0f, 0.0f), juce::Justification::centredLeft, true);
+                        label.reduced (6.0f, 0.0f), juce::Justification::centredLeft, true);
 
             // Content preview.
             auto body = r.withTrimmedTop (16.0f).reduced (4.0f, 3.0f);
@@ -476,7 +544,7 @@ namespace beatforge
                         if (c.pattern[(size_t) lane][(size_t) (step % project::stepsPerPattern)])
                         {
                             const auto x0 = tl.x ((double) (c.start + at));
-                            g.fillRect (x0, body.getY() + (float) lane * laneH, juce::jmax (1.5f, tl.x ((double) stepTicks) - tl.left - 1.0f), laneH - 1.0f);
+                            g.fillRect (x0, body.getY() + (float) lane * laneH, juce::jmax (1.5f, tl.w ((double) stepTicks) - 1.0f), laneH - 1.0f);
                         }
             }
             else if (! c.notes.empty())
@@ -588,6 +656,22 @@ namespace beatforge
                                  : c != nullptr ? juce::MouseCursor::DraggingHandCursor : juce::MouseCursor::NormalCursor);
         }
 
+        void mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override
+        {
+            if (! owner.handleWheel (e.getEventRelativeTo (&owner), wheel))
+                Component::mouseWheelMove (e, wheel);   // vertical: the viewport scrolls the tracks
+        }
+
+        // Track drag: line drawn above row `row` (-1 = none).
+        void setDropRow (int row)
+        {
+            if (row != dropRow)
+            {
+                dropRow = row;
+                repaint();
+            }
+        }
+
         bool keyPressed (const juce::KeyPress& key) override
         {
             if (key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey)
@@ -627,6 +711,7 @@ namespace beatforge
         Clip original;
         juce::Point<float> dragStart;
         double playhead = 0.0;
+        int dropRow = -1;
     };
 
     //==============================================================================
@@ -651,11 +736,27 @@ namespace beatforge
         addDrumsButton.onClick = [this] { if (auto id = session.addTrack (TrackType::drums)) selection.selectTrack (id); };
         addSynthButton.onClick = [this] { if (auto id = session.addTrack (TrackType::instrument)) selection.selectTrack (id); };
 
+        hScroll.setAutoHide (false);
+        hScroll.addListener (this);
+        addAndMakeVisible (hScroll);
+        zoomOutButton.setTooltip ("Zoom out (Ctrl+-, or Ctrl+wheel)");
+        zoomInButton.setTooltip ("Zoom in (Ctrl+=, or Ctrl+wheel)");
+        fitButton.setTooltip ("Show the whole song");
+        zoomOutButton.onClick = [this] { zoomOut(); };
+        zoomInButton.onClick = [this] { zoomIn(); };
+        fitButton.onClick = [this] { zoomToFit(); };
+        for (auto* b : { &zoomOutButton, &zoomInButton, &fitButton })
+        {
+            b->setWantsKeyboardFocus (false);
+            addAndMakeVisible (*b);
+        }
+
         sessionListener = session.addListener ([this] (project::Session::Change change)
         {
             if (change == project::Session::Change::metadata || change == project::Session::Change::instrument)
                 return;
             rebuild();
+            setView (viewStart, viewBars);   // the song may have shrunk
         });
         selectionListener = selection.addListener ([this] { refresh(); });
 
@@ -667,6 +768,99 @@ namespace beatforge
     {
         session.removeListener (sessionListener);
         selection.removeListener (selectionListener);
+    }
+
+    //==============================================================================
+    int ArrangementView::totalBars() const
+    {
+        const auto perBar = (double) session.getProject().timeSignature.ticksPerBar();
+        return std::max (barsShown(), (int) std::ceil ((viewStart + visibleTicks()) / perBar));
+    }
+
+    double ArrangementView::visibleTicks() const
+    {
+        return viewBars * (double) session.getProject().timeSignature.ticksPerBar();
+    }
+
+    void ArrangementView::setView (double startTick, double bars)
+    {
+        const auto perBar = (double) session.getProject().timeSignature.ticksPerBar();
+        viewBars = juce::jlimit (minBarsVisible, maxBarsVisible, bars);
+        const auto maxStart = std::max (0.0, (double) barsShown() * perBar - visibleTicks());
+        viewStart = juce::jlimit (0.0, maxStart, startTick);
+        updateScrollBar();
+        ruler->repaint();
+        lanes->repaint();
+    }
+
+    void ArrangementView::updateScrollBar()
+    {
+        const auto perBar = (double) session.getProject().timeSignature.ticksPerBar();
+        hScroll.setRangeLimits (0.0, std::max ((double) barsShown() * perBar, viewStart + visibleTicks()), juce::dontSendNotification);
+        hScroll.setCurrentRange (viewStart, visibleTicks(), juce::dontSendNotification);
+        hScroll.setSingleStepSize (perBar);
+    }
+
+    void ArrangementView::scrollBarMoved (juce::ScrollBar*, double newRangeStart)
+    {
+        setView (newRangeStart, viewBars);
+    }
+
+    void ArrangementView::zoomAround (double factor, float xInThis)
+    {
+        const auto laneWidth = (float) std::max (1, getWidth() - headerWidth - viewport.getScrollBarThickness());
+        const auto fraction = juce::jlimit (0.0, 1.0, (double) (xInThis - (float) headerWidth) / (double) laneWidth);
+        const auto anchor = viewStart + fraction * visibleTicks();
+        const auto bars = juce::jlimit (minBarsVisible, maxBarsVisible, viewBars / factor);
+        const auto perBar = (double) session.getProject().timeSignature.ticksPerBar();
+        setView (anchor - fraction * bars * perBar, bars);
+    }
+
+    // Button/keyboard zoom keeps the playhead in place when it is in view, else the centre.
+    void ArrangementView::zoomIn()  { zoomAround (1.5, zoomAnchorX()); }
+    void ArrangementView::zoomOut() { zoomAround (1.0 / 1.5, zoomAnchorX()); }
+
+    float ArrangementView::zoomAnchorX() const
+    {
+        const auto laneWidth = (double) std::max (1, getWidth() - headerWidth - viewport.getScrollBarThickness());
+        const auto position = engine.getPositionTicks();
+        const auto fraction = position >= viewStart && position <= viewStart + visibleTicks() ? (position - viewStart) / visibleTicks() : 0.5;
+        return (float) headerWidth + (float) (fraction * laneWidth);
+    }
+
+    void ArrangementView::zoomToFit()
+    {
+        const auto& p = session.getProject();
+        time::Tick last = 0;
+        for (auto& t : p.tracks)
+            for (auto& c : t.clips)
+                last = std::max (last, c.end());
+        const auto perBar = p.timeSignature.ticksPerBar();
+        setView (0.0, std::max (4.0, (double) ((last + perBar - 1) / perBar) + 1.0));
+    }
+
+    bool ArrangementView::handleWheel (const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel, bool plainWheelZooms)
+    {
+        const auto delta = std::abs (wheel.deltaX) > std::abs (wheel.deltaY) ? wheel.deltaX : wheel.deltaY;
+        if (std::abs (delta) < 1.0e-6f)
+            return false;
+
+        if (e.mods.isCommandDown() || (plainWheelZooms && ! e.mods.isShiftDown()))
+        {
+            zoomAround (std::pow (1.5, (double) wheel.deltaY * 4.0), e.position.x);
+            return true;
+        }
+        if (e.mods.isShiftDown() || std::abs (wheel.deltaX) > std::abs (wheel.deltaY))
+        {
+            setView (viewStart - (double) delta * visibleTicks() * 0.5, viewBars);
+            return true;
+        }
+        return false;
+    }
+
+    void ArrangementView::setTrackDropRow (int row)
+    {
+        lanes->setDropRow (row);
     }
 
     int ArrangementView::barsShown() const
@@ -712,7 +906,20 @@ namespace beatforge
 
     void ArrangementView::timerCallback()
     {
-        lanes->setPlayhead (engine.getPositionTicks());
+        const auto position = engine.getPositionTicks();
+
+        // When the playhead moves (playing, Stop, seek) page along so it stays in
+        // view; a still playhead never overrides scrolling, nor does a drag.
+        const bool moved = std::abs (position - lastPosition) > 0.5;
+        lastPosition = position;
+        if (moved && ! isMouseButtonDown (true)
+            && (position < viewStart || position > viewStart + visibleTicks() * 0.97))
+        {
+            const auto perBar = (double) session.getProject().timeSignature.ticksPerBar();
+            setView (std::floor (position / perBar) * perBar, viewBars);
+        }
+
+        lanes->setPlayhead (position);
         ruler->repaint();
     }
 
@@ -740,6 +947,15 @@ namespace beatforge
     {
         auto area = getLocalBounds();
         auto top = area.removeFromTop (rulerHeight);
+
+        auto footer = area.removeFromBottom (footerHeight);
+        auto zoom = footer.removeFromLeft (headerWidth).reduced (8, 3);
+        fitButton.setBounds (zoom.removeFromRight (44));
+        zoom.removeFromRight (4);
+        zoomInButton.setBounds (zoom.removeFromRight (28));
+        zoom.removeFromRight (4);
+        zoomOutButton.setBounds (zoom.removeFromRight (28));
+        hScroll.setBounds (footer.withTrimmedRight (viewport.getScrollBarThickness()).reduced (0, 6));
         auto corner = top.removeFromLeft (headerWidth).reduced (8, 4);
         addSynthButton.setBounds (corner.removeFromRight (80));
         corner.removeFromRight (6);

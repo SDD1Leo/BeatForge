@@ -55,6 +55,10 @@ namespace beatforge
                 g.fillPath (path);
                 break;
 
+            case Icon::record:
+                g.fillEllipse (iconArea.withSizeKeepingCentre (12.0f, 12.0f));
+                break;
+
             case Icon::loop:
             {
                 // Rounded loop with an arrow head on the top run.

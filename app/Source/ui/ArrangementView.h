@@ -22,9 +22,14 @@ namespace beatforge
     //          (snaps to beats, can move to another track of the same kind);
     //          drag its right edge to resize; double-click to edit it;
     //          right-click for Duplicate / Delete; Ctrl+D, Delete on the selected clip.
-    //  Headers: double-click the name to rename; right-click for Rename / Delete.
+    //  Headers: double-click the name to rename; drag up/down to reorder;
+    //           right-click for Rename / Move up / Move down / Delete.
+    //  View:   Ctrl+wheel (or the wheel over the ruler) zooms, Shift+wheel or the
+    //          scroll bar scrolls; - / + / Fit below the headers. While playing,
+    //          the view pages along with the playhead.
     class ArrangementView final : public juce::Component,
-                                  private juce::Timer
+                                  private juce::Timer,
+                                  private juce::ScrollBar::Listener
     {
     public:
         ArrangementView (audio::AudioEngine&, project::Session&, Selection&);
@@ -36,10 +41,15 @@ namespace beatforge
         void duplicateSelectedClip();
         void deleteSelectedClip();
 
+        void zoomIn();
+        void zoomOut();
+        void zoomToFit();     // the whole song
+
         void paint (juce::Graphics&) override;
         void resized() override;
 
-        static constexpr int headerWidth = 236, rowHeight = 60, rulerHeight = 32;
+        static constexpr int headerWidth = 236, rowHeight = 60, rulerHeight = 32, footerHeight = 26;
+        static constexpr double minBarsVisible = 1.0, maxBarsVisible = 256.0;
 
     private:
         class Ruler;
@@ -47,9 +57,21 @@ namespace beatforge
         class TrackHeader;
 
         void timerCallback() override;
+        void scrollBarMoved (juce::ScrollBar*, double newRangeStart) override;
         void rebuild();                    // tracks added/removed/reordered
         void refresh();                    // values changed
-        int barsShown() const;
+        int barsShown() const;             // the song plus some room
+        int totalBars() const;             // scrollable extent
+
+        // Visible range of the timeline, shared by the ruler and the lanes.
+        double visibleTicks() const;
+        void setView (double startTick, double bars);
+        void zoomAround (double factor, float xInThis);
+        float zoomAnchorX() const;
+        // Zoom (Ctrl, or `plainWheelZooms`) or scroll (Shift / horizontal wheel); false if not handled.
+        bool handleWheel (const juce::MouseEvent& inThis, const juce::MouseWheelDetails&, bool plainWheelZooms = false);
+        void setTrackDropRow (int row);
+        void updateScrollBar();
 
         audio::AudioEngine& engine;
         project::Session& session;
@@ -60,6 +82,10 @@ namespace beatforge
         std::unique_ptr<Lanes> lanes;
         juce::Viewport viewport;
         juce::TextButton addDrumsButton { "+ Drums" }, addSynthButton { "+ Synth" };
+        juce::ScrollBar hScroll { false };
+        juce::TextButton zoomOutButton { "-" }, zoomInButton { "+" }, fitButton { "Fit" };
+        double viewStart = 0.0, viewBars = 16.0;
+        double lastPosition = 0.0;
         std::vector<project::TrackId> shownTracks;
     };
 }

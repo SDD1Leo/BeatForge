@@ -52,6 +52,8 @@ namespace beatforge::project
         TrackId addTrack (TrackType);            // 0 when the 16-track limit is reached
         bool removeTrack (TrackId);
         bool renameTrack (TrackId, const std::string&);
+        // Moves a track to `newIndex` in the track list (clamped); its sound is unaffected.
+        bool moveTrack (TrackId, int newIndex);
         void setTrackVolume (TrackId, float db);
         void setTrackPan (TrackId, float pan);
         void setTrackMuted (TrackId, bool);

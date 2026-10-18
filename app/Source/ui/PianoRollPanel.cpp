@@ -72,7 +72,7 @@ namespace beatforge
 
         void setPlayhead (double clipTick)
         {
-            // Generous strip: at fractional display scales the anti-aliased line reaches further pixels.
+            // Covers the 2 px line and its anti-aliased edges at any position.
             auto strip = [this] (double t) { return juce::Rectangle<int> ((int) std::floor (tickToX (t)) - 4, 0, 9, getHeight()); };
             if (playhead >= 0.0) repaint (strip (playhead));
             playhead = clipTick;
@@ -217,7 +217,7 @@ namespace beatforge
             if (pos.x < gridLeft())   // keyboard: audition
             {
                 heldPitch = yToPitch (pos.y);
-                owner.engine.previewNoteOn (owner.slot(), heldPitch, 100);
+                playKey (heldPitch, 100);
                 repaint (0, 0, keyboardWidth, getHeight());
                 return;
             }
@@ -278,9 +278,9 @@ namespace beatforge
                 const auto pitch = yToPitch (pos.y);
                 if (pitch != heldPitch)
                 {
-                    owner.engine.previewNoteOff (owner.slot(), heldPitch);
+                    playKey (heldPitch, 0);
                     heldPitch = pitch;
-                    owner.engine.previewNoteOn (owner.slot(), heldPitch, 100);
+                    playKey (heldPitch, 100);
                     repaint (0, 0, keyboardWidth, getHeight());
                 }
                 return;
@@ -349,7 +349,7 @@ namespace beatforge
         {
             if (heldPitch >= 0)
             {
-                owner.engine.previewNoteOff (owner.slot(), heldPitch);
+                playKey (heldPitch, 0);
                 heldPitch = -1;
                 repaint (0, 0, keyboardWidth, getHeight());
                 return;
@@ -476,6 +476,10 @@ namespace beatforge
         std::vector<midi::Note> originals;
         midi::NoteId anchorId = 0;
         int auditionPitch = -1, heldPitch = -1;
+
+        // The keyboard is a live input like a MIDI keyboard: it plays the
+        // selected synth track and is recorded while recording.
+        void playKey (int pitch, int velocity) { owner.engine.screenNote ({ audio::AudioEngine::now(), pitch, velocity }); }
         double playhead = -1.0;
     };
 
@@ -695,6 +699,7 @@ namespace beatforge
         {
             shownClip = clipId();
             selection.clear();
+            scrollToNotes();
         }
 
         // Drop selected ids that no longer exist (deleted, or another project).
@@ -707,7 +712,9 @@ namespace beatforge
             const bool standard = c->length % perBar == 0 && (bars == 1 || bars == 2 || bars == 4 || bars == 8);
             clipLengthBox.setSelectedId (standard ? bars : 0, juce::dontSendNotification);
             if (! standard)
-                clipLengthBox.setText (juce::String ((double) c->length / (double) perBar, 2) + " bars", juce::dontSendNotification);
+                clipLengthBox.setText (c->length % perBar == 0 ? juce::String (bars) + " bars"
+                                                               : juce::String ((double) c->length / (double) perBar, 2) + " bars",
+                                       juce::dontSendNotification);
         }
         for (auto* c : std::initializer_list<juce::Component*> { &clipLengthBox, &gridBox, &quantizeButton, &viewport, velocityLane.get() })
             c->setVisible (hasClip);
@@ -803,5 +810,25 @@ namespace beatforge
             scrolledToMiddle = true;
             viewport.setViewPosition (0, (int) editor->pitchToY (72) - area.getHeight() / 2);
         }
+        if (scrollToNotesPending)
+            scrollToNotes();
+    }
+
+    void PianoRollPanel::scrollToNotes()
+    {
+        // A clip opens with its notes in view (centred on their range).
+        const auto* c = clipPtr();
+        if (c == nullptr || c->notes.empty())
+            return;
+        if (viewport.getHeight() <= 0)
+        {
+            scrollToNotesPending = true;
+            return;
+        }
+        scrollToNotesPending = false;
+        scrolledToMiddle = true;
+        int lo = 127, hi = 0;
+        for (auto& n : c->notes) { lo = std::min (lo, n.pitch); hi = std::max (hi, n.pitch); }
+        viewport.setViewPosition (0, (int) editor->pitchToY ((lo + hi + 1) / 2) - viewport.getHeight() / 2);
     }
 }

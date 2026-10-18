@@ -27,7 +27,17 @@ namespace beatforge
         arrangement.onOpenEditor = [this] { showTab (0); };
 
         // The clip editor follows the selected track's kind.
-        selectionListenerId = selection.addListener ([this] { showTab (workspaceTabs.getCurrentTab()); });
+        selectionListenerId = selection.addListener ([this]
+        {
+            showTab (workspaceTabs.getCurrentTab());
+            updateLiveInput();
+        });
+        sessionListenerId = session.addListener ([this] (project::Session::Change change)
+        {
+            if (change != project::Session::Change::metadata && change != project::Session::Change::transport)
+                updateLiveInput();
+        });
+        transportBar.onRecord = [this] { toggleRecord(); };
 
         addAndMakeVisible (transportBar);
         addAndMakeVisible (arrangement);
@@ -42,8 +52,9 @@ namespace beatforge
         setWantsKeyboardFocus (true);
         devices.addChangeListener (this);
         refreshDeviceStatus();
-        startTimer (500);   // dropout counter has no change notification
+        startTimerHz (30);   // recorded notes, MIDI light; device status every 0.5 s
         showTab (0);
+        updateLiveInput();
 
         setSize (1280, 800);
     }
@@ -51,7 +62,9 @@ namespace beatforge
     MainComponent::~MainComponent()
     {
         selection.removeListener (selectionListenerId);
+        session.removeListener (sessionListenerId);
         devices.removeChangeListener (this);
+        engine.setLiveTarget (-1);
 
         if (settingsWindow != nullptr)
             delete settingsWindow.getComponent();
@@ -60,8 +73,90 @@ namespace beatforge
     void MainComponent::changeListenerCallback (juce::ChangeBroadcaster*) { refreshDeviceStatus(); }
     void MainComponent::timerCallback()
     {
-        refreshDeviceStatus();
-        engine.collectGarbage();   // free note schedules the audio thread has finished with
+        pollRecording();
+
+        // MIDI light: on for ~150 ms after any message.
+        if (const auto count = devices.getMidiEventCount(); count != lastMidiCount)
+        {
+            lastMidiCount = count;
+            midiLightTicks = 5;
+        }
+        else if (midiLightTicks > 0)
+        {
+            --midiLightTicks;
+        }
+        statusBar.setMidi (midiInputsText, midiLightTicks > 0);
+
+        if (++slowTicks >= 15)
+        {
+            slowTicks = 0;
+            refreshDeviceStatus();     // the dropout counter has no change notification
+            engine.collectGarbage();   // free schedules the audio thread has finished with
+        }
+    }
+
+    void MainComponent::updateLiveInput()
+    {
+        const auto* selected = session.findTrack (selection.getTrack());
+        const bool synth = selected != nullptr && selected->type == project::TrackType::instrument;
+
+        // While a take runs, the keys keep playing the track being recorded.
+        const auto target = recorder.isActive() ? recorder.getTrack() : synth ? selected->id : 0;
+        engine.setLiveTarget (target != 0 ? session.slotOf (target) : -1);
+
+        if (recorder.isActive())
+            transportBar.setRecordAvailable (true, "Recording - press again (R) to stop recording, Stop to end");
+        else if (! deviceOpen)
+            transportBar.setRecordAvailable (false, "No audio device - open Audio Settings");
+        else if (synth)
+            transportBar.setRecordAvailable (true, "Record into " + juce::String::fromUTF8 (selected->name.c_str())
+                                                       + " (R): play your MIDI keyboard or the piano roll keys");
+        else
+            transportBar.setRecordAvailable (false, "Select a synth track to record into it");
+    }
+
+    void MainComponent::toggleRecord()
+    {
+        if (engine.isRecording())
+        {
+            engine.setRecording (false);   // punch out, keep playing
+            return;
+        }
+
+        const auto* t = session.findTrack (selection.getTrack());
+        if (t == nullptr || t->type != project::TrackType::instrument || ! deviceOpen || ! recorder.begin (t->id))
+            return;
+
+        updateLiveInput();
+        engine.setRecording (true);
+        if (! engine.isPlayRequested())
+            transportBar.togglePlayStop();
+        transportBar.setRecording (true);
+    }
+
+    void MainComponent::pollRecording()
+    {
+        audio::AudioEngine::RecordedEvent e;
+        while (engine.popRecorded (e))
+            recorder.add (e);
+
+        // Recording switched off before the engine started a take: nothing will follow.
+        if (recorder.isActive() && ! engine.isRecording() && engine.getState() == audio::TransportState::stopped)
+            recorder.finish();
+
+        const bool recording = engine.isRecording() || recorder.isActive();
+        transportBar.setRecording (recording);
+
+        if (takeWasActive && ! recorder.isActive())
+        {
+            if (recorder.getLastClip() != 0)
+            {
+                selection.selectClip (recorder.getLastClip());   // show the take in the piano roll
+                pianoRoll.scrollToNotes();
+            }
+            updateLiveInput();
+        }
+        takeWasActive = recorder.isActive();
     }
 
     void MainComponent::showTab (int index)
@@ -81,6 +176,12 @@ namespace beatforge
     {
         const auto s = devices.getStatus();
         transportBar.setDeviceAvailable (s.deviceOpen);
+        midiInputsText = s.midiInputs.isEmpty() ? juce::String ("No MIDI input") : "MIDI in: " + s.midiInputs.joinIntoString (", ");
+        if (deviceOpen != s.deviceOpen)
+        {
+            deviceOpen = s.deviceOpen;
+            updateLiveInput();
+        }
 
         if (! s.deviceOpen)
         {
@@ -109,8 +210,8 @@ namespace beatforge
         }
 
         auto selector = std::make_unique<juce::AudioDeviceSelectorComponent> (
-            devices.getDeviceManager(), 0, 0, 1, 2, false, false, true, false);
-        selector->setSize (520, 380);
+            devices.getDeviceManager(), 0, 0, 1, 2, true, false, true, false);
+        selector->setSize (560, 480);
 
         juce::DialogWindow::LaunchOptions options;
         options.dialogTitle = "Audio Settings";
@@ -142,6 +243,10 @@ namespace beatforge
             || key == juce::KeyPress ('z', ctrl | juce::ModifierKeys::shiftModifier, 0)
             || key == juce::KeyPress ('Z', ctrl | juce::ModifierKeys::shiftModifier, 0)) { session.redo(); return true; }
         if (key == juce::KeyPress ('d', ctrl, 0))  { arrangement.duplicateSelectedClip(); return true; }
+        if (key == juce::KeyPress ('e', ctrl, 0))  { actions.exportMidiWithChooser(); return true; }
+        if (key == juce::KeyPress ('=', ctrl, 0) || key == juce::KeyPress ('+', ctrl, 0)
+            || key == juce::KeyPress ('+', ctrl | juce::ModifierKeys::shiftModifier, 0)) { arrangement.zoomIn(); return true; }
+        if (key == juce::KeyPress ('-', ctrl, 0))  { arrangement.zoomOut(); return true; }
 
         if (key == juce::KeyPress ('1', ctrl, 0))  { showTab (0); return true; }
         if (key == juce::KeyPress ('2', ctrl, 0))  { showTab (1); return true; }
@@ -150,6 +255,7 @@ namespace beatforge
         // Single-letter shortcuts only without modifiers (Ctrl+L etc. stay free).
         if (key == juce::KeyPress ('m') || key == juce::KeyPress ('M')) { transportBar.toggleMetronome(); return true; }
         if (key == juce::KeyPress ('l') || key == juce::KeyPress ('L')) { transportBar.toggleLoop();      return true; }
+        if (key == juce::KeyPress ('r') || key == juce::KeyPress ('R')) { toggleRecord();                 return true; }
 
         return false;
     }

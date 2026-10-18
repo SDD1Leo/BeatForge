@@ -14,11 +14,14 @@ add_executable(beatforge_tests
     unit/DrumKitTests.cpp
     unit/DrumMachineTests.cpp
     unit/LevelMeterTests.cpp
+    unit/LiveInputTests.cpp
+    unit/MidiFileTests.cpp
     unit/InstrumentTests.cpp
     unit/MetronomeTests.cpp
     unit/MidiTests.cpp
     unit/MusicalTimeTests.cpp
     unit/ProjectFileTests.cpp
+    unit/RecordingTests.cpp
     unit/SessionTests.cpp
     unit/TempoMapTests.cpp
     unit/TransportTests.cpp)
@@ -37,10 +40,16 @@ if(XVFB_RUN)
     set(SMOKE_LAUNCHER ${XVFB_RUN} -a)
 endif()
 
+# App tests run with their own HOME so they never touch your settings,
+# recent files or MIDI device choices.
+set(APP_TEST_HOME "${CMAKE_CURRENT_BINARY_DIR}/app-test-home")
+file(MAKE_DIRECTORY "${APP_TEST_HOME}")
+
 add_test(NAME app_smoke_launch
     COMMAND ${SMOKE_LAUNCHER} $<TARGET_FILE:BeatForge> --smoke-test)
 set_tests_properties(app_smoke_launch PROPERTIES
     TIMEOUT 30
+    ENVIRONMENT "HOME=${APP_TEST_HOME}"
     PASS_REGULAR_EXPRESSION "SMOKE: window shown.*BeatForge shut down cleanly"
     FAIL_REGULAR_EXPRESSION "JUCE Assertion failure|leaked objects")
 
@@ -59,6 +68,17 @@ foreach(case IN LISTS OPEN_CASES)
         COMMAND ${SMOKE_LAUNCHER} $<TARGET_FILE:BeatForge> --smoke-test "${FIXTURES}/${name}.beatforge")
     set_tests_properties(app_open_${name} PROPERTIES
         TIMEOUT 30
+        ENVIRONMENT "HOME=${APP_TEST_HOME}"
         PASS_REGULAR_EXPRESSION "${expected}"
         FAIL_REGULAR_EXPRESSION "JUCE Assertion failure|leaked objects")
 endforeach()
+
+# The real app exports a project as a Standard MIDI File from the command line.
+add_test(NAME app_export_midi
+    COMMAND ${SMOKE_LAUNCHER} $<TARGET_FILE:BeatForge> --smoke-test "${FIXTURES}/house-demo.beatforge"
+            "--export-midi=${CMAKE_CURRENT_BINARY_DIR}/house-demo.mid")
+set_tests_properties(app_export_midi PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT "HOME=${APP_TEST_HOME}"
+    PASS_REGULAR_EXPRESSION "SMOKE: MIDI exported: house-demo.mid [0-9]+ tracks?, [1-9][0-9]* notes"
+    FAIL_REGULAR_EXPRESSION "JUCE Assertion failure|leaked objects|Could not export")

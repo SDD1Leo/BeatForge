@@ -3,10 +3,11 @@
 A native desktop DAW for electronic music, built in C++ with JUCE.
 Small feature set, reliable audio, pleasant workflow.
 
-**Status:** Phase 7 (arrangement view) approved; Phase 8 (MIDI input, recording, MIDI export) next.
+**Status:** Phase 8 (MIDI input, recording, MIDI export) built — awaiting hands-on test.
 Arrange drum and synth tracks (Nebula Poly or Nebula Bass) as clips on a
 timeline, with per-track volume, pan, mute and solo, a loop region, seek and
-undo/redo. The selected clip opens in the step sequencer or piano roll. Runs on a
+undo/redo. Play synth tracks from a MIDI keyboard, record takes, and export
+the song as a Standard MIDI File. The selected clip opens in the step sequencer or piano roll. Runs on a
 sample-accurate musical clock (40–240 BPM, time signatures, metronome) and saves
 as versioned `.beatforge` project files.
 
@@ -14,8 +15,14 @@ as versioned `.beatforge` project files.
 
 | Action | How |
 |---|---|
+| Play from a MIDI keyboard | Plug it in (it is enabled automatically; see Audio Settings → Active MIDI inputs) and select a synth track. The status bar shows the inputs and flashes on MIDI |
+| Record | Select a synth track, press **Record** or **R**: playback starts and what you play goes into the track (into the clip under the playhead, or a new clip). **R** again stops recording, **Stop**/Space ends it. **Ctrl+Z** removes the whole take |
+| Record without a keyboard | Click the piano roll's keyboard while recording |
+| Export MIDI | Project menu → **Export MIDI...** or **Ctrl+E** (a .mid file next to your project) |
 | Add a track | **+ Drums** / **+ Synth** above the track headers (up to 16) |
 | Rename / delete a track | Double-click its name / right-click its header → Delete track |
+| Reorder tracks | Drag a track header up or down, or right-click → Move up / Move down |
+| Zoom / scroll the arrangement | **Ctrl+wheel** or the wheel over the ruler, **-** / **+** below the headers, **Ctrl+=** / **Ctrl+-**; **Fit** shows the whole song; scroll bar or **Shift+wheel** to scroll. The view follows the playhead |
 | Track volume / pan / mute / solo | Header slider (double-click = 0 dB), pan knob, **M**, **S** |
 | Create a clip | Double-click an empty spot in a track's lane (a 1-bar pattern on drum tracks, 4 bars on synth tracks) |
 | Select / open a clip | Click it / double-click it (opens it in the editor below) |
@@ -31,7 +38,7 @@ as versioned `.beatforge` project files.
 | Drum level / mute / solo | Row slider (double-click = 0 dB), **M**, **S** buttons |
 | Clear the pattern | **Clear** |
 | Rename a drum | Double-click its name |
-| Project menu | Click the project name (top left): New, Open, Open Recent, Save, Save As, Rename, Undo, Redo |
+| Project menu | Click the project name (top left): New, Open, Open Recent, Save, Save As, Rename, Undo, Redo, Export MIDI |
 | New / Open / Save / Save As | **Ctrl+N** / **Ctrl+O** / **Ctrl+S** / **Ctrl+Shift+S** |
 | Choose a synth track's instrument | Select the track → Instrument tab → **Nebula Poly** (chords, leads) or **Nebula Bass** (mono, glide) |
 | Shape the sound | Instrument tab: wave buttons; knobs (drag up/down or scroll, Shift = fine, double-click = default); **Reset** restores defaults |
@@ -91,6 +98,7 @@ Use the `release` preset for an optimised build
 | `--smoke-play` | Like `--smoke-test`, plus: wait 1 s, press Play, check the audio clock keeps real time for 2 s and every metronome beat fired, press Stop, check it stops. **Plays clicks on your output** (see TESTING.md to route it to a virtual sink). |
 | `--screenshot=<file.png>` | Save the window content as PNG (mid-playback with `--smoke-play`) |
 | `<project>.beatforge` | Open that project at launch |
+| `--export-midi=<file.mid>` | Export the (opened) project as a MIDI file at launch |
 
 ## Audio on Linux
 

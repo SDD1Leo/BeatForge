@@ -301,6 +301,24 @@ namespace beatforge::project
         });
     }
 
+    bool Session::moveTrack (TrackId id, int newIndex)
+    {
+        return edit (Change::tracks, [&] (Project& p)
+        {
+            const auto it = std::find_if (p.tracks.begin(), p.tracks.end(), [&] (const Track& t) { return t.id == id; });
+            if (it == p.tracks.end())
+                return false;
+            const auto from = (int) (it - p.tracks.begin());
+            const auto to = std::clamp (newIndex, 0, (int) p.tracks.size() - 1);
+            if (from == to)
+                return false;
+            auto moved = std::move (*it);
+            p.tracks.erase (it);
+            p.tracks.insert (p.tracks.begin() + to, std::move (moved));
+            return true;
+        });
+    }
+
     bool Session::renameTrack (TrackId id, const std::string& name)
     {
         if (name.empty() || name.size() > (size_t) Project::maxNameLength || findTrack (id) == nullptr)

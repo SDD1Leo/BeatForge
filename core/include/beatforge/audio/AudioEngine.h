@@ -8,7 +8,9 @@
 #include "beatforge/audio/TrackSchedule.h"
 #include "beatforge/time/Transport.h"
 #include "beatforge/util/LockFreeExchange.h"
+#include "beatforge/util/SpscQueue.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cstdint>
@@ -96,6 +98,52 @@ namespace beatforge::audio
         void previewNoteOn (int slot, int pitch, int velocity) noexcept  { previews.push ({ slot, pitch, velocity }); }
         void previewNoteOff (int slot, int pitch) noexcept               { previews.push ({ slot, pitch, 0 }); }
 
+        // --- Live input (MIDI keyboard, on-screen keyboard) ---------------------------------
+        // Notes play on the live target slot (an instrument slot; -1 = none) and,
+        // while recording and playing, are reported back with their musical position.
+        //
+        // Events are stamped with now() when they arrive. The engine follows the
+        // audio clock (callbacks may come in bursts, e.g. through a sound server)
+        // and plays every event a fixed delay after it arrived - one block plus
+        // the observed burst - so the spacing between notes is kept exactly.
+        // pitch -1 with velocity 0 = all notes off.
+        struct LiveNote
+        {
+            double time = 0.0;   // now() when the note arrived
+            int pitch = 60;
+            int velocity = 0;    // 0 = note off
+        };
+
+        static double now() noexcept;                         // steady clock, seconds
+        bool deviceNote (const LiveNote& n) noexcept   { return deviceInput.push (n); }   // MIDI thread
+        bool screenNote (const LiveNote& n) noexcept   { return screenInput.push (n); }   // message thread
+        void setLiveTarget (int slot) noexcept         { liveTarget.store (slot, std::memory_order_release); }
+        int getLiveTarget() const noexcept             { return liveTarget.load (std::memory_order_acquire); }
+
+        // Recording: what the live input plays while the transport runs is reported
+        // through popRecorded(), at the musical position the player heard when
+        // pressing the key: the press time on the audio clock, moved back by
+        // `outputLatency` (samples from rendering to the speakers).
+        void setRecording (bool) noexcept;
+        bool isRecording() const noexcept              { return recording.load (std::memory_order_acquire); }
+        void setOutputLatency (int samples) noexcept   { outputLatency.store (std::max (0, samples), std::memory_order_release); }
+
+        struct RecordedEvent
+        {
+            double tick = 0.0;
+            int pitch = 60;      // endOfTake: recording stopped at `tick`, close held notes
+            int velocity = 0;    // 0 = note off
+            static constexpr int endOfTake = -1;
+        };
+        bool popRecorded (RecordedEvent& e) noexcept   { return recorded.pop (e); }
+
+        // Tests: replace the clock used to place live events.
+        using Clock = double (*)() noexcept;
+        void setClockForTesting (Clock c) noexcept     { clock = c != nullptr ? c : &AudioEngine::now; }
+
+        static constexpr VoiceId liveVoiceBase = VoiceId (1) << 62;
+        static constexpr bool isLiveVoice (VoiceId v) noexcept { return v != PolySynthInstrument::previewId && (v & liveVoiceBase) != 0; }
+
         // Writes the output for one block into every output channel.
         void process (float* const* outputs, int numOutputs, int numSamples) noexcept;
 
@@ -103,7 +151,12 @@ namespace beatforge::audio
 
     private:
         struct Slot;
-        void processChunk (float* const* pair, int numPair, int numSamples) noexcept;
+        void processChunk (float* const* pair, int numPair, int numSamples, int blockOffset) noexcept;
+        void collectLiveEvents (int numSamples) noexcept;
+        bool applyLive (const LiveNote&) noexcept;
+        void releaseLive (double tick, double samplesPerTick) noexcept;
+        // `tick` = where it was rendered; `delaySamples` = from what the player heard to that.
+        void recordEvent (double tick, double delaySamples, double samplesPerTick, int pitch, int velocity) noexcept;
         void applySettings() noexcept;
         void publishPosition() noexcept;
         void renderVoices (int start, int num) noexcept;
@@ -119,6 +172,33 @@ namespace beatforge::audio
         std::vector<float> metronomeBuffer;
         PreviewQueue previews;
         bool wasPlaying = false;
+
+        // Live input (audio thread unless noted).
+        util::SpscQueue<LiveNote, 512> deviceInput, screenInput;     // producers: MIDI thread / message thread
+        util::SpscQueue<RecordedEvent, 4096> recorded;               // consumer: message thread
+        struct PlacedLive
+        {
+            int offset;           // where it is rendered in this block
+            double pressOffset;   // where the key press falls on the audio clock (may be < 0)
+            LiveNote note;
+        };
+        static constexpr int maxLivePerBlock = 256;
+        std::array<PlacedLive, maxLivePerBlock> liveEvents {};
+        int numLiveEvents = 0;
+        std::array<bool, 128> liveHeld {};
+        int liveSlot = -1;                                            // slot the held notes play on
+        bool recordingActive = false;                                 // recording && playing
+        double lastPlayingTick = 0.0, lastSamplesPerTick = 1.0;
+        Clock clock = &AudioEngine::now;
+        std::atomic<int> liveTarget { -1 };
+        std::atomic<bool> recording { false };
+        std::atomic<int> outputLatency { 0 };
+
+        // Audio clock (audio thread): wall time of the latest callback deadline,
+        // as `clockOffset + renderedSamples / sampleRate`.
+        std::int64_t renderedSamples = 0;
+        double clockOffset = 0.0, clockEarliness = 0.0;
+        bool clockValid = false;
 
         // Settings written by other threads.
         std::atomic<bool> playRequested { false };

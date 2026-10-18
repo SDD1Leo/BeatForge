@@ -33,7 +33,28 @@ ctest --preset debug
 | `[session][instrument]` | Choice/settings through the session (clamping, dirty, no-op), save/load round trip incl. both instruments, 0.5 `basicSynth` compat, out-of-range corrected, unknown settings and instruments preserved | nothing |
 | `app_open_*` | Real app opens fixture files: valid demo (0 warnings), corrected tempo (1 warning listed), newer format refused, truncated JSON refused | X server |
 | `[realtime]` | **Callback path makes zero heap allocations** (global `operator new` counter), plus a self-check that the counter works | nothing |
+| `[live]` | Live notes sound one block after arrival at the exact sample for block sizes 256/480/1024; need a synth target; note off / all-notes-off / a new target release them; held live notes survive play, seek, loop wraps, clip edits and Stop; allocation-free | nothing (fake clock) |
+| `[live][record]` | Recorded at the tick the player heard (tick 192 for a press at 0.1 s @ 120 BPM, any block size); output latency compensated also across a loop wrap; punch-out ends the take; nothing recorded while stopped or not recording; **bursty callbacks (two blocks back to back) keep exact spacing** in sound and recording | nothing (fake clock) |
+| `[record]` | Takes: new clip from the note's bar growing bar by bar, one undo step; overdub into the clip under the note; loop recording fills the loop region, a note held over the wrap ends at the loop end; held keys closed at the end; a take's clip never grows over another clip; only synth tracks record | nothing |
+| `[session][tracks]` (reorder) | Move track up/down/clamped, slots unchanged, undo | nothing |
+| `[midi][file]` | SMF write → read round trip (format 1, PPQ, 3-byte delta times, meta/program events); broken and truncated files refused with reasons | nothing |
+| `[midi][export]` | Export: tempo 124 → 483871 µs, 3/4 signature, track names, GM drums on channel 10 as played (muted lane left out), synth program + channel, notes cut at clip end, songs end; mute/solo respected; channels skip 10; atomic file write | temp dir |
+| `app_export_midi` | Real app opens a project and exports it with `--export-midi` | X server |
 | `app_smoke_launch` | Real GUI app starts, window reaches the screen, app quits cleanly. **Fails on any JUCE assertion or leaked object.** | X server (uses `xvfb-run` if installed) |
+
+App tests run with `HOME=build/<preset>/tests/app-test-home`, so they never
+touch your settings, recent files or MIDI device choices.
+
+### MIDI without a keyboard
+
+Linux always has the ALSA port **Midi Through Port-0** (14:0), which BeatForge
+enables like any input. Anything sent to it reaches BeatForge as if played:
+
+```bash
+aplaymidi -p 14:0 some.mid                         # "play" a MIDI file into BeatForge (live or recording)
+aseqdump -p 14:0 & aplaymidi -p 14:0 export.mid    # check an exported file with ALSA's own parser
+aseqnet &                                          # a new port appears: tests hot-plug (kill it to unplug)
+```
 
 ### Real-device checks without disturbing your speakers
 
@@ -85,6 +106,16 @@ Proof levels we keep separate (from Phase 1 on):
 2. **Generated audio** — render to buffers/files and analyse samples.
 3. **Real device** — only a human (or a run on real hardware) proves sound
    actually comes out of the speakers. Automated tests never claim this.
+
+## Manual checklist — Phase 8
+
+1. Plug in your MIDI keyboard (before or after launching). The status bar shows **MIDI in: <your keyboard>**; the light flashes when you play. (Audio Settings lists it under Active MIDI inputs.)
+2. Select a synth track (Bass or Synth) and play — you hear it. Select the Drums track — the keyboard goes quiet.
+3. Turn the metronome on (**M**), select a synth track, press **R** (or the red Record button): playback starts. Play a phrase, press **Space** to stop. The take appears as a clip and opens in the piano roll; notes sit where you played them.
+4. **Ctrl+Z** removes the whole take; **Ctrl+Shift+Z** brings it back.
+5. Set a 2-bar loop on the ruler, press **R** and play over several passes — everything lands in one 2-bar clip (overdub). No keyboard? Click the piano roll keys while recording.
+6. **Ctrl+E** → export a .mid file; open it in another MIDI app (MuseScore, LMMS, an online MIDI player) — tracks, notes, tempo and drums are there.
+7. Arrangement: **Ctrl+wheel** to zoom, **Shift+wheel** / scroll bar to scroll, **Fit** to see the whole song; play while zoomed in — the view follows. Drag a track header up or down to reorder tracks (colours stay with the tracks).
 
 ## Manual checklist — Phase 7
 
@@ -168,6 +199,7 @@ Proof levels we keep separate (from Phase 1 on):
 
 | Date | Phase | Result |
 |---|---|---|
+| 2026-10-18 | 8 | 150/150 ctest pass in Debug and Release (144 unit cases, 529,951 assertions). Real app (Xvfb, sandboxed HOME, virtual sink, ALSA Midi Through as the keyboard): a MIDI file played into a selected synth track sounded **C4 E4 G4 C5 G4 E4 C4 D4 at 0.5 s** (±10 ms onset resolution). Recorded with **R**: 8 notes with their velocities (100…127); first build showed ±10 ms spacing jitter (954–979 ticks for 960) caused by bursty ALSA→PipeWire callbacks → engine now follows the audio clock → **960 ticks ×6 and 962, durations 480/482 for 480 sent** (≤ 2 ticks ≈ 1 ms). Take = one undo step; loop recording into a new track made one 2-bar loop clip; clicks on the piano keys recorded 3 notes. Ctrl+E dialog export (3 tracks, 19 notes) read back by ALSA's parser (`aplaymidi`→`aseqdump`): 19 note on/off pairs, right pitches, velocities, channels, programs. Hot-plug: a new ALSA port (aseqnet) appeared in the status bar within 2 s, enabled and saved; unticking in Audio Settings disabled and saved it. Zoom buttons, Ctrl+wheel, Shift+wheel, Fit, follow while playing and back to the start on Stop; track drag + Move down + undo. Clean quit after recording. Found & fixed: device state with the enabled MIDI inputs was never saved (JUCE only queues change messages for listeners already registered) → MIDI input lost on the next launch; app ctests were writing to your real settings (now own HOME; your file untouched); track colours swapped when reordering; piano roll did not show a fresh take; clip labels vanished when scrolled; length box said "3.00 bars"; after Stop the view stayed away from the playhead. |
 | 2026-10-18 | 7 | 126/126 ctest pass in Debug and Release (121 unit cases, 529,726 assertions). Real UI (Xvfb, sandboxed HOME, virtual sink): programmed a beat, stretched the drum clip to 8 bars, added a synth track → Nebula Bass, double-clicked a 4-bar clip and drew 16 notes, **Ctrl+D** duplicated it to bar 5, made a melody clip and dragged it from bar 1 to bar 5. Full 8-bar playback (loop off): level steady over bars 1–8, silence after (−57 dB), peak −3.7 dBFS. Solo bass: **A#2×4 C3×4 D#3×4 G2×4** twice at 0.5000 s; solo melody: first note **8.0 s after start** (bar 5), **C4 A3 G3 F3 E3 G3 A3 C4** at 1.000 s. Seek to bar 3 + loop 3–5: bass **D#3 G2 D#3 G2…**, 0.5000 s across wraps, Stop back at 3.1.000. Move + Delete → Ctrl+Z ×2 → Ctrl+Shift+Z each one step. Rename track, add/delete track, saved (v2 JSON checked) and reopened with clips, instrument and loop intact; quit prompt; clean exit. Each capture showed one 20–25 ms short gap at a random time (5.9/6.2/11.7/15.7 s) while the app counted 0 dropouts: lost in the ALSA→PipeWire capture path, not the engine (scheduling errors would repeat at the same musical position). Found & fixed: a loop drag included the bar under the release point (3→5 gave 3–6); step-sequencer subtitle said "for 1 bars" and was clipped. User hands-on test: approved 2026-10-18. |
 | 2026-10-18 | 6 | 118/118 ctest pass in Debug and Release (15 new). Real UI (Xvfb, sandboxed HOME, virtual sink): Instrument tab screenshots match the Nebula reference with live displays; chose Nebula Bass (Glide shown, A/S/R hidden); programmed drums + drew an 8-note off-beat bassline; bass alone analysed with YIN: **C2 C2 D#2 C2 G1 G1 A#1 C2** at **0.5 s** spacing; switching to square + cutoff 13.4 kHz while playing → display followed, capture **1.4× brighter**; saved and reopened with instrument/settings restored; your own `save test` / `save2` projects load read-only in 0.6 without warnings (unchanged on disk). Found & fixed: envelope release stretched by per-block parameter updates (and buffer-size dependent); filter pacing depended on the block size; **mix clipped (+3.2 dBFS) with chords + drums** → gain staging (kit −6 dB, Poly −10 dB, Bass −6 dB default), typical mix now **−4.5 dBFS**; settings could be lost when no clip existed. User hands-on test: approved 2026-10-18. |
 | 2026-10-18 | 5 | 103/103 ctest pass in Debug and Release (24 new). Real UI (Xvfb, sandboxed HOME, virtual sink): created a 4-bar clip, set 1/8, clicked an 8-note melody (8 auditions heard), dragged C5 → one eighth later + D5, stretched F4 to 3 eighths, dragged a velocity bar; playback analysed note by note: onsets **0 / 0.5 / 1.0 / 1.75 / 2.0 / 2.5 / 3.0 / 3.5 s**, pitches **C4 E4 G4 D5 B4 G4 A4 F4**, quieter C4 (−5.8 dB), F4 sounding through 4.05 s; off-grid note quantized with Q; Delete, Ctrl+A, Up/Shift+Up work; saved and reopened from the command line with all notes. Found & fixed: notes fired one sample early at some block sizes (event window now sample-exact), loop-wrap release missed when a wrap ended a block, piano-roll **Ctrl+Q quantized instead of quitting** (and Ctrl+M/L toggled), keyboard drawing. User hands-on test: approved 2026-10-18. |

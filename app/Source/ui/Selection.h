@@ -48,7 +48,8 @@ namespace beatforge
             changed();
         }
 
-        // Track colour by type and position among tracks of that type.
+        // Track colour by type and creation order among tracks of that type, so a
+        // track keeps its colour when tracks are reordered.
         juce::Colour colourOf (project::TrackId id) const;
 
         int addListener (std::function<void()> l) { listeners.emplace_back (++nextId, std::move (l)); return nextId; }
@@ -86,14 +87,14 @@ namespace beatforge
 
     inline juce::Colour Selection::colourOf (project::TrackId id) const
     {
-        int index = 0;
+        const auto* of = session.findTrack (id);
+        if (of == nullptr)
+            return theme::textMuted;
+
+        int index = 0;   // same-type tracks created earlier (ids only grow)
         for (auto& t : session.getProject().tracks)
-        {
-            if (t.id == id)
-                return theme::track::forTrack (t.type == project::TrackType::drums, index);
-            if (session.findTrack (id) != nullptr && t.type == session.findTrack (id)->type)
+            if (t.type == of->type && t.id < id)
                 ++index;
-        }
-        return theme::textMuted;
+        return theme::track::forTrack (of->type == project::TrackType::drums, index);
     }
 }
