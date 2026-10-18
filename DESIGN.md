@@ -22,6 +22,7 @@ the mockup").
 | Fonts (Inter, JetBrains Mono; OFL) | `app/Resources/fonts/`, embedded with BinaryData |
 | Stock JUCE widgets (buttons, combo boxes, sliders, knobs, menus, tooltips, dialogs) | `app/Source/ui/BeatForgeLookAndFeel.*` |
 | Custom components (header, track headers, clips, meter, modules…) | read tokens from `Theme.h`, never literal colours |
+| Editor pages' shared header (tabs, track context, tools) | `app/Source/ui/EditorPage.h` |
 
 Rule: no `juce::Colour (0x…)` outside `Theme.h` (checked with
 `grep -rn "Colour (0x" app/Source | grep -v Theme.h`).
@@ -96,9 +97,9 @@ with a text label; it is never the only signal.
 | 2 | Shared chrome: 68 px header, arrangement panel (track headers 12.6, ruler, lanes, clips, playhead), master meter with peak readout, status bar | done |
 | 3 | Instrument tab: editor shell header, three module cards, waveform / filter / envelope displays, wave selector, knob controls | done |
 | 3b | Studio tour overlay (spotlight + card, same tokens) | done (1.0.0) |
-| 4 | Step Sequencer tab | after 1.0.0 |
-| 5 | Piano Roll tab | after 1.0.0 |
-| 6 | Mixer tab restyle | after 1.0.0 |
+| 4 | Step Sequencer tab | done (1.0.0) |
+| 5 | Piano Roll tab | done (1.0.0) |
+| 6 | Mixer tab restyle (no Figma board: same cards, toggles and meters) | done (1.0.0) |
 
 Earlier NEBULA steps (0.3–0.11) built the screens this pass restyles; see the
 CHANGELOG for their history.

@@ -63,6 +63,5 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 
 ## Next up: Phase 12
 
-v1.0.0 is out. Phase 12 features one at a time (suggested first: delay/reverb,
-then automation lanes). Still open from the revamp: restyling the Step
-Sequencer, Piano Roll and Mixer tabs to the Figma spec (DESIGN.md).
+v1.0.0 is out, with every screen on the Figma design. Phase 12 features one at a
+time (suggested first: delay/reverb, then automation lanes).

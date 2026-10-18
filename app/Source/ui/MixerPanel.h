@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ui/EditorPage.h"
 #include "ui/LevelMeterComponent.h"
 #include "ui/Selection.h"
 
@@ -13,11 +14,11 @@
 
 namespace beatforge
 {
-    // NEBULA mixer: one channel strip per track (colour, name, pan, fader with
+    // Mixer: one channel strip per track (colour, name, pan, fader with
     // a post-fader meter, dB readout, mute/solo) and the master strip (master
     // volume, output meter). Everything goes through the Session; a fader drag
     // is one undo step. Clicking a strip selects its track.
-    class MixerPanel final : public juce::Component
+    class MixerPanel final : public EditorPage
     {
     public:
         MixerPanel (audio::AudioEngine&, project::Session&, Selection&);
@@ -43,6 +44,5 @@ namespace beatforge
         std::vector<std::unique_ptr<Strip>> strips;
         std::unique_ptr<Strip> master;
         std::vector<project::TrackId> shownTracks;
-        juce::Rectangle<int> headerArea;
     };
 }

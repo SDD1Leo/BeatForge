@@ -31,7 +31,7 @@ BeatForge/
 │       ├── project/        ProjectActions (file commands, dialogs, recent files, Export MIDI)
 │       └── ui/             Theme (tokens, embedded fonts), LookAndFeel, TransportBar (the header), ProjectNameField, SignatureField, TempoField,
 │                           ArrangementView, Selection, DrumMachinePanel, PianoRollPanel, InstrumentPanel, Knob, TabBar,
-│                           LevelMeterComponent, StatusBar, StudioTour
+│                           LevelMeterComponent, StatusBar, StudioTour, EditorPage
 ├── docs/ui-spec/         Figma export: SPEC.md, colour tokens, screen PNGs (the visual reference)
 ├── tools/                analyze_onsets.py (timing analysis of captured audio)
 ├── tests/                Catch2 unit tests + app launch test (CTest)

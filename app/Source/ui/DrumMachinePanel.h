@@ -3,6 +3,7 @@
 #include <beatforge/audio/AudioEngine.h>
 #include <beatforge/project/Session.h>
 
+#include "ui/EditorPage.h"
 #include "ui/Selection.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -16,7 +17,7 @@ namespace beatforge
     // 16-step grid. Click or drag across steps to paint them; while stopped a
     // newly enabled step is auditioned. The playing step is highlighted.
     // Double-click a drum name to rename it. Edits go through the Session.
-    class DrumMachinePanel final : public juce::Component,
+    class DrumMachinePanel final : public EditorPage,
                                    private juce::Timer
     {
     public:
@@ -29,7 +30,7 @@ namespace beatforge
         static juce::Colour laneColour (int lane);
 
         std::function<void()> onTextEditFinished;   // a rename finished: return focus
-        static constexpr int preferredHeight = 44 + 18 + audio::DrumMachine::numLanes * 44 + 12;
+        static constexpr int preferredHeight = headerHeight + 14 + 18 + 6 + audio::DrumMachine::numLanes * 52 + 14;
 
     private:
         class StepGrid;
@@ -52,7 +53,7 @@ namespace beatforge
         juce::TextButton clearButton { "Clear" };
         std::unique_ptr<StepGrid> grid;
         std::array<std::unique_ptr<LaneHeader>, audio::DrumMachine::numLanes> headers;
-        juce::Rectangle<int> titleArea, stepNumbers;
+        juce::Rectangle<int> stepNumbers, clipChip, headerDivider;
 
         std::array<std::uint32_t, audio::DrumMachine::numLanes> lastTriggerCounts {};
         std::array<float, audio::DrumMachine::numLanes> flashes {};

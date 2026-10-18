@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ui/EditorPage.h"
 #include "ui/Knob.h"
 #include "ui/Selection.h"
 
@@ -16,7 +17,7 @@ namespace beatforge
     // selected instrument's controls in OSCILLATOR / FILTER / ENVELOPE sections.
     // The waveform, filter-response and envelope displays are drawn from the
     // actual parameter values. Only parameters the instrument uses are shown.
-    class InstrumentPanel final : public juce::Component
+    class InstrumentPanel final : public EditorPage
     {
     public:
         InstrumentPanel (project::Session&, Selection&);
@@ -24,11 +25,6 @@ namespace beatforge
 
         void paint (juce::Graphics&) override;
         void resized() override;
-
-        // The panel covers the whole editor card; the shell's tabs occupy the
-        // header up to this x, and the track context is drawn after it.
-        void setHeaderStart (int x) { headerStart = x; repaint(); }
-        static constexpr int headerHeight = 52;
 
     private:
         class WaveButton;
@@ -54,7 +50,6 @@ namespace beatforge
         juce::String chipText (int module) const;
 
         static constexpr int titleHeight = 18;
-        int headerStart = 0;
         juce::Rectangle<int> headerArea, instrumentCaption, presetCaption, headerDivider, oscArea, filterArea, envArea;
         juce::Rectangle<int> waveDisplay, filterDisplay, envDisplay;
     };

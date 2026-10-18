@@ -3,6 +3,7 @@
 #include <beatforge/audio/AudioEngine.h>
 #include <beatforge/project/Session.h>
 
+#include "ui/EditorPage.h"
 #include "ui/Selection.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -12,7 +13,7 @@
 
 namespace beatforge
 {
-    // NEBULA piano roll for the synth track's MIDI clip.
+    // Piano roll for the synth track's MIDI clip.
     //
     //  - Click empty grid: add a note (snapped to the grid) and hear it.
     //  - Drag empty grid: box-select. Shift/Ctrl+click: add to selection.
@@ -23,7 +24,7 @@ namespace beatforge
     //  - Velocity lane: drag bars up/down (moves all selected together).
     //  - Click the keyboard to hear a pitch.
     // All edits go through the Session.
-    class PianoRollPanel final : public juce::Component,
+    class PianoRollPanel final : public EditorPage,
                                  private juce::Timer
     {
     public:
@@ -32,6 +33,7 @@ namespace beatforge
 
         void paint (juce::Graphics&) override;
         void resized() override;
+        void paintOverChildren (juce::Graphics&) override;
 
         // Brings the shown clip's notes into view (done when another clip opens).
         void scrollToNotes();
@@ -40,7 +42,7 @@ namespace beatforge
         std::function<bool (const juce::KeyPress&)> keyFilter;
 
         static constexpr int lowestPitch = 24, highestPitch = 108;   // C1..C8
-        static constexpr int rowHeight = 13, keyboardWidth = 58;
+        static constexpr int rowHeight = 12, keyboardWidth = 64;
 
     private:
         class Editor;
@@ -50,6 +52,7 @@ namespace beatforge
         void refreshFromSession();
         void quantizeSelectionOrAll();
         time::Tick gridTicks() const;
+        juce::Colour noteColour() const;   // the track's colour
 
         // What the panel edits: the selected synth track's selected clip.
         project::TrackId trackId() const;
@@ -71,7 +74,7 @@ namespace beatforge
         juce::Viewport viewport;
         std::unique_ptr<Editor> editor;
         std::unique_ptr<VelocityLane> velocityLane;
-        juce::Rectangle<int> headerArea, emptyArea;
+        juce::Rectangle<int> emptyArea, gridFrame, lengthCaption, snapCaption, headerDivider;
         bool scrolledToMiddle = false, scrollToNotesPending = false;
         double lastPlayhead = -1.0;
     };

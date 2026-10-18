@@ -15,9 +15,19 @@
 - The header's logo no longer drifts right and cuts off "BeatForge" after
   repeated repaints.
 
-### Not restyled yet
-- The Step Sequencer, Piano Roll and Mixer tabs work as before but keep their
-  previous styling inside the new editor panel.
+### Changed
+- **Step Sequencer** (spec 8): name chips with a hit light, M/S and level per
+  sound, a 4 × 4 grid with alternating beat groups, lit steps with a shine, the
+  playing column outlined with glowing hits and a purple step number, and a clip
+  chip (bar, length, steps) beside Clear in the header.
+- **Piano Roll** (spec 9): framed note grid with a bar ruler (song bars), new key
+  and row colours, notes in the track's colour (opacity follows velocity), a
+  glowing playhead, a velocity lane with a 127 / 64 / 0 scale and stems with dots,
+  LENGTH and SNAP dropdowns with Mono values, and a note-count chip.
+- **Mixer**: card-style channel strips (colour strip, name, pan, fader + meter,
+  dB, M/S); silence reads `-inf`.
+- All editor pages share one header: tabs, the selected track, then the page's
+  tools.
 
 ## Phase 11b: UI revamp from the Figma spec
 

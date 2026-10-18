@@ -600,24 +600,24 @@ namespace beatforge
 
         // The arrangement keeps 440 px unless the editor would drop below the
         // step sequencer's height.
-        const int editorMin = editorHeaderHeight + DrumMachinePanel::preferredHeight + 16;
+        const int editorMin = DrumMachinePanel::preferredHeight;
         const int arrangementHeight = juce::jlimit (160, 440, body.getHeight() - 12 - editorMin);
         arrangement.setBounds (body.removeFromTop (arrangementHeight));
         body.removeFromTop (12);
         editorCard = body;
 
-        auto editor = editorCard;
-        auto header = editor.removeFromTop (editorHeaderHeight).withTrimmedLeft (6);
-        workspaceTabs.setBounds (header.withWidth (workspaceTabs.getPreferredWidth()).withTrimmedBottom (1).withTrimmedTop (10));
-        editor = editor.reduced (1);
-        pianoRoll.setBounds (editor);
-        instrumentPanel.setBounds (editorCard.reduced (1));
-        instrumentPanel.setHeaderStart (workspaceTabs.getRight() - instrumentPanel.getX() + 10);
+        // The tabs sit in the editor header; each page covers the card and draws
+        // its context and tools after them.
+        workspaceTabs.setBounds (editorCard.withTrimmedLeft (6).withHeight (editorHeaderHeight)
+                                     .withWidth (workspaceTabs.getPreferredWidth()).withTrimmedTop (10).withTrimmedBottom (1));
+        for (auto* page : std::initializer_list<EditorPage*> { &drumPanel, &pianoRoll, &instrumentPanel, &mixer })
+        {
+            page->setBounds (editorCard.reduced (1));
+            page->setHeaderStart (workspaceTabs.getRight() - page->getX() + 10);
+        }
         workspaceTabs.toFront (false);
         if (tour != nullptr)
             tour->toFront (false);   // the tour always stays on top
-        mixer.setBounds (editor);
-        drumPanel.setBounds (editor.removeFromTop (DrumMachinePanel::preferredHeight));
         outputMeter.setBounds (outputCard.reduced (12, 0).withTrimmedTop (40).withTrimmedBottom (14));
     }
 }

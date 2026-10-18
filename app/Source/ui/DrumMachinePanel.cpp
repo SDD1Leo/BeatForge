@@ -7,8 +7,10 @@ namespace beatforge
     {
         constexpr int numLanes = audio::DrumMachine::numLanes;
         constexpr int numSteps = audio::DrumMachine::numSteps;
-        constexpr int rowHeight = 44;
-        constexpr int headerWidth = 310;
+        constexpr int rowHeight = 52, cellHeight = 44;   // spec 8: rows 52, cells 44
+        constexpr int headerWidth = 316;                  // name chip, M, S, level
+        constexpr int glowMargin = 8;                     // room around the grid for the playhead glow
+        constexpr int groupGap = 16, cellGap = 6;
 
     }
 
@@ -33,7 +35,9 @@ namespace beatforge
             {
                 b->setClickingTogglesState (true);
                 b->setWantsKeyboardFocus (false);
-                b->setColour (juce::TextButton::textColourOnId, theme::background);
+                b->setColour (juce::TextButton::buttonColourId, theme::bgControl);
+                b->setColour (juce::TextButton::textColourOffId, theme::textSecondary);
+                b->setColour (juce::TextButton::textColourOnId, theme::bgApp);
                 addAndMakeVisible (*b);
             }
 
@@ -100,52 +104,61 @@ namespace beatforge
                 showEditor();
         }
 
+        // Name chip (spec 8): bg/surface card with a colour bar, a hit light that
+        // flashes on every trigger, and the name.
         void paint (juce::Graphics& g) override
         {
             const auto colour = laneColour (lane);
-            auto area = nameArea.toFloat().reduced (0.0f, 6.0f);
+            const auto chip = nameArea.toFloat();
 
-            // Track-header style: dark plate, solid track-colour stripe, a hit
-            // light that flashes on every trigger.
-            g.setColour (theme::control.interpolatedWith (colour, 0.18f * flash));
-            g.fillRoundedRectangle (area, theme::controlRadius);
-            g.setColour (colour);
-            g.fillRoundedRectangle (area.withWidth (4.0f), 2.0f);
+            {
+                juce::Graphics::ScopedSaveState state (g);
+                juce::Path shape;
+                shape.addRoundedRectangle (chip, 8.0f);
+                g.reduceClipRegion (shape);
+                g.setColour (theme::bgSurface.interpolatedWith (colour, 0.22f * flash));
+                g.fillRect (chip);
+                g.setColour (colour);
+                g.fillRect (chip.withWidth (4.0f));
+            }
+            g.setColour (theme::borderSubtle);
+            g.drawRoundedRectangle (chip.reduced (0.5f), 8.0f, 1.0f);
 
             if (editor != nullptr)
                 return;
 
-            area.removeFromLeft (10.0f);
-            auto led = area.removeFromLeft (14.0f).withSizeKeepingCentre (7.0f, 7.0f);
-            g.setColour (flash > 0.0f ? colour.withAlpha (0.4f + 0.6f * flash) : theme::border);
-            g.fillEllipse (led);
-            area.removeFromLeft (4.0f);
+            auto area = chip.withTrimmedLeft (14.0f);
+            g.setColour (flash > 0.0f ? colour.withAlpha (0.4f + 0.6f * flash) : theme::bgControl);
+            g.fillEllipse (area.removeFromLeft (6.0f).withSizeKeepingCentre (6.0f, 6.0f));
+            area.removeFromLeft (8.0f);
 
-            g.setColour (theme::textPrimary);
-            g.setFont (theme::font (13.5f, juce::Font::bold));
-            g.drawText (name, area.withTrimmedRight (4.0f), juce::Justification::centredLeft, true);
+            const auto* t = owner.track();
+            const bool muted = t != nullptr && t->lanes[(size_t) lane].muted;
+            g.setColour (muted ? theme::textMuted : theme::textPrimary);
+            g.setFont (theme::font (12.0f, juce::Font::bold));
+            g.drawText (name, area.withTrimmedRight (6.0f), juce::Justification::centredLeft, true);
         }
 
         void resized() override
         {
-            auto area = getLocalBounds();
-            nameArea = area.removeFromLeft (120);
-            area.removeFromLeft (8);
-            mute.setBounds (area.removeFromLeft (28).withSizeKeepingCentre (28, 26));
-            area.removeFromLeft (4);
-            solo.setBounds (area.removeFromLeft (28).withSizeKeepingCentre (28, 26));
-            area.removeFromLeft (8);
-            volume.setBounds (area.reduced (0, 8));
+            auto area = getLocalBounds().withSizeKeepingCentre (getWidth(), cellHeight);
+            nameArea = area.removeFromLeft (132);
+            area.removeFromLeft (10);
+            mute.setBounds (area.removeFromLeft (24).withSizeKeepingCentre (24, 22));
+            area.removeFromLeft (6);
+            solo.setBounds (area.removeFromLeft (24).withSizeKeepingCentre (24, 22));
+            area.removeFromLeft (12);
+            volume.setBounds (area.withTrimmedRight (16).withSizeKeepingCentre (area.getWidth() - 16, 14).withX (area.getX()));
 
             if (editor != nullptr)
-                editor->setBounds (nameArea.reduced (8, 9).withTrimmedLeft (6));
+                editor->setBounds (nameArea.reduced (8, 10).withTrimmedLeft (20));
         }
 
     private:
         void showEditor()
         {
             editor = std::make_unique<juce::TextEditor>();
-            editor->setFont (theme::font (13.5f, juce::Font::bold));
+            editor->setFont (theme::font (12.0f, juce::Font::bold));
             editor->setInputRestrictions (project::Project::maxLaneNameLength);
             editor->setText (name, false);
             editor->selectAll();
@@ -211,6 +224,11 @@ namespace beatforge
             }
         }
 
+        int getPlayingStep() const noexcept { return playingStep; }
+
+        // Spec 12.4: off cells alternate bg/raised and bg/control by beat group;
+        // on cells take the row colour with a shine; the playing column is
+        // outlined, and its lit cells glow.
         void paint (juce::Graphics& g) override
         {
             const auto* clip = owner.clip();
@@ -218,30 +236,45 @@ namespace beatforge
                 return;
             const auto& pattern = clip->pattern;
 
+            if (playingStep >= 0)
+                for (int lane = 0; lane < numLanes; ++lane)
+                    if (pattern[(size_t) lane][(size_t) playingStep])
+                    {
+                        juce::Path cell;
+                        cell.addRoundedRectangle (cellBounds (lane, playingStep).toFloat(), 5.0f);
+                        juce::DropShadow (laneColour (lane).withAlpha (0.8f), 14, {}).drawForPath (g, cell);
+                    }
+
             for (int step = 0; step < numSteps; ++step)
             {
-                // Empty cells in every other beat group are lighter so the 4x4
-                // structure is readable.
-                const auto offColour = (step / 4) % 2 == 1 ? theme::control.brighter (0.08f) : theme::control;
+                const bool accentGroup = (step / 4) % 2 == 1;
+                const bool playing = step == playingStep;
 
                 for (int lane = 0; lane < numLanes; ++lane)
                 {
-                    const auto cell = cellBounds (lane, step).toFloat().reduced (3.0f, 6.0f);
+                    const auto cell = cellBounds (lane, step).toFloat();
                     const bool on = pattern[(size_t) lane][(size_t) step];
-                    const auto colour = laneColour (lane);
 
-                    g.setColour (on ? colour : offColour);
-                    g.fillRoundedRectangle (cell, theme::controlRadius);
-
-                    // Current step: lifts every cell in the column; a lit step flares.
-                    if (step == playingStep)
+                    if (on)
                     {
-                        g.setColour (on ? juce::Colours::white.withAlpha (0.45f) : theme::textPrimary.withAlpha (0.16f));
-                        g.fillRoundedRectangle (cell, theme::controlRadius);
+                        const auto colour = laneColour (lane);
+                        juce::Graphics::ScopedSaveState state (g);
+                        juce::Path shape;
+                        shape.addRoundedRectangle (cell, 5.0f);
+                        g.reduceClipRegion (shape);
+                        g.setColour (colour);
+                        g.fillRect (cell);
+                        g.setColour (theme::shadow.withAlpha (0.25f));
+                        g.fillRect (cell.withTop (cell.getBottom() - 2.0f));
+                        g.setColour (juce::Colour (theme::textPrimary).withAlpha (0.35f));
+                        g.fillRoundedRectangle (cell.reduced (4.0f, 0.0f).withY (cell.getY() + 4.0f).withHeight (2.0f), 1.0f);
+                        continue;
                     }
 
-                    g.setColour (on ? colour.brighter (0.3f) : (step == playingStep ? theme::borderStrong : theme::border));
-                    g.drawRoundedRectangle (cell, theme::controlRadius, theme::borderWidth);
+                    g.setColour (playing || accentGroup ? theme::bgControl : theme::bgRaised);
+                    g.fillRoundedRectangle (cell, 5.0f);
+                    g.setColour (playing ? theme::textPrimary.withAlpha (0.6f) : (accentGroup ? theme::border : theme::borderSubtle));
+                    g.drawRoundedRectangle (cell.reduced (0.5f), 5.0f, 1.0f);
                 }
             }
         }
@@ -292,25 +325,42 @@ namespace beatforge
             repaint (cellBounds (lane, step));
         }
 
-        float cellWidth() const { return (float) getWidth() / numSteps; }
+    public:
+        // Inner grid area (the component keeps a margin for the glow).
+        juce::Rectangle<int> inner() const { return getLocalBounds().reduced (glowMargin); }
 
-        juce::Rectangle<int> columnBounds (int step) const
+        float cellWidth() const
         {
-            const auto x0 = juce::roundToInt (step * cellWidth()), x1 = juce::roundToInt ((step + 1) * cellWidth());
-            return { x0, 0, x1 - x0, getHeight() };
+            return ((float) inner().getWidth() - 3.0f * groupGap - 12.0f * cellGap) / (float) numSteps;
+        }
+
+        float columnX (int step) const
+        {
+            return (float) inner().getX() + (float) step * (cellWidth() + cellGap) + (float) (step / 4) * (groupGap - cellGap);
         }
 
         juce::Rectangle<int> cellBounds (int lane, int step) const
         {
-            return columnBounds (step).withY (lane * rowHeight).withHeight (rowHeight);
+            const auto x0 = juce::roundToInt (columnX (step)), x1 = juce::roundToInt (columnX (step) + cellWidth());
+            const auto y = inner().getY() + lane * rowHeight + (rowHeight - cellHeight) / 2;
+            return { x0, y, x1 - x0, cellHeight };
         }
 
+    private:
+        // The nearest column within the gaps, so a drag across a gap keeps painting.
         std::pair<int, int> cellAt (juce::Point<int> p) const
         {
-            if (! getLocalBounds().contains (p))
+            const auto area = inner();
+            if (! area.expanded (glowMargin / 2).contains (p))
                 return { -1, -1 };
-            return { juce::jlimit (0, numLanes - 1, p.y / rowHeight),
-                     juce::jlimit (0, numSteps - 1, (int) ((float) p.x / cellWidth())) };
+            int best = 0;
+            float bestDistance = std::numeric_limits<float>::max();
+            for (int step = 0; step < numSteps; ++step)
+            {
+                const auto d = std::abs ((float) p.x - (columnX (step) + cellWidth() * 0.5f));
+                if (d < bestDistance) { bestDistance = d; best = step; }
+            }
+            return { juce::jlimit (0, numLanes - 1, (p.y - area.getY()) / rowHeight), best };
         }
 
         DrumMachinePanel& owner;
@@ -399,7 +449,11 @@ namespace beatforge
             if (pos >= (double) c->start && pos < (double) c->end())
                 step = (int) ((pos - (double) c->start) / (double) time::Transport::stepTicks) % numSteps;
         }
-        grid->setPlayingStep (step);
+        if (step != grid->getPlayingStep())
+        {
+            grid->setPlayingStep (step);
+            repaint (stepNumbers);
+        }
 
         // Trigger lights: flash when a lane's hit count changes, then fade.
         for (int lane = 0; lane < numLanes; ++lane)
@@ -423,70 +477,84 @@ namespace beatforge
 
     void DrumMachinePanel::paint (juce::Graphics& g)
     {
-        const auto bounds = getLocalBounds().toFloat();
-        g.setColour (theme::panel);
-        g.fillRoundedRectangle (bounds, theme::cornerRadius);
-        g.setColour (theme::border);
-        g.drawRoundedRectangle (bounds.reduced (0.5f), theme::cornerRadius, 1.0f);
-
-        // Title: caption, track name and where the clip sits.
-        auto title = titleArea.withWidth (headerWidth - 80);
-        g.setColour (theme::textSecondary);
-        g.setFont (theme::captionFont());
-        g.drawText ("STEP SEQUENCER", title.removeFromLeft (118), juce::Justification::centredLeft);
-
         const auto* t = track();
         const auto* c = clip();
-        if (t != nullptr)
-        {
-            g.setColour (selection.colourOf (t->id));
-            g.setFont (theme::font (13.0f, juce::Font::bold));
-            g.drawText (juce::String::fromUTF8 (t->name.c_str()), title, juce::Justification::centredLeft, true);
-        }
+        if (const auto* selected = session.findTrack (selection.getTrack()))
+            paintContext (g, selection.colourOf (selected->id), juce::String::fromUTF8 (selected->name.c_str()),
+                          selected->type == project::TrackType::drums ? "DRUMS" : "SYNTH");
+
+        if (t == nullptr)
+            return paintEmpty (g, "Select a drum track or one of its clips in the arrangement.");
 
         if (c == nullptr)
         {
             g.setColour (theme::textMuted);
             g.setFont (theme::font (14.0f));
-            const auto message = t == nullptr ? "Select a drum track or one of its clips in the arrangement."
-                                              : "This drum track has no clip selected. Double-click its lane in the arrangement to create one.";
-            g.drawFittedText (message, getLocalBounds().withTrimmedLeft (t != nullptr ? headerWidth : 0).reduced (24),
+            g.drawFittedText ("This drum track has no clip selected. Double-click its lane in the arrangement to create one.",
+                              getLocalBounds().withTrimmedTop (headerHeight).withTrimmedLeft (16 + headerWidth).reduced (24),
                               juce::Justification::centred, 2);
             return;
         }
 
-        const auto perBar = session.getProject().timeSignature.ticksPerBar();
-        g.setColour (theme::textSecondary);
-        g.setFont (theme::font (12.0f));
-        const auto bars = juce::String ((double) c->length / (double) perBar, 2).trimCharactersAtEnd ("0").trimCharactersAtEnd (".");
-        g.drawText ("Clip at bar " + juce::String (c->start / perBar + 1) + ", " + bars + (c->length == perBar ? " bar" : " bars")
-                        + (c->length > perBar ? ", pattern repeats every bar" : ""),
-                    titleArea.withTrimmedLeft (headerWidth + 4).withRight (getWidth() - 14), juce::Justification::centredRight);
+        // Header: the clip chip, a divider, then Clear.
+        {
+            const auto perBar = session.getProject().timeSignature.ticksPerBar();
+            const auto bars = juce::String ((double) c->length / (double) perBar, 2).trimCharactersAtEnd ("0").trimCharactersAtEnd (".");
+            const auto where = juce::String ("Clip at bar ") + juce::String (c->start / perBar + 1) + juce::String::fromUTF8 (" \xc2\xb7 ")
+                             + bars + (c->length == perBar ? " bar" : " bars")
+                             + (c->length > perBar ? juce::String::fromUTF8 (" \xc2\xb7 repeats every bar") : juce::String());
+            const auto steps = juce::String::fromUTF8 (" \xc2\xb7 ") + juce::String (numSteps) + " steps";
+            const juce::Font text (theme::font (11.0f)), mono (theme::numericFont (11.0f));
+            const auto w1 = juce::GlyphArrangement::getStringWidthInt (text, where), w2 = juce::GlyphArrangement::getStringWidthInt (mono, steps);
+            auto chip = clipChip.withLeft (clipChip.getRight() - (w1 + w2 + 22));
+            g.setColour (theme::bgSurface);
+            g.fillRoundedRectangle (chip.toFloat(), 6.0f);
+            g.setColour (theme::borderSubtle);
+            g.drawRoundedRectangle (chip.toFloat().reduced (0.5f), 6.0f, 1.0f);
+            auto inner = chip.reduced (11, 0);
+            g.setColour (theme::textSecondary);
+            g.setFont (text);
+            g.drawText (where, inner.removeFromLeft (w1), juce::Justification::centredLeft, false);
+            g.setFont (mono);
+            g.drawText (steps, inner, juce::Justification::centredLeft, false);
+            g.setColour (theme::border);
+            g.fillRect (headerDivider);
+        }
 
-        // Step numbers above the grid.
-        const auto gridBounds = grid->getBounds();
-        g.setFont (theme::font (10.0f));
+        // Step numbers: the first of each group brighter, the playing step purple.
+        g.setColour (theme::textMuted);
+        g.setFont (theme::captionFont (9.0f));
+        g.drawText ("SOUND", stepNumbers.withWidth (headerWidth), juce::Justification::centredLeft, false);
+        g.setFont (theme::numericFont (10.0f, juce::Font::bold));
+        const auto playing = grid->getPlayingStep();
         for (int step = 0; step < numSteps; ++step)
         {
-            const float w = (float) gridBounds.getWidth() / numSteps;
-            g.setColour (step % 4 == 0 ? theme::textPrimary : theme::textSecondary);
-            g.drawText (juce::String (step + 1),
-                        juce::Rectangle<float> (gridBounds.getX() + step * w, (float) stepNumbers.getY(), w, (float) stepNumbers.getHeight()),
-                        juce::Justification::centred);
+            const auto cell = grid->cellBounds (0, step) + grid->getPosition();
+            g.setColour (step == playing ? theme::purple : (step % 4 == 0 ? theme::textSecondary : theme::textMuted));
+            g.drawText (juce::String (step + 1), cell.withY (stepNumbers.getY()).withHeight (stepNumbers.getHeight()),
+                        juce::Justification::centred, false);
         }
     }
 
     void DrumMachinePanel::resized()
     {
-        auto area = getLocalBounds().reduced (12, 6);
-        titleArea = area.removeFromTop (32);
+        // Header tools (right): clip chip, divider, Clear.
+        auto tools = toolRow();
+        clearButton.setBounds (tools.removeFromRight (64));
+        tools.removeFromRight (12);
+        headerDivider = tools.removeFromRight (1).withSizeKeepingCentre (1, 18);
+        tools.removeFromRight (12);
+        clipChip = tools.withSizeKeepingCentre (tools.getWidth(), 28);
+
+        // Body: padding 16 / 14, the step numbers, then one row per sound.
+        auto area = getLocalBounds().withTrimmedTop (headerHeight).reduced (16, 14);
         stepNumbers = area.removeFromTop (18);
-        clearButton.setBounds (titleArea.withLeft (titleArea.getX() + headerWidth - 70).withWidth (60).reduced (0, 4));
+        area.removeFromTop (6);
 
         auto headerColumn = area.removeFromLeft (headerWidth);
         for (auto& h : headers)
-            h->setBounds (headerColumn.removeFromTop (rowHeight).withTrimmedRight (12));
+            h->setBounds (headerColumn.removeFromTop (rowHeight));
 
-        grid->setBounds (area.withHeight (rowHeight * numLanes));
+        grid->setBounds (area.withHeight (rowHeight * numLanes).expanded (glowMargin));
     }
 }

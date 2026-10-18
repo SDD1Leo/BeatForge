@@ -459,25 +459,8 @@ namespace beatforge
         // context (track) and the three modules.
         const auto* track = session.findTrack (trackId());
         if (const auto* selected = session.findTrack (target.getTrack()))
-        {
-            auto context = headerArea.withLeft (headerStart);
-            g.setColour (theme::border);
-            g.fillRect (context.removeFromLeft (1).withSizeKeepingCentre (1, 18));
-            context.removeFromLeft (16);
-            g.setColour (target.colourOf (selected->id));
-            g.fillRoundedRectangle (context.removeFromLeft (4).withSizeKeepingCentre (4, 16).toFloat(), 2.0f);
-            context.removeFromLeft (10);
-            g.setColour (theme::textPrimary);
-            g.setFont (theme::font (13.0f, juce::Font::bold));
-            const auto name = juce::String::fromUTF8 (selected->name.c_str());
-            const auto nameWidth = juce::jmin (220, juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), name) + 2);
-            g.drawText (name, context.removeFromLeft (nameWidth), juce::Justification::centredLeft, true);
-            context.removeFromLeft (8);
-            g.setColour (theme::textMuted);
-            g.setFont (theme::captionFont (9.0f));
-            g.drawText (selected->type == project::TrackType::drums ? "DRUMS" : "SYNTH", context.removeFromLeft (60),
-                        juce::Justification::centredLeft, false);
-        }
+            paintContext (g, target.colourOf (selected->id), juce::String::fromUTF8 (selected->name.c_str()),
+                          selected->type == project::TrackType::drums ? "DRUMS" : "SYNTH");
 
         if (track == nullptr)
         {

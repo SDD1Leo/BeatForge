@@ -129,7 +129,10 @@ namespace beatforge
     //==============================================================================
     juce::Font BeatForgeLookAndFeel::getComboBoxFont (juce::ComboBox& box)
     {
-        return juce::Font (theme::font (juce::jmin (13.0f, (float) box.getHeight() * 0.5f), juce::Font::bold));
+        const auto size = juce::jmin (13.0f, (float) box.getHeight() * 0.5f);
+        if (box.getProperties()["monoValue"])
+            return juce::Font (theme::numericFont (juce::jmin (12.0f, size), juce::Font::bold));
+        return juce::Font (theme::font (size, juce::Font::bold));
     }
 
     void BeatForgeLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height, bool isButtonDown,

@@ -8,7 +8,7 @@ namespace beatforge
     namespace
     {
         constexpr int numRows = PianoRollPanel::highestPitch - PianoRollPanel::lowestPitch + 1;
-        constexpr int velocityLaneHeight = 76;
+        constexpr int velocityLaneHeight = 104, rulerHeight = 22;
 
         bool isBlackKey (int pitch)
         {
@@ -73,7 +73,7 @@ namespace beatforge
         void setPlayhead (double clipTick)
         {
             // Covers the 2 px line and its anti-aliased edges at any position.
-            auto strip = [this] (double t) { return juce::Rectangle<int> ((int) std::floor (tickToX (t)) - 4, 0, 9, getHeight()); };
+            auto strip = [this] (double t) { return juce::Rectangle<int> ((int) std::floor (tickToX (t)) - 7, 0, 15, getHeight()); };
             if (playhead >= 0.0) repaint (strip (playhead));
             playhead = clipTick;
             if (playhead >= 0.0) repaint (strip (playhead));
@@ -89,32 +89,33 @@ namespace beatforge
             const auto perBar = owner.session.getProject().timeSignature.ticksPerBar();
             const auto clipBounds = g.getClipBounds();
 
-            // Pitch rows: black-key rows darker, a line at every C.
+            // Pitch rows (spec 9): black-key rows near-black, white-key rows lifted,
+            // a faint line under each row and a stronger one under every C.
+            g.setColour (theme::bgInset);
+            g.fillRect (clipBounds);
             for (int pitch = lowestPitch; pitch <= highestPitch; ++pitch)
             {
                 const auto y = pitchToY (pitch);
                 if (y > (float) clipBounds.getBottom() || y + rowHeight < (float) clipBounds.getY())
                     continue;
-                g.setColour (isBlackKey (pitch) ? theme::background : theme::panel);
+                g.setColour (isBlackKey (pitch) ? theme::bgApp.withAlpha (0.9f) : theme::bgSurface.withAlpha (0.55f));
                 g.fillRect (gridLeft(), y, gridWidth(), (float) rowHeight);
-                if (pitch % 12 == 0)
-                {
-                    g.setColour (theme::border);
-                    g.drawHorizontalLine ((int) (y + rowHeight) - 1, gridLeft(), (float) getWidth());
-                }
+                g.setColour (pitch % 12 == 0 ? theme::borderStrong : theme::borderSubtle);
+                g.fillRect (gridLeft(), y + (float) rowHeight - 1.0f, gridWidth(), 1.0f);
             }
 
             // Time lines: bars strong, beats medium, grid faint.
             for (time::Tick t = 0; t <= clipLen; t += grid)
             {
-                const auto x = (int) tickToX ((double) t);
-                g.setColour (t % perBar == 0 ? theme::borderStrong : (t % perBeat == 0 ? theme::border : theme::border.withAlpha (0.35f)));
-                g.drawVerticalLine (x, (float) clipBounds.getY(), (float) clipBounds.getBottom());
+                const auto x = std::round (tickToX ((double) t));
+                g.setColour (t % perBar == 0 ? theme::borderStrong : (t % perBeat == 0 ? theme::border : theme::borderSubtle.withAlpha (0.5f)));
+                g.fillRect (x, (float) clipBounds.getY(), 1.0f, (float) clipBounds.getHeight());
             }
 
-            // Notes: track colour, brightness follows velocity, selection outlined.
+            // Notes: track colour, opacity follows velocity; selection outlined white.
             if (clip)
             {
+                const auto colour = owner.noteColour();
                 for (auto& n : clip->notes)
                 {
                     if (n.start >= clip->length)
@@ -124,11 +125,18 @@ namespace beatforge
                         continue;
 
                     const bool selected = owner.selection.count (n.id) > 0;
-                    const auto colour = theme::track::synth;
-                    g.setColour (colour.withAlpha (0.45f + 0.55f * (float) n.velocity / 127.0f));
-                    g.fillRoundedRectangle (r, 2.5f);
-                    g.setColour (selected ? theme::textPrimary : colour.brighter (0.4f));
-                    g.drawRoundedRectangle (r, 2.5f, selected ? 1.6f : 1.0f);
+                    g.setColour (colour.withAlpha (0.55f + 0.45f * (float) n.velocity / 127.0f));
+                    g.fillRoundedRectangle (r, 3.0f);
+                    if (selected)
+                    {
+                        g.setColour (theme::textPrimary);
+                        g.drawRoundedRectangle (r.reduced (0.75f), 3.0f, 1.5f);
+                    }
+                    else
+                    {
+                        g.setColour (theme::purple.withAlpha (0.9f));
+                        g.drawRoundedRectangle (r.reduced (0.5f), 3.0f, 1.0f);
+                    }
                 }
             }
 
@@ -141,10 +149,14 @@ namespace beatforge
                 g.drawRect (marquee, 1.0f);
             }
 
-            // Playhead.
+            // Playhead: 2 px with a soft glow.
             if (playhead >= 0.0)
             {
                 const auto x = tickToX (playhead);
+                juce::ColourGradient glow (theme::playhead.withAlpha (0.0f), x - 6.0f, 0.0f, theme::playhead.withAlpha (0.0f), x + 6.0f, 0.0f, false);
+                glow.addColour (0.5, theme::playhead.withAlpha (0.35f));
+                g.setGradientFill (glow);
+                g.fillRect (x - 6.0f, (float) clipBounds.getY(), 12.0f, (float) clipBounds.getHeight());
                 g.setColour (theme::playhead);
                 g.fillRect (x - 1.0f, (float) clipBounds.getY(), 2.0f, (float) clipBounds.getHeight());
             }
@@ -152,13 +164,14 @@ namespace beatforge
             paintKeyboard (g, clipBounds);
         }
 
+        // Keyboard column (spec 9): ivory keys, black keys at 62 % width, C labels.
         void paintKeyboard (juce::Graphics& g, juce::Rectangle<int> visible)
         {
-            const float keysWidth = (float) keyboardWidth - 2.0f;
+            const float keysWidth = (float) keyboardWidth - 1.0f;
             const float blackWidth = keysWidth * 0.62f;
+            const auto held = owner.noteColour();
 
-            // One continuous ivory column; black keys and divisions on top.
-            g.setColour (theme::textPrimary.withAlpha (0.9f));
+            g.setColour (theme::textPrimary.withAlpha (0.88f));
             g.fillRect (0.0f, (float) visible.getY(), keysWidth, (float) visible.getHeight());
 
             for (int pitch = lowestPitch; pitch <= highestPitch; ++pitch)
@@ -168,36 +181,36 @@ namespace beatforge
                     continue;
 
                 const bool black = isBlackKey (pitch);
-                const bool held = pitch == heldPitch;
+                const bool isHeld = pitch == heldPitch;
 
                 if (black)
                 {
                     // White-key division runs through the middle of each black key.
-                    g.setColour (theme::border.withAlpha (0.6f));
-                    g.drawHorizontalLine ((int) (y + rowHeight * 0.5f), blackWidth, keysWidth);
+                    g.setColour (theme::border);
+                    g.fillRect (blackWidth, y + rowHeight * 0.5f - 0.25f, keysWidth - blackWidth, 0.5f);
 
-                    g.setColour (held ? theme::track::synth : theme::background);
+                    g.setColour (isHeld ? held : theme::bgApp);
                     g.fillRoundedRectangle (juce::Rectangle<float> (-3.0f, y + 1.0f, blackWidth + 3.0f, (float) rowHeight - 2.0f), 2.0f);
                 }
                 else
                 {
-                    if (held)
+                    if (isHeld)
                     {
-                        g.setColour (theme::track::synth);
+                        g.setColour (held);
                         g.fillRect (0.0f, y, keysWidth, (float) rowHeight);
                     }
 
                     // E-F and B-C have no black key between them: draw the edge.
                     if (! isBlackKey (pitch + 1))
                     {
-                        g.setColour (theme::border.withAlpha (0.6f));
-                        g.drawHorizontalLine ((int) y, 0.0f, keysWidth);
+                        g.setColour (theme::border);
+                        g.fillRect (0.0f, y - 0.25f, keysWidth, 0.5f);
                     }
 
                     if (pitch % 12 == 0)
                     {
-                        g.setColour (held ? theme::textPrimary : theme::background);
-                        g.setFont (theme::font (9.5f, juce::Font::bold));
+                        g.setColour (isHeld ? theme::textPrimary : theme::bgApp);
+                        g.setFont (theme::numericFont (9.0f));
                         g.drawText (pitchName (pitch), juce::Rectangle<float> (0.0f, y, keysWidth - 4.0f, (float) rowHeight),
                                     juce::Justification::centredRight);
                     }
@@ -205,7 +218,7 @@ namespace beatforge
             }
 
             g.setColour (theme::border);
-            g.drawVerticalLine (keyboardWidth - 1, (float) visible.getY(), (float) visible.getBottom());
+            g.fillRect ((float) keyboardWidth - 1.0f, (float) visible.getY(), 1.0f, (float) visible.getHeight());
         }
 
         // --- mouse ----------------------------------------------------------------
@@ -496,35 +509,45 @@ namespace beatforge
             setTooltip ("Velocity: drag a bar up or down (moves all selected notes together)");
         }
 
+        // Spec 9: a label column with the scale, then a stem and dot per note.
         void paint (juce::Graphics& g) override
         {
-            g.setColour (theme::panel);
+            g.setColour (theme::bgInset);
             g.fillRect (getLocalBounds());
-            g.setColour (theme::border);
-            g.drawHorizontalLine (0, 0.0f, (float) getWidth());
+            const auto area = barArea();
 
-            g.setColour (theme::textSecondary);
-            g.setFont (theme::captionFont (9.5f));
-            g.drawText ("VELOCITY", juce::Rectangle<int> (0, 6, keyboardWidth - 6, 14), juce::Justification::centredRight);
+            g.setColour (theme::bgPanel);
+            g.fillRect (0, 0, keyboardWidth, getHeight());
+            g.setColour (theme::border);
+            g.fillRect (keyboardWidth - 1, 0, 1, getHeight());
+            g.setColour (theme::textMuted);
+            g.setFont (theme::captionFont (8.0f));
+            g.drawText ("VELOCITY", juce::Rectangle<int> (8, 6, keyboardWidth - 10, 12), juce::Justification::centredLeft, false);
+            g.setFont (theme::numericFont (9.0f));
+            for (auto [v, label] : { std::pair { 127, "127" }, std::pair { 64, "64" }, std::pair { 0, "0" } })
+            {
+                const auto y = area.getBottom() - area.getHeight() * (float) v / 127.0f;
+                g.setColour (theme::textMuted);
+                g.drawText (label, juce::Rectangle<float> (8.0f, y - 6.0f, (float) keyboardWidth - 18.0f, 12.0f), juce::Justification::centredRight, false);
+                g.setColour (theme::borderSubtle.withAlpha (v == 0 ? 1.0f : 0.6f));
+                g.fillRect (area.getX(), std::round (y), area.getWidth(), 1.0f);
+            }
 
             const auto* clip = owner.clipPtr();
             if (! clip)
                 return;
 
-            const auto area = barArea();
-            g.setColour (theme::border.withAlpha (0.5f));
-            g.drawHorizontalLine ((int) area.getY(), area.getX(), area.getRight());
-
+            const auto colour = owner.noteColour();
             for (auto& n : clip->notes)
             {
                 if (n.start >= clip->length)
                     continue;
                 const bool selected = owner.selection.count (n.id) > 0;
-                const auto x = editor.tickToX ((double) n.start);
+                const auto x = editor.tickToX ((double) n.start) + 1.0f;
                 const auto h = area.getHeight() * (float) n.velocity / 127.0f;
-                g.setColour (selected ? theme::textPrimary : theme::track::synth);
-                g.fillRect (x, area.getBottom() - h, 3.0f, h);
-                g.fillEllipse (x - 2.0f, area.getBottom() - h - 3.5f, 7.0f, 7.0f);
+                g.setColour (selected ? theme::textPrimary : colour.withAlpha (0.85f));
+                g.fillRect (x - 1.0f, area.getBottom() - h, 2.0f, h);
+                g.fillEllipse (juce::Rectangle<float> (8.0f, 8.0f).withCentre ({ x, area.getBottom() - h }));
             }
         }
 
@@ -541,7 +564,7 @@ namespace beatforge
             {
                 if (n.start >= clip->length)
                     continue;
-                const auto d = std::abs (editor.tickToX ((double) n.start) + 1.5f - e.position.x)
+                const auto d = std::abs (editor.tickToX ((double) n.start) + 1.0f - e.position.x)
                              - (owner.selection.count (n.id) ? 0.5f : 0.0f);
                 if (d < bestDistance) { bestDistance = d; best = &n; }
             }
@@ -576,7 +599,8 @@ namespace beatforge
     private:
         juce::Rectangle<float> barArea() const
         {
-            return juce::Rectangle<float> (editor.gridLeft(), 10.0f, editor.gridWidth(), (float) getHeight() - 16.0f);
+            // Baseline 20 px above the bottom; full velocity 62 px above it (at 104 px tall).
+            return juce::Rectangle<float> (editor.gridLeft(), 22.0f, editor.gridWidth(), (float) getHeight() - 42.0f);
         }
 
         void setVelocityFromY (float y)
@@ -630,6 +654,9 @@ namespace beatforge
             newNoteLength = gridTicks();
             editor->repaint();
         };
+
+        for (auto* box : { &clipLengthBox, &gridBox })
+            box->getProperties().set ("monoValue", true);   // Mono Medium value (spec 9)
 
         quantizeButton.setTooltip ("Quantize the selected notes, or all notes if none are selected (Q)");
         quantizeButton.onClick = [this] { quantizeSelectionOrAll(); };
@@ -725,7 +752,7 @@ namespace beatforge
 
         editor->repaint();
         velocityLane->repaint();
-        repaint (headerArea);
+        repaint (headerBounds());
     }
 
     void PianoRollPanel::timerCallback()
@@ -748,66 +775,128 @@ namespace beatforge
 
     }
 
+    juce::Colour PianoRollPanel::noteColour() const
+    {
+        return trackId() != 0 ? target.colourOf (trackId()) : theme::track::synth;
+    }
+
     void PianoRollPanel::paint (juce::Graphics& g)
     {
-        const auto bounds = getLocalBounds().toFloat();
-        g.setColour (theme::panel);
-        g.fillRoundedRectangle (bounds, theme::cornerRadius);
-        g.setColour (theme::border);
-        g.drawRoundedRectangle (bounds.reduced (0.5f), theme::cornerRadius, theme::borderWidth);
-
-        // Header: track-colour stripe, caption, track name, note count.
-        auto header = headerArea;
         const auto* track = session.findTrack (trackId());
-        g.setColour (track != nullptr ? target.colourOf (track->id) : theme::textMuted);
-        g.fillRoundedRectangle (header.removeFromLeft (4).toFloat().reduced (0.0f, 6.0f), 2.0f);
-        header.removeFromLeft (10);
-        g.setColour (theme::textSecondary);
-        g.setFont (theme::captionFont());
-        g.drawText ("PIANO ROLL", header.removeFromLeft (88), juce::Justification::centredLeft);
-        g.setColour (theme::textPrimary);
-        g.setFont (theme::font (13.5f, juce::Font::bold));
-        g.drawText (track != nullptr ? juce::String::fromUTF8 (track->name.c_str()) : juce::String(), header.removeFromLeft (120),
-                    juce::Justification::centredLeft);
-
-        if (const auto* clip = clipPtr())
+        if (const auto* selected = session.findTrack (target.getTrack()))
         {
-            g.setColour (theme::textSecondary);
-            g.setFont (theme::font (12.5f));
-            const auto count = (int) std::count_if (clip->notes.begin(), clip->notes.end(),
-                                                    [&] (const midi::Note& n) { return n.start < clip->length; });
-            g.drawText (juce::String (count) + (count == 1 ? " note" : " notes")
-                            + (selection.empty() ? juce::String() : ", " + juce::String ((int) selection.size()) + " selected"),
-                        header.removeFromLeft (200), juce::Justification::centredLeft);
+            const auto end = paintContext (g, target.colourOf (selected->id), juce::String::fromUTF8 (selected->name.c_str()),
+                                           selected->type == project::TrackType::drums ? "DRUMS" : "SYNTH");
+            if (const auto* clip = clipPtr())
+            {
+                const auto count = (int) std::count_if (clip->notes.begin(), clip->notes.end(),
+                                                        [&] (const midi::Note& n) { return n.start < clip->length; });
+                paintChip (g, { end + 6, headerBounds().getCentreY() },
+                           juce::String (count) + (count == 1 ? " note" : " notes")
+                               + (selection.empty() ? juce::String() : juce::String::fromUTF8 (" \xc2\xb7 ") + juce::String ((int) selection.size()) + " selected"));
+            }
         }
-        else
+
+        const auto* clip = clipPtr();
+        if (clip == nullptr)
         {
             g.setColour (theme::textMuted);
             g.setFont (theme::font (14.0f));
             g.drawFittedText (track == nullptr ? "Select a synth track or one of its clips in the arrangement."
                                                : "This synth track has no clip selected. Double-click its lane in the arrangement, or:",
                               emptyArea.withTrimmedBottom (70).reduced (24, 0), juce::Justification::centred, 2);
+            return;
+        }
+
+        // Header captions and divider.
+        g.setColour (theme::textMuted);
+        g.setFont (theme::captionFont (9.0f));
+        g.drawText ("LENGTH", lengthCaption, juce::Justification::centredRight, false);
+        g.drawText ("SNAP", snapCaption, juce::Justification::centredRight, false);
+        g.setColour (theme::border);
+        g.fillRect (headerDivider);
+
+        // Frames (inset wells) behind the note grid and the velocity lane.
+        for (auto frame : { gridFrame, velocityLane->getBounds() })
+        {
+            g.setColour (theme::bgInset);
+            g.fillRoundedRectangle (frame.toFloat(), 8.0f);
+        }
+
+        // Ruler: song bar numbers over the clip.
+        const auto ruler = gridFrame.withHeight (rulerHeight);
+        g.setColour (theme::bgPanel);
+        g.fillRect (ruler);
+        g.setColour (theme::borderSubtle);
+        g.fillRect (ruler.withTop (ruler.getBottom() - 1));
+        const auto perBar = session.getProject().timeSignature.ticksPerBar();
+        const auto perBeat = session.getProject().timeSignature.ticksPerBeat();
+        g.setFont (theme::numericFont (10.0f, juce::Font::bold));
+        for (time::Tick t = 0; t < clip->length; t += perBeat)
+        {
+            const auto x = (float) viewport.getX() + editor->tickToX ((double) t);
+            if (t % perBar == 0)
+            {
+                g.setColour (theme::borderStrong);
+                g.fillRect (std::round (x), (float) ruler.getBottom() - 10.0f, 1.0f, 10.0f);
+                g.setColour (theme::textSecondary);
+                g.drawText (juce::String ((clip->start + t) / perBar + 1), juce::Rectangle<float> (x + 5.0f, (float) ruler.getY(), 40.0f, (float) rulerHeight - 2.0f),
+                            juce::Justification::centredLeft, false);
+            }
+            else
+            {
+                g.setColour (theme::border);
+                g.fillRect (std::round (x), (float) ruler.getBottom() - 5.0f, 1.0f, 5.0f);
+            }
+        }
+    }
+
+    void PianoRollPanel::paintOverChildren (juce::Graphics& g)
+    {
+        if (clipPtr() == nullptr)
+            return;
+
+        // Round the wells' corners over their contents, then outline them.
+        for (auto frame : { gridFrame, velocityLane->getBounds() })
+        {
+            const auto r = frame.toFloat();
+            juce::Path outside;
+            outside.addRectangle (r);
+            outside.addRoundedRectangle (r, 8.0f);
+            outside.setUsingNonZeroWinding (false);
+            g.setColour (theme::bgPanel);
+            g.fillPath (outside);
+            g.setColour (theme::borderSubtle);
+            g.drawRoundedRectangle (r.reduced (0.5f), 8.0f, 1.0f);
         }
     }
 
     void PianoRollPanel::resized()
     {
-        auto area = getLocalBounds().reduced (10, 6);
-        headerArea = area.removeFromTop (36);
+        // Header tools (right): LENGTH, SNAP, divider, Quantize.
+        auto tools = toolRow();
+        quantizeButton.setBounds (tools.removeFromRight (92));
+        tools.removeFromRight (12);
+        headerDivider = tools.removeFromRight (1).withSizeKeepingCentre (1, 18);
+        tools.removeFromRight (12);
+        gridBox.setBounds (tools.removeFromRight (86));
+        tools.removeFromRight (8);
+        snapCaption = tools.removeFromRight (34);
+        tools.removeFromRight (16);
+        clipLengthBox.setBounds (tools.removeFromRight (100));
+        tools.removeFromRight (8);
+        lengthCaption = tools.removeFromRight (48);
 
-        auto controls = headerArea;
-        quantizeButton.setBounds (controls.removeFromRight (92).reduced (0, 5));
-        controls.removeFromRight (8);
-        gridBox.setBounds (controls.removeFromRight (80).reduced (0, 5));
-        controls.removeFromRight (8);
-        clipLengthBox.setBounds (controls.removeFromRight (92).reduced (0, 5));
-
-        area.removeFromTop (4);
+        // Body: padding 12 x 16, the note grid (ruler + keys + rows), gap 8, velocity lane.
+        auto area = getLocalBounds().withTrimmedTop (headerHeight).reduced (16, 12);
         emptyArea = area;
         createButton.setBounds (area.withSizeKeepingCentre (230, 36));
 
         velocityLane->setBounds (area.removeFromBottom (velocityLaneHeight));
-        viewport.setBounds (area);
+        area.removeFromBottom (8);
+        gridFrame = area;
+        viewport.setBounds (area.withTrimmedTop (rulerHeight));
+        area = viewport.getBounds();
         editor->setSize (area.getWidth() - viewport.getScrollBarThickness(), numRows * rowHeight);
 
         if (! scrolledToMiddle && area.getHeight() > 0)
