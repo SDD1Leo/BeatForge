@@ -1,4 +1,5 @@
 #include "ui/TransportBar.h"
+#include "project/FilePaths.h"
 #include "ui/Theme.h"
 
 #include <beatforge/BuildInfo.h>
@@ -120,7 +121,7 @@ namespace beatforge
     {
         if (! savedArea.contains (getMouseXYRelative()))
             return {};
-        const auto file = session.getFile() ? juce::String (session.getFile()->string()) : juce::String();
+        const auto file = session.getFile() ? toFile (*session.getFile()).getFullPathName() : juce::String();
         if (! session.isDirty())
             return file.isEmpty() ? "New project, not saved yet (Ctrl+S)" : "All changes saved in " + file;
         auto text = juce::String ("Unsaved changes - Ctrl+S to save") + (file.isNotEmpty() ? " to " + file : juce::String());

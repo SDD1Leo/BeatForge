@@ -1,0 +1,44 @@
+# Builds BeatForge for Windows and runs every test on a real Windows machine.
+# The built app is attached to the run as an artifact (BeatForge-windows).
+name: Windows
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: MCP server (build, so its tests run under ctest)
+        working-directory: mcp
+        run: |
+          npm ci
+          npm run build
+
+      - name: Configure
+        run: cmake --preset windows
+
+      - name: Build (Release)
+        run: cmake --build --preset windows-release --parallel
+
+      - name: Test
+        run: ctest --preset windows-release --timeout 300
+
+      - name: Upload the app
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BeatForge-windows
+          path: build/windows/app/BeatForge_artefacts/Release/BeatForge.exe
+          if-no-files-found: warn

@@ -2,12 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { fileURLToPath } from "node:url";
 import { startFakeDaw } from "./fake-daw.mjs";
 
 async function connect(socketPath) {
   const client = new Client({ name: "test", version: "1" });
   await client.connect(new StdioClientTransport({
-    command: process.execPath, args: [new URL("../dist/index.js", import.meta.url).pathname],
+    command: process.execPath, args: [fileURLToPath(new URL("../dist/index.js", import.meta.url))],
     env: { ...process.env, BEATFORGE_SOCKET: socketPath }, stderr: "ignore",
   }));
   return client;
@@ -63,7 +64,7 @@ test("valid calls reach the app unchanged; app errors are tool errors with their
 });
 
 test("connection status reports a missing app without failing", async () => {
-  const client = await connect("/tmp/nothing-here/daw.sock");
+  const client = await connect(process.platform === "win32" ? "\\\\.\\pipe\\nothing-here" : "/tmp/nothing-here/daw.sock");
   const r = await client.callTool({ name: "get_connection_status", arguments: {} });
   const status = JSON.parse(r.content[0].text);
   assert.equal(status.connected, false);

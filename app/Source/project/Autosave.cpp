@@ -1,4 +1,5 @@
 #include "project/Autosave.h"
+#include "project/FilePaths.h"
 #include "project/ProjectActions.h"
 
 #include <beatforge/project/ProjectFile.h>
@@ -55,13 +56,13 @@ namespace beatforge
     void Autosave::write()
     {
         file.getParentDirectory().createDirectory();
-        const auto result = project::saveFile (session.getProject(), file.getFullPathName().toStdString(),
+        const auto result = project::saveFile (session.getProject(), toPath (file),
                                                ProjectActions::appVersion().toStdString());
         if (! result.ok())
             return;   // try again at the next tick; never bother the user about the safety copy
         written = session.getProject();
         lastWrite = juce::Time::getCurrentTime();
-        settings.setValue (originalKey, session.getFile() ? juce::String (session.getFile()->string()) : juce::String());
+        settings.setValue (originalKey, session.getFile() ? toFile (*session.getFile()).getFullPathName() : juce::String());
         settings.saveIfNeeded();
         if (onAutosaved) onAutosaved();
     }
@@ -88,13 +89,13 @@ namespace beatforge
     {
         if (! file.existsAsFile())
             return std::nullopt;
-        auto loaded = project::loadFile (file.getFullPathName().toStdString());
+        auto loaded = project::loadFile (toPath (file));
         if (! loaded.project)
             return std::nullopt;
         Recovery r { std::move (*loaded.project), std::nullopt, file.getLastModificationTime() };
         const auto original = settings.getValue (originalKey);
         if (original.isNotEmpty())
-            r.originalFile = original.toStdString();
+            r.originalFile = toPath (juce::File (original));
         return r;
     }
 }

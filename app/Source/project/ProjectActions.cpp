@@ -1,4 +1,5 @@
 #include "project/ProjectActions.h"
+#include "project/FilePaths.h"
 #include "ui/ExportAudioDialog.h"
 
 #include <beatforge/BuildInfo.h>
@@ -113,7 +114,7 @@ namespace beatforge
 
     void ProjectActions::loadFile (const juce::File& file)
     {
-        const auto result = project::loadFile (file.getFullPathName().toStdString());
+        const auto result = project::loadFile (toPath (file));
 
         if (! result.ok())
         {
@@ -121,7 +122,7 @@ namespace beatforge
             return;
         }
 
-        session.openProject (*result.project, file.getFullPathName().toStdString());
+        session.openProject (*result.project, toPath (file));
         rememberRecent (file);
 
         if (reportToConsole)
@@ -144,7 +145,7 @@ namespace beatforge
     void ProjectActions::save (std::function<void (bool)> done)
     {
         if (const auto& file = session.getFile())
-            saveTo (juce::File (juce::String (file->string())), std::move (done));
+            saveTo (toFile (*file), std::move (done));
         else
             saveAs (std::move (done));
     }
@@ -177,7 +178,7 @@ namespace beatforge
     void ProjectActions::exportMidiWithChooser()
     {
         // Next to the project file when there is one.
-        auto folder = session.getFile() ? juce::File (juce::String (session.getFile()->parent_path().string())) : defaultFolder();
+        auto folder = session.getFile() ? toFile (session.getFile()->parent_path()) : defaultFolder();
         folder.createDirectory();
         const auto suggested = folder.getChildFile (juce::File::createLegalFileName (toJuce (session.getProject().name)))
                                    .withFileExtension (".mid");
@@ -196,7 +197,7 @@ namespace beatforge
     bool ProjectActions::exportMidiTo (const juce::File& file)
     {
         const auto& p = session.getProject();
-        const auto error = project::saveMidiFile (p, file.getFullPathName().toStdString());
+        const auto error = project::saveMidiFile (p, toPath (file));
         if (! error.empty())
         {
             showError ("Could not export MIDI", toJuce (error));
@@ -214,7 +215,7 @@ namespace beatforge
 
     bool ProjectActions::exportAudioTo (const juce::File& file, const project::AudioExportOptions& options)
     {
-        const auto result = project::exportAudio (session.getProject(), file.getFullPathName().toStdString(), options);
+        const auto result = project::exportAudio (session.getProject(), toPath (file), options);
         if (! result.ok())
         {
             showError ("Could not export audio", toJuce (result.error));
@@ -230,7 +231,7 @@ namespace beatforge
         if (session.getProject().name == project::Project {}.name)
             session.renameProject (file.getFileNameWithoutExtension().substring (0, project::Project::maxNameLength).toStdString());
 
-        const auto result = project::saveFile (session.getProject(), file.getFullPathName().toStdString(),
+        const auto result = project::saveFile (session.getProject(), toPath (file),
                                                appVersion().toStdString());
 
         if (! result.ok())
@@ -240,7 +241,7 @@ namespace beatforge
             return;
         }
 
-        session.markSaved (file.getFullPathName().toStdString());
+        session.markSaved (toPath (file));
         rememberRecent (file);
 
         if (reportToConsole)

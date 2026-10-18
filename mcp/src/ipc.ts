@@ -1,11 +1,14 @@
-// Client side of BeatForge's local IPC: a Unix domain socket, one JSON
-// request/response per line. See core/include/beatforge/ipc/IpcServer.h.
+// Client side of BeatForge's local IPC: a Unix domain socket (Linux) or a named
+// pipe (Windows), one JSON request/response per line.
+// See core/include/beatforge/ipc/IpcServer.h.
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
 export function defaultSocketPath(): string {
   if (process.env.BEATFORGE_SOCKET) return process.env.BEATFORGE_SOCKET;
+  // Same name as the app: \\.\pipe\beatforge-<user name> (a backslash would end it).
+  if (process.platform === "win32") return `\\\\.\\pipe\\beatforge-${os.userInfo().username.replace(/\\/g, "_")}`;
   if (process.env.XDG_RUNTIME_DIR) return path.join(process.env.XDG_RUNTIME_DIR, "beatforge", "daw.sock");
   return path.join("/tmp", `beatforge-${os.userInfo().uid}`, "daw.sock");
 }

@@ -9,6 +9,13 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(BEATFORGE_BUILD_TESTS "Build BeatForge tests" ON)
 
+if(MSVC)
+    # Sources are UTF-8 (they contain characters such as · and −).
+    add_compile_options(/utf-8)
+    # Link the C++ runtime into the program, so no Visual C++ Redistributable is needed.
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/JUCE/CMakeLists.txt")
     message(FATAL_ERROR "JUCE submodule missing. Run: git submodule update --init --depth 1")
 endif()

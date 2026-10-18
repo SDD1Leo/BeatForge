@@ -1,4 +1,5 @@
 #include "beatforge/project/ProjectFile.h"
+#include "beatforge/util/Paths.h"
 
 #include <nlohmann/json.hpp>
 
@@ -800,7 +801,7 @@ namespace beatforge::project
 
         if (! std::filesystem::is_regular_file (path, ec))
         {
-            result.error = "The file " + path.string() + " does not exist or is not a regular file.";
+            result.error = "The file " + pathToUtf8 (path) + " does not exist or is not a regular file.";
             return result;
         }
 
@@ -832,7 +833,7 @@ namespace beatforge::project
             errno = 0;
             std::ofstream out (temp, std::ios::binary | std::ios::trunc);
             if (! out)
-                return { "Could not write to " + path.parent_path().string() + ": " + std::strerror (errno)
+                return { "Could not write to " + pathToUtf8 (path.parent_path()) + ": " + std::strerror (errno)
                          + ". Check that the folder exists and is writable." };
 
             out << text;
@@ -851,7 +852,7 @@ namespace beatforge::project
         {
             std::error_code ignored;
             std::filesystem::remove (temp, ignored);
-            return { "Could not replace " + path.filename().string() + ": " + ec.message() + ". The previous file was not changed." };
+            return { "Could not replace " + pathToUtf8 (path.filename()) + ": " + ec.message() + ". The previous file was not changed." };
         }
 
         return {};

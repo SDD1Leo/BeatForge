@@ -1,4 +1,5 @@
 #include "ui/ExportAudioDialog.h"
+#include "project/FilePaths.h"
 #include "ui/Theme.h"
 
 #include <cmath>
@@ -159,7 +160,7 @@ namespace beatforge
         setState (State::rendering);
 
         // A snapshot: later edits do not reach this render.
-        worker = std::thread ([this, snapshot = session.getProject(), path = file.getFullPathName().toStdString()]
+        worker = std::thread ([this, snapshot = session.getProject(), path = toPath (file)]
         {
             result = project::exportAudio (snapshot, path, running, &progress);
             finished = true;

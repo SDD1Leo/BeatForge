@@ -6,7 +6,10 @@ import path from "node:path";
 
 export async function startFakeDaw(handler) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bf-mcp-"));
-  const socketPath = path.join(dir, "daw.sock");
+  // Windows: a named pipe, as the app uses there.
+  const socketPath = process.platform === "win32"
+    ? `\\\\.\\pipe\\${path.basename(dir)}`
+    : path.join(dir, "daw.sock");
   const requests = [];
   const sockets = new Set();
   const server = net.createServer((socket) => {

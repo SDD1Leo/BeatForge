@@ -47,12 +47,14 @@ endif()
 # recent files or MIDI device choices.
 set(APP_TEST_HOME "${CMAKE_CURRENT_BINARY_DIR}/app-test-home")
 file(MAKE_DIRECTORY "${APP_TEST_HOME}")
+# HOME is enough on Linux; Windows keeps settings in %APPDATA%, so point the app there too.
+set(APP_TEST_ENV "HOME=${APP_TEST_HOME};BEATFORGE_CONFIG_DIR=${APP_TEST_HOME}/config")
 
 add_test(NAME app_smoke_launch
     COMMAND ${SMOKE_LAUNCHER} $<TARGET_FILE:BeatForge> --smoke-test)
 set_tests_properties(app_smoke_launch PROPERTIES
     TIMEOUT 30
-    ENVIRONMENT "HOME=${APP_TEST_HOME}"
+    ENVIRONMENT "${APP_TEST_ENV}"
     PASS_REGULAR_EXPRESSION "SMOKE: window shown.*BeatForge shut down cleanly"
     FAIL_REGULAR_EXPRESSION "JUCE Assertion failure|leaked objects")
 
@@ -71,7 +73,7 @@ foreach(case IN LISTS OPEN_CASES)
         COMMAND ${SMOKE_LAUNCHER} $<TARGET_FILE:BeatForge> --smoke-test "${FIXTURES}/${name}.beatforge")
     set_tests_properties(app_open_${name} PROPERTIES
         TIMEOUT 30
-        ENVIRONMENT "HOME=${APP_TEST_HOME}"
+        ENVIRONMENT "${APP_TEST_ENV}"
         PASS_REGULAR_EXPRESSION "${expected}"
         FAIL_REGULAR_EXPRESSION "JUCE Assertion failure|leaked objects")
 endforeach()
@@ -82,7 +84,7 @@ add_test(NAME app_export_midi
             "--export-midi=${CMAKE_CURRENT_BINARY_DIR}/house-demo.mid")
 set_tests_properties(app_export_midi PROPERTIES
     TIMEOUT 30
-    ENVIRONMENT "HOME=${APP_TEST_HOME}"
+    ENVIRONMENT "${APP_TEST_ENV}"
     PASS_REGULAR_EXPRESSION "SMOKE: MIDI exported: house-demo.mid [0-9]+ tracks?, [1-9][0-9]* notes"
     FAIL_REGULAR_EXPRESSION "JUCE Assertion failure|leaked objects|Could not export")
 
@@ -92,7 +94,7 @@ add_test(NAME app_export_wav
             "--export-wav=${CMAKE_CURRENT_BINARY_DIR}/house-demo.wav" --wav-rate=44100 --wav-bits=16)
 set_tests_properties(app_export_wav PROPERTIES
     TIMEOUT 60
-    ENVIRONMENT "HOME=${APP_TEST_HOME}"
+    ENVIRONMENT "${APP_TEST_ENV}"
     PASS_REGULAR_EXPRESSION "SMOKE: Audio exported: house-demo.wav: [0-9]+:[0-9.]+ .*44.1 kHz 16-bit, peak -?[0-9.]+ dBFS"
     FAIL_REGULAR_EXPRESSION "JUCE Assertion failure|leaked objects|Could not export")
 

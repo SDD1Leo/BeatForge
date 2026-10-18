@@ -1,4 +1,5 @@
 #include "MainComponent.h"
+#include "project/FilePaths.h"
 #include "audio/AudioDeviceController.h"
 #include "ui/BeatForgeLookAndFeel.h"
 #include "ui/Theme.h"
@@ -273,6 +274,12 @@ namespace beatforge
             options.folderName = "BeatForge";
            #endif
             options.filenameSuffix = ".settings";
+
+            // $BEATFORGE_CONFIG_DIR: settings (and the crash-recovery copy next to
+            // them) in that folder instead. Tests use it; HOME does not move
+            // the settings on Windows.
+            if (const auto configDir = juce::SystemStats::getEnvironmentVariable ("BEATFORGE_CONFIG_DIR", {}); configDir.isNotEmpty())
+                options.folderName = configDir;   // an absolute folder replaces the default location
             options.osxLibrarySubFolder = "Application Support";
             migrateOldSettings (options);
             settings.setStorageParameters (options);
@@ -331,7 +338,7 @@ namespace beatforge
             {
                 std::string error;
                 if (mainWindow->getMainComponent().startAiBridge (error))
-                    std::cout << "MCP bridge listening on " << ipc::IpcServer::defaultPath().string() << std::endl;
+                    std::cout << "MCP bridge listening on " << pathToUtf8 (ipc::IpcServer::defaultPath()) << std::endl;
                 else
                     std::cout << "MCP bridge off: " << error << std::endl;
             }

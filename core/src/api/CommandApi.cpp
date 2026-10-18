@@ -1,4 +1,5 @@
 #include "beatforge/api/CommandApi.h"
+#include "beatforge/util/Paths.h"
 #include "beatforge/midi/Note.h"
 #include "beatforge/project/MidiExport.h"
 #include "beatforge/project/ProjectFile.h"
@@ -237,12 +238,12 @@ namespace beatforge::api
     std::filesystem::path CommandApi::fileArg (const Json& args, const char* extension, bool forWriting) const
     {
         namespace fs = std::filesystem;
-        fs::path p = text (args, "file", 1024);
+        fs::path p = pathFromUtf8 (text (args, "file", 1024));
         if (p.is_relative())
             p = env.allowedFolders.front() / p;
         if (! p.has_extension())
             p += extension;
-        else if (lower (p.extension().string()) != extension)
+        else if (lower (pathToUtf8 (p.extension())) != extension)
             invalid ("the file must end in " + std::string (extension));
 
         std::error_code ec;
@@ -262,14 +263,14 @@ namespace beatforge::api
         if (! allowed)
         {
             std::string roots;
-            for (auto& r : env.allowedFolders) roots += (roots.empty() ? "" : ", ") + r.string();
+            for (auto& r : env.allowedFolders) roots += (roots.empty() ? "" : ", ") + pathToUtf8 (r);
             fail ("path_not_allowed", "files can only be used inside: " + roots);
         }
 
         if (forWriting)
             fs::create_directories (target.parent_path(), ec);
         else if (! fs::exists (target))
-            fail ("not_found", target.string() + " does not exist");
+            fail ("not_found", pathToUtf8 (target) + " does not exist");
         return target;
     }
 
@@ -338,7 +339,7 @@ namespace beatforge::api
         for (auto& t : p.tracks)
             tracks.push_back (trackJson (t));
         return { { "name", p.name },
-                 { "file", session.getFile() ? Json (session.getFile()->string()) : Json (nullptr) },
+                 { "file", session.getFile() ? Json (pathToUtf8 (*session.getFile())) : Json (nullptr) },
                  { "unsaved_changes", session.isDirty() },
                  { "tempo_bpm", p.tempo },
                  { "time_signature", std::to_string (p.timeSignature.numerator) + "/" + std::to_string (p.timeSignature.denominator) },
@@ -375,7 +376,7 @@ namespace beatforge::api
         if (op == "hello")
         {
             Json folders = Json::array();
-            for (auto& f : env.allowedFolders) folders.push_back (f.string());
+            for (auto& f : env.allowedFolders) folders.push_back (pathToUtf8 (f));
             return { { "app", "BeatForge" }, { "version", env.appVersion }, { "protocol", 1 },
                      { "operations", operations() }, { "allowed_folders", folders } };
         }
@@ -397,7 +398,7 @@ namespace beatforge::api
             {
                 file = fileArg (a, project::fileExtension, true);
                 if (std::filesystem::exists (file) && (! session.getFile() || *session.getFile() != file))
-                    requireConfirm (a, "overwrite", file.string() + " already exists and would be replaced.");
+                    requireConfirm (a, "overwrite", pathToUtf8 (file) + " already exists and would be replaced.");
             }
             else if (session.getFile())
                 file = *session.getFile();
@@ -405,13 +406,13 @@ namespace beatforge::api
                 fail ("file_required", "the project has never been saved; give a file name (e.g. \"My Song\")");
 
             if (p.name == project::Project {}.name)   // like Save As: an untitled project takes the file's name
-                session.renameProject (file.stem().string().substr (0, (size_t) project::Project::maxNameLength));
+                session.renameProject (pathToUtf8 (file.stem()).substr (0, (size_t) project::Project::maxNameLength));
             const auto saved = project::saveFile (session.getProject(), file, env.appVersion);
             if (! saved.ok())
                 fail ("save_failed", saved.error);
             session.markSaved (file);
             if (env.fileSaved) env.fileSaved (file);
-            return { { "file", file.string() }, { "name", session.getProject().name } };
+            return { { "file", pathToUtf8 (file) }, { "name", session.getProject().name } };
         }
 
         if (op == "open_project")
@@ -822,10 +823,10 @@ namespace beatforge::api
 
             const auto file = fileArg (a, ".wav", true);
             if (std::filesystem::exists (file))
-                requireConfirm (a, "overwrite", file.string() + " already exists and would be replaced.");
+                requireConfirm (a, "overwrite", pathToUtf8 (file) + " already exists and would be replaced.");
             for (auto& [id, job] : jobs)
                 if (! job->done && job->file == file)
-                    fail ("busy", "export " + id + " is already writing " + file.string());
+                    fail ("busy", "export " + id + " is already writing " + pathToUtf8 (file));
             if (o.range == project::AudioExportOptions::Range::song && project::songEnd (p) <= 0)
                 fail ("nothing_to_export", "the song has no clips yet");
 
@@ -841,7 +842,7 @@ namespace beatforge::api
             });
             const auto id = job->id;
             jobs[id] = std::move (job);
-            return { { "job", id }, { "file", file.string() }, { "state", "running" },
+            return { { "job", id }, { "file", pathToUtf8 (file) }, { "state", "running" },
                      { "hint", "poll get_export_status with this job id" } };
         }
 
@@ -856,7 +857,7 @@ namespace beatforge::api
             if (job.done && job.thread.joinable())
                 job.thread.join();
 
-            Json j { { "job", id }, { "file", job.file.string() } };
+            Json j { { "job", id }, { "file", pathToUtf8 (job.file) } };
             if (! job.done)
             {
                 j["state"] = job.progress.cancel ? "cancelling" : "running";
@@ -885,11 +886,11 @@ namespace beatforge::api
         {
             const auto file = fileArg (a, ".mid", true);
             if (std::filesystem::exists (file))
-                requireConfirm (a, "overwrite", file.string() + " already exists and would be replaced.");
+                requireConfirm (a, "overwrite", pathToUtf8 (file) + " already exists and would be replaced.");
             const auto error = project::saveMidiFile (p, file);
             if (! error.empty()) fail ("export_failed", error);
             const auto e = project::exportMidi (p);
-            return { { "file", file.string() }, { "tracks", e.tracksWritten }, { "notes", e.notes },
+            return { { "file", pathToUtf8 (file) }, { "tracks", e.tracksWritten }, { "notes", e.notes },
                      { "bars", (double) e.length / (double) perBar } };
         }
 

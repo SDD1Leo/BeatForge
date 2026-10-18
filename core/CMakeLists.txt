@@ -18,6 +18,7 @@ add_library(beatforge_core STATIC
     src/audio/WavFile.cpp
     src/dsp/Biquad.cpp
     src/ipc/IpcServer.cpp
+    $<IF:$<BOOL:${WIN32}>,src/ipc/IpcServer_windows.cpp,src/ipc/IpcServer_posix.cpp>
     src/midi/MidiFile.cpp
     src/midi/Note.cpp
     src/project/AudioExport.cpp
@@ -35,4 +36,11 @@ target_include_directories(beatforge_core PUBLIC include)
 # JSON is part of the command API (api/CommandApi.h), so users of core see it too.
 target_link_libraries(beatforge_core PUBLIC nlohmann_json::nlohmann_json)
 target_compile_features(beatforge_core PUBLIC cxx_std_20)
-target_compile_options(beatforge_core PRIVATE -Wall -Wextra -Wpedantic)
+if(MSVC)
+    target_compile_options(beatforge_core PRIVATE /W4 /permissive-)
+    # strerror/getenv are fine here; NOMINMAX keeps <windows.h> from breaking std::min/max.
+    target_compile_definitions(beatforge_core PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+    target_link_libraries(beatforge_core PRIVATE advapi32)
+else()
+    target_compile_options(beatforge_core PRIVATE -Wall -Wextra -Wpedantic)
+endif()

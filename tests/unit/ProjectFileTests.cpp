@@ -7,7 +7,7 @@
 
 #include <filesystem>
 #include <fstream>
-#include <unistd.h>
+#include "TestSupport.h"
 
 using namespace beatforge::project;
 using Catch::Matchers::ContainsSubstring;
@@ -68,7 +68,7 @@ namespace
 
     struct TempDir
     {
-        TempDir() : path (fs::temp_directory_path() / ("beatforge-test-" + std::to_string (::getpid()) + "-" + std::to_string (counter++)))
+        TempDir() : path (fs::temp_directory_path() / ("beatforge-test-" + std::to_string (beatforge::test::processId()) + "-" + std::to_string (counter++)))
         {
             fs::create_directories (path);
         }

@@ -1,4 +1,5 @@
 #include "MainComponent.h"
+#include "project/FilePaths.h"
 #include "ui/ShortcutsDialog.h"
 #include "ui/UserGuideDialog.h"
 #include "ui/Theme.h"
@@ -185,7 +186,7 @@ namespace beatforge
     bool MainComponent::startAiBridge (std::string& error)
     {
         api::CommandApi::Environment env;
-        env.allowedFolders = { actions.defaultFolder().getFullPathName().toStdString() };
+        env.allowedFolders = { toPath (actions.defaultFolder()) };
         env.appVersion = ProjectActions::appVersion().toStdString();
         env.audioAvailable = [this] { return deviceOpen; };
         env.reveal = [this] (project::TrackId track, project::ClipId clip)
@@ -193,7 +194,7 @@ namespace beatforge
             if (clip != 0) selection.selectClip (clip);
             else           selection.selectTrack (track);
         };
-        env.fileSaved = [this] (const std::filesystem::path& file) { actions.noteSaved (juce::File (juce::String (file.string()))); };
+        env.fileSaved = [this] (const std::filesystem::path& file) { actions.noteSaved (toFile (file)); };
 
         aiBridge = std::make_unique<AiBridge> (session, engine, std::move (env));
         return aiBridge->start (error);
@@ -445,7 +446,7 @@ namespace beatforge
             return;
         }
 
-        const auto current = session.getFile() ? juce::File (juce::String (session.getFile()->string())) : juce::File();
+        const auto current = session.getFile() ? toFile (*session.getFile()) : juce::File();
         auto browser = std::make_unique<ProjectBrowser> (actions.defaultFolder(), actions.getRecentFiles(), current);
         auto close = [this]
         {
@@ -477,7 +478,7 @@ namespace beatforge
 
         auto folder = juce::File (appSettings.getValue ("exportFolder"));
         if (session.getFile())
-            folder = juce::File (juce::String (session.getFile()->parent_path().string()));
+            folder = toFile (session.getFile()->parent_path());
         else if (! folder.isDirectory())
             folder = actions.defaultFolder();
 

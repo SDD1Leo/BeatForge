@@ -1,6 +1,8 @@
 #include "ui/DrumMachinePanel.h"
 #include "ui/Theme.h"
 
+#include <limits>
+
 namespace beatforge
 {
     namespace

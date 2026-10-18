@@ -4,10 +4,24 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/un.h>
-#include <unistd.h>
+
+#include "TestSupport.h"
+
+#ifdef _WIN32
+ #ifndef NOMINMAX
+  #define NOMINMAX
+ #endif
+ #ifndef WIN32_LEAN_AND_MEAN
+  #define WIN32_LEAN_AND_MEAN
+ #endif
+ #include <windows.h>
+#else
+ #include <cstring>
+ #include <sys/socket.h>
+ #include <sys/stat.h>
+ #include <sys/un.h>
+ #include <unistd.h>
+#endif
 
 using namespace beatforge;
 using api::Json;
@@ -15,7 +29,55 @@ namespace fs = std::filesystem;
 
 namespace
 {
-    fs::path testDir() { return fs::temp_directory_path() / ("beatforge-ipc-test-" + std::to_string (getpid())); }
+    fs::path testDir() { return fs::temp_directory_path() / ("beatforge-ipc-test-" + std::to_string (test::processId())); }
+
+   #ifdef _WIN32
+    fs::path testEndpoint() { return fs::path (L"\\\\.\\pipe\\beatforge-ipc-test-" + std::to_wstring (test::processId())); }
+
+    // A named-pipe client, as the MCP server connects on Windows.
+    struct Client
+    {
+        HANDLE pipe = INVALID_HANDLE_VALUE;
+        std::string pending;
+
+        explicit Client (const fs::path& path)
+        {
+            for (int attempt = 0; attempt < 50 && pipe == INVALID_HANDLE_VALUE; ++attempt)
+            {
+                pipe = CreateFileW (path.wstring().c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+                if (pipe == INVALID_HANDLE_VALUE)
+                    WaitNamedPipeW (path.wstring().c_str(), 100);   // all instances busy: the server is between accepts
+            }
+            REQUIRE (pipe != INVALID_HANDLE_VALUE);
+        }
+        ~Client() { CloseHandle (pipe); }
+
+        void send (const std::string& s)
+        {
+            DWORD written = 0;
+            REQUIRE (WriteFile (pipe, s.data(), (DWORD) s.size(), &written, nullptr));
+            REQUIRE (written == s.size());
+        }
+
+        std::string line()
+        {
+            for (;;)
+            {
+                if (const auto nl = pending.find ('\n'); nl != std::string::npos)
+                {
+                    auto l = pending.substr (0, nl);
+                    pending.erase (0, nl + 1);
+                    return l;
+                }
+                char buf[4096];
+                DWORD n = 0;
+                if (! ReadFile (pipe, buf, sizeof (buf), &n, nullptr) || n == 0) return {};
+                pending.append (buf, n);
+            }
+        }
+    };
+   #else
+    fs::path testEndpoint() { return testDir() / "daw.sock"; }
 
     struct Client
     {
@@ -51,6 +113,7 @@ namespace
             }
         }
     };
+   #endif
 
     struct ServerRig
     {
@@ -61,7 +124,7 @@ namespace
         {
             return ipc::handleRequestLine (l, [this] (const std::string& op, const Json& args) { return api.execute (op, args); });
         } };
-        fs::path path = testDir() / "daw.sock";
+        fs::path path = testEndpoint();
 
         ServerRig()
         {
@@ -102,6 +165,33 @@ TEST_CASE ("Requests over the socket reach the command API and are answered in o
     REQUIRE (rig.server.getClientCount() == 1);
 }
 
+#ifdef _WIN32
+TEST_CASE ("The pipe is never taken over by a second BeatForge", "[ipc][safety]")
+{
+    ServerRig rig;
+
+    ipc::IpcServer second ([] (const std::string&) { return std::string ("{}"); });
+    std::string error;
+    REQUIRE_FALSE (second.start (rig.path, error));
+    REQUIRE (error.find ("another BeatForge") != std::string::npos);
+
+    // Once the first one stops, the name is free again.
+    rig.server.stop();
+    REQUIRE (second.start (rig.path, error));
+    {
+        Client c (rig.path);
+        c.send ("{\"id\": 1, \"op\": \"x\"}\n");
+        REQUIRE (Json::parse (c.line()) == Json::object());
+    }
+    second.stop();
+
+    // Only pipe names are accepted on Windows.
+    ipc::IpcServer third ([] (const std::string&) { return std::string ("{}"); });
+    REQUIRE_FALSE (third.start (testDir() / "daw.sock", error));
+    REQUIRE (error.find ("not a pipe name") != std::string::npos);
+}
+
+#else
 TEST_CASE ("The socket is private and never taken over", "[ipc][safety]")
 {
     ServerRig rig;
@@ -139,6 +229,7 @@ TEST_CASE ("The socket is private and never taken over", "[ipc][safety]")
     REQUIRE_FALSE (third.start (open / "daw.sock", error));
     REQUIRE (error.find ("private") != std::string::npos);
 }
+#endif
 
 TEST_CASE ("Oversized requests are refused and the client is disconnected", "[ipc]")
 {

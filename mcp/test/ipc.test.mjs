@@ -26,8 +26,11 @@ test("a request the app never answers times out", async () => {
   await daw.close();
 });
 
+const missingEndpoint = process.platform === "win32"
+  ? "\\\\.\\pipe\\definitely-not-beatforge" : "/tmp/definitely-not-beatforge/daw.sock";
+
 test("no app running: a clear not_running error", async () => {
-  const client = new BeatForgeClient("/tmp/definitely-not-beatforge/daw.sock", 1000);
+  const client = new BeatForgeClient(missingEndpoint, 1000);
   await assert.rejects(client.request("hello"), (e) => e.code === "not_running" && /Start BeatForge/.test(e.message));
 });
 

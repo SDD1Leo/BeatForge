@@ -1,4 +1,5 @@
 #include "beatforge/project/MidiExport.h"
+#include "beatforge/util/Paths.h"
 #include "beatforge/project/ScheduleBuilder.h"
 
 #include <algorithm>
@@ -121,7 +122,7 @@ namespace beatforge::project
             errno = 0;
             std::ofstream out (temp, std::ios::binary | std::ios::trunc);
             if (! out)
-                return "Could not write to " + path.parent_path().string() + ": " + std::strerror (errno)
+                return "Could not write to " + pathToUtf8 (path.parent_path()) + ": " + std::strerror (errno)
                        + ". Check that the folder exists and is writable.";
             out.write (reinterpret_cast<const char*> (bytes.data()), (std::streamsize) bytes.size());
             out.flush();
@@ -139,7 +140,7 @@ namespace beatforge::project
         {
             std::error_code ignored;
             std::filesystem::remove (temp, ignored);
-            return "Could not replace " + path.filename().string() + ": " + ec.message() + ".";
+            return "Could not replace " + pathToUtf8 (path.filename()) + ": " + ec.message() + ".";
         }
         return {};
     }

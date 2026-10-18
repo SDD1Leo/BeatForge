@@ -5,18 +5,26 @@
 #include <atomic>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <string>
 #include <thread>
 
 namespace beatforge::ipc
 {
-    // Local IPC for the MCP bridge: a Unix domain socket (Linux), never a
-    // network port. Access control is the operating system's:
-    //  - the socket lives in a private folder (mode 0700, owned by the user):
+    // Local IPC for the MCP bridge, never a network port. Access control is the
+    // operating system's.
+    //
+    // Linux: a Unix domain socket.
+    //  - It lives in a private folder (mode 0700, owned by the user):
     //    $BEATFORGE_SOCKET, else $XDG_RUNTIME_DIR/beatforge/daw.sock, else
     //    /tmp/beatforge-<uid>/daw.sock;
     //  - the socket file is mode 0600, and every connection's peer user id is
     //    checked (SO_PEERCRED) against ours.
+    //
+    // Windows: a named pipe, $BEATFORGE_SOCKET or \\.\pipe\beatforge-<user name>.
+    //  - Its security descriptor lets only the current user open it, remote
+    //    clients are rejected, and each client's user is checked against ours;
+    //  - FILE_FLAG_FIRST_PIPE_INSTANCE: a second BeatForge cannot take it over.
     //
     // Protocol: one JSON object per line (UTF-8, "\n"-terminated, max 1 MiB):
     //   request   {"id": 7, "op": "set_tempo", "args": {"bpm": 128}}
@@ -48,9 +56,11 @@ namespace beatforge::ipc
     private:
         void loop();
 
+        struct Platform;   // the OS side: socket descriptors, or pipe handles
+        std::unique_ptr<Platform> os;
+
         Handler handler;
         std::filesystem::path path;
-        int listenFd = -1, wakeRead = -1, wakeWrite = -1;
         std::thread thread;
         std::atomic<bool> running { false };
         std::atomic<int> clients { 0 };

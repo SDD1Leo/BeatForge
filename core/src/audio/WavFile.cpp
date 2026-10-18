@@ -1,4 +1,5 @@
 #include "beatforge/audio/WavFile.h"
+#include "beatforge/util/Paths.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -66,7 +67,7 @@ namespace beatforge::audio
         out.open (temp, std::ios::binary | std::ios::trunc);
         if (! out)
         {
-            error = "Could not write to " + path.parent_path().string() + ": " + std::strerror (errno)
+            error = "Could not write to " + pathToUtf8 (path.parent_path()) + ": " + std::strerror (errno)
                     + ". Check that the folder exists and is writable.";
             return false;
         }
@@ -170,7 +171,7 @@ namespace beatforge::audio
         {
             std::error_code ignored;
             std::filesystem::remove (temp, ignored);
-            return error = "Could not replace " + target.filename().string() + ": " + ec.message() + ".", false;
+            return error = "Could not replace " + pathToUtf8 (target.filename()) + ": " + ec.message() + ".", false;
         }
         return true;
     }
@@ -190,7 +191,7 @@ namespace beatforge::audio
     {
         in.open (path, std::ios::binary);
         if (! in)
-            return error = "Could not open " + path.string() + ".", false;
+            return error = "Could not open " + pathToUtf8 (path) + ".", false;
 
         std::uint8_t h[12];
         if (! in.read (reinterpret_cast<char*> (h), 12) || std::memcmp (h, "RIFF", 4) != 0 || std::memcmp (h + 8, "WAVE", 4) != 0)

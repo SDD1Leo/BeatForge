@@ -1,4 +1,5 @@
 #include "ui/ProjectBrowser.h"
+#include "project/FilePaths.h"
 #include "ui/Theme.h"
 
 #include <beatforge/project/AudioExport.h>
@@ -47,7 +48,7 @@ namespace beatforge
             e.file = file;
             e.modified = file.getLastModificationTime();
             e.isCurrent = file == current;
-            const auto loaded = project::loadFile (file.getFullPathName().toStdString());
+            const auto loaded = project::loadFile (toPath (file));
             if (loaded.project)
             {
                 const auto& p = *loaded.project;
