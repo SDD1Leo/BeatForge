@@ -72,7 +72,8 @@ namespace beatforge
 
         void setPlayhead (double clipTick)
         {
-            auto strip = [this] (double t) { return juce::Rectangle<int> ((int) tickToX (t) - 2, 0, 5, getHeight()); };
+            // Generous strip: at fractional display scales the anti-aliased line reaches further pixels.
+            auto strip = [this] (double t) { return juce::Rectangle<int> ((int) std::floor (tickToX (t)) - 4, 0, 9, getHeight()); };
             if (playhead >= 0.0) repaint (strip (playhead));
             playhead = clipTick;
             if (playhead >= 0.0) repaint (strip (playhead));

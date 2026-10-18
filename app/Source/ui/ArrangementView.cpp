@@ -386,7 +386,9 @@ namespace beatforge
         void setPlayhead (double tick)
         {
             const auto tl = timeline();
-            auto strip = [&] (double t) { return juce::Rectangle<int> ((int) tl.x (t) - 2, 0, 5, getHeight()); };
+            // Wider than the 6 px glow: at fractional display scales (e.g. 125 %) its
+            // anti-aliased edges reach further pixels, which would otherwise never be cleared.
+            auto strip = [&] (double t) { return juce::Rectangle<int> ((int) std::floor (tl.x (t)) - 6, 0, 13, getHeight()); };
             repaint (strip (playhead));
             playhead = tick;
             repaint (strip (playhead));
