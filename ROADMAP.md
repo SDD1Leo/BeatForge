@@ -13,7 +13,7 @@ Legend: ✅ approved · 🧪 built, awaiting user test · ⏳ planned
 | 3 | First drum machine (16-step sequencer, 5 drum sounds) | ✅ |
 | 4 | Project save/load (versioned format) | ✅ |
 | 5 | MIDI engine & piano roll | ✅ |
-| 6 | Built-in synth & mono bass | 🧪 |
+| 6 | Built-in synth & mono bass | ✅ |
 | 7 | Arrangement view (tracks, clips, volume/pan, loop, undo) | ⏳ |
 | 8 | MIDI device input, recording, MIDI file export | ⏳ |
 | 9 | Offline render & WAV export | ⏳ |

@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.6.0] — Phase 6: built-in synthesizer and bass (awaiting user test)
+## [0.6.0] — Phase 6: built-in synthesizer and bass (approved 2026-10-18)
 
 ### Added
 - Nebula Poly: 16-voice subtractive synth (sine/saw/square/triangle, resonant
